@@ -1806,13 +1806,15 @@ def products_create_page(
     track_mode: str = Form("none"),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    from lightmes.modules.masterdata.schemas import ProductCreate
     svc = MasterDataService(db)
     try:
         product = svc.create_product(ProductCreate(
             code=code, name=name, type=type, unit=unit, track_mode=track_mode))
     except ValueError as e:
-        return HTMLResponse(f'<tr><td colspan="6" style="color:red">{e}</td></tr>')
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 6},
+        )
     return templates.TemplateResponse(
         request, "masterdata/partials/product_row.html", {"product": product}
     )
@@ -1834,13 +1836,15 @@ def stations_create_page(
     location: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    from lightmes.modules.masterdata.schemas import StationCreate
     svc = MasterDataService(db)
     try:
         station = svc.create_station(StationCreate(
             code=code, name=name, location=location or None))
     except ValueError as e:
-        return HTMLResponse(f'<tr><td colspan="4" style="color:red">{e}</td></tr>')
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4},
+        )
     return templates.TemplateResponse(
         request, "masterdata/partials/station_row.html", {"station": station}
     )
