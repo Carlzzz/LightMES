@@ -610,8 +610,8 @@ git commit -m "chore: wire up alembic migrations against Base.metadata"
 
 - [ ] **Step 1: 加依赖**
 
-Run: `uv add "passlib[bcrypt]"`
-Expected: 成功。
+Run: `uv add "pwdlib[argon2,bcrypt]"`
+Expected: 成功。（用 pwdlib——passlib 的现代维护版继任者；passlib 1.7.4 已停止维护且与新版 bcrypt 冲突。`PasswordHash.recommended()` 默认选 Argon2，故需 argon2 extra。）
 
 - [ ] **Step 2: 写失败测试**
 
@@ -647,17 +647,17 @@ Expected: FAIL —— `ImportError`（`security` 无 `hash_password`）。
 
 `src/lightmes/shared/security.py`:
 ```python
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_password_hash = PasswordHash.recommended()
 
 
 def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+    return _password_hash.hash(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    return _password_hash.verify(plain, hashed)
 ```
 
 - [ ] **Step 5: 运行测试确认通过**
