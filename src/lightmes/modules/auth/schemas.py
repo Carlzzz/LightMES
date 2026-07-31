@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class UserCreate(BaseModel):
@@ -8,10 +8,6 @@ class UserCreate(BaseModel):
     role: str = "operator"
 
 
-class UserRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
+class LoginResponse(BaseModel):
     username: str
     display_name: str
-    role: str
-    is_active: bool

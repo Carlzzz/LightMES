@@ -1,31 +1,28 @@
-from fastapi import APIRouter, Depends, Form, Request, Response, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
+from lightmes.modules.auth.schemas import LoginResponse
 from lightmes.modules.auth.service import AuthService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="src/lightmes/templates")
 
 
-@router.post("/api/auth/login")
+@router.post("/api/auth/login", response_model=LoginResponse)
 def api_login(
-    response: Response,
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
-) -> Response:
+) -> LoginResponse:
     user = AuthService(db).authenticate(username, password)
     if user is None:
-        return JSONResponse(
-            {"detail": "用户名或密码错误"},
-            status_code=status.HTTP_401_UNAUTHORIZED,
-        )
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
     request.session["user_id"] = user.id
-    return JSONResponse({"username": user.username, "display_name": user.display_name})
+    return LoginResponse(username=user.username, display_name=user.display_name)
 
 
 @router.get("/login", response_class=HTMLResponse)
