@@ -55,3 +55,16 @@ def test_unknown_station_rejected(db_session):
     with pytest.raises(ValueError):
         svc.create_routing(RoutingCreate(code="R8", name="x", product_id=p.id,
             steps=[RoutingStepCreate(seq=1, station_id=99999, name="a")]))
+
+
+def test_db_rejects_two_active_routings_for_product(db_session):
+    from sqlalchemy.exc import IntegrityError
+    from lightmes.modules.masterdata.models import Routing
+    svc = MasterDataService(db_session)
+    p, s1, s2 = _setup_product_and_stations(svc)
+    svc.create_routing(RoutingCreate(code="RA", name="v1", product_id=p.id,
+        steps=[RoutingStepCreate(seq=1, station_id=s1.id, name="a")]))
+    # bypass the service rule: force a 2nd active routing directly
+    db_session.add(Routing(code="RB", name="v2", product_id=p.id, version="2", status="active"))
+    with pytest.raises(IntegrityError):
+        db_session.flush()

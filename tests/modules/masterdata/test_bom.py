@@ -45,3 +45,16 @@ def test_unknown_component_rejected(db_session):
     with pytest.raises(ValueError):
         svc.create_bom(BomCreate(product_id=fin.id, items=[
             BomItemCreate(component_product_id=99999)]))
+
+
+def test_db_rejects_two_active_boms_for_product(db_session):
+    from sqlalchemy.exc import IntegrityError
+    from lightmes.modules.masterdata.models import Bom
+    svc = MasterDataService(db_session)
+    fin, c_ser, _ = _finished_and_components(svc)
+    svc.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c_ser.id)]))
+    # bypass the service rule: force a 2nd active bom directly
+    db_session.add(Bom(product_id=fin.id, version="2", status="active"))
+    with pytest.raises(IntegrityError):
+        db_session.flush()
