@@ -12,3 +12,14 @@ class Product(Base, TimestampMixin):
     spec: Mapped[str | None] = mapped_column(default=None)
     unit: Mapped[str] = mapped_column(default="pcs")
     track_mode: Mapped[str] = mapped_column(default="none")  # serial/batch/none
+
+
+class Station(Base, TimestampMixin):
+    __tablename__ = "stations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(unique=True, index=True)
+    name: Mapped[str] = mapped_column()
+    description: Mapped[str | None] = mapped_column(default=None)
+    location: Mapped[str | None] = mapped_column(default=None)
+    is_active: Mapped[bool] = mapped_column(default=True)
