@@ -1,6 +1,4 @@
-import os
 import pytest
-from sqlalchemy import text
 from lightmes.database import SessionLocal, engine
 
 

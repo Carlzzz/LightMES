@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
-from lightmes.modules import auth
+from lightmes.modules import auth, masterdata
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -16,6 +16,7 @@ app.mount(
     name="static",
 )
 auth.register(app)
+masterdata.register(app)
 
 
 @app.get("/health")
