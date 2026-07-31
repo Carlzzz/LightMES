@@ -1,0 +1,40 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: mes
+      POSTGRES_PASSWORD: mes
+      POSTGRES_DB: lightmes
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mes -d lightmes"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mqtt_data:/mosquitto/data
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://mes:mes@db:5432/lightmes
+      MQTT_URL: mqtt://mqtt:1883
+      SECRET_KEY: change-me-in-prod
+    ports:
+      - "8000:8000"
+
+volumes:
+  db_data:
+  mqtt_data:
