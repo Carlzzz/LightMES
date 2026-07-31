@@ -1,6 +1,13 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from lightmes.modules.masterdata.models import Product, Routing, RoutingStep, Station
+from lightmes.modules.masterdata.models import (
+    Bom,
+    BomItem,
+    Product,
+    Routing,
+    RoutingStep,
+    Station,
+)
 
 
 class ProductRepository:
@@ -78,5 +85,33 @@ class RoutingRepository:
                 select(RoutingStep)
                 .where(RoutingStep.routing_id == routing_id)
                 .order_by(RoutingStep.seq)
+            ).scalars().all()
+        )
+
+
+class BomRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, bom: Bom) -> Bom:
+        self.db.add(bom)
+        self.db.flush()
+        return bom
+
+    def get(self, id: int) -> Bom | None:
+        return self.db.get(Bom, id)
+
+    def get_active_by_product(self, product_id: int) -> Bom | None:
+        return self.db.execute(
+            select(Bom).where(Bom.product_id == product_id, Bom.status == "active")
+        ).scalar_one_or_none()
+
+    def list_all(self) -> list[Bom]:
+        return list(self.db.execute(select(Bom)).scalars().all())
+
+    def items_of(self, bom_id: int) -> list[BomItem]:
+        return list(
+            self.db.execute(
+                select(BomItem).where(BomItem.bom_id == bom_id)
             ).scalars().all()
         )

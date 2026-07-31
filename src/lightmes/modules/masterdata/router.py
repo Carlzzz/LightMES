@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
 from lightmes.modules.masterdata.schemas import (
+    BomCreate,
+    BomItemRead,
+    BomRead,
     ProductCreate,
     ProductRead,
     RoutingCreate,
@@ -107,4 +110,37 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
         steps=[RoutingStepRead.model_validate(s) for s in steps],
+    )
+
+
+@router.post(
+    "/api/masterdata/boms",
+    response_model=BomRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_bom(data: BomCreate, db: Session = Depends(get_db)) -> BomRead:
+    svc = MasterDataService(db)
+    try:
+        bom = svc.create_bom(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    items = svc.boms.items_of(bom.id)
+    return BomRead(
+        id=bom.id, product_id=bom.product_id, version=bom.version,
+        status=bom.status,
+        items=[BomItemRead.model_validate(i) for i in items],
+    )
+
+
+@router.get("/api/masterdata/boms/{bom_id}", response_model=BomRead)
+def get_bom(bom_id: int, db: Session = Depends(get_db)) -> BomRead:
+    svc = MasterDataService(db)
+    bom = svc.boms.get(bom_id)
+    if bom is None:
+        raise HTTPException(status_code=404, detail="BOM 不存在")
+    items = svc.boms.items_of(bom.id)
+    return BomRead(
+        id=bom.id, product_id=bom.product_id, version=bom.version,
+        status=bom.status,
+        items=[BomItemRead.model_validate(i) for i in items],
     )

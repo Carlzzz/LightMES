@@ -71,3 +71,31 @@ class RoutingRead(BaseModel):
     version: str
     status: str
     steps: list[RoutingStepRead]
+
+
+class BomItemCreate(BaseModel):
+    component_product_id: int
+    qty: float = 1
+
+
+class BomCreate(BaseModel):
+    product_id: int
+    version: str = "1"
+    items: list[BomItemCreate]
+
+
+class BomItemRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    component_product_id: int
+    qty: float
+    track_mode: str
+
+
+class BomRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    product_id: int
+    version: str
+    status: str
+    items: list[BomItemRead]

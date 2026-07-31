@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import ForeignKey, JSON, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -48,3 +48,27 @@ class RoutingStep(Base, TimestampMixin):
     name: Mapped[str] = mapped_column()
     is_mandatory: Mapped[bool] = mapped_column(default=True)
     binding_config: Mapped[dict | None] = mapped_column(JSON, default=None)
+
+
+class Bom(Base, TimestampMixin):
+    __tablename__ = "boms"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    version: Mapped[str] = mapped_column(default="1")
+    status: Mapped[str] = mapped_column(default="active")  # active/inactive
+
+
+class BomItem(Base, TimestampMixin):
+    __tablename__ = "bom_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "bom_id", "component_product_id", name="uq_bom_item_component"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bom_id: Mapped[int] = mapped_column(ForeignKey("boms.id"))
+    component_product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    qty: Mapped[float] = mapped_column(Numeric(12, 3), default=1)
+    track_mode: Mapped[str] = mapped_column()  # denormalized from component product
