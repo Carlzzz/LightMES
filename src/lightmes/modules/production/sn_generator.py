@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import SnRule
 
-_TOKEN = re.compile(r"\{([A-Z]+)(?::(\d+))?\}")
+_TOKEN = re.compile(r"\{([A-Za-z]+)(?::([^}]*))?\}")
 _KNOWN_DATE = {"YYYY", "YY", "MM", "DD"}
 
 
@@ -12,8 +12,8 @@ def validate_pattern(pattern: str) -> None:
     for m in _TOKEN.finditer(pattern):
         name, width = m.group(1), m.group(2)
         if name == "SEQ":
-            if width is None:
-                raise ValueError("占位符 {SEQ} 必须带位数, 如 {SEQ:5}")
+            if width is None or not width.isdigit():
+                raise ValueError("占位符 {SEQ} 必须带数字位数, 如 {SEQ:5}")
         elif name not in _KNOWN_DATE:
             raise ValueError(f"未知占位符: {{{name}}}")
 
@@ -40,7 +40,8 @@ def render(pattern: str, seq: int, now: datetime) -> str:
         if name == "DD":
             return now.strftime("%d")
         if name == "SEQ":
-            return str(seq).zfill(int(width))
+            if width and width.isdigit():
+                return str(seq).zfill(int(width))
         return m.group(0)
 
     return _TOKEN.sub(repl, pattern)
@@ -54,7 +55,10 @@ class SnGenerator:
         now = now or datetime.now()
         # 对该 rule 行加锁，保证并发下流水唯一
         locked = self.db.execute(
-            select(SnRule).where(SnRule.id == rule.id).with_for_update()
+            select(SnRule)
+            .where(SnRule.id == rule.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
         current_key = period_key(locked.seq_reset, now)
         if locked.seq_period_key != current_key:

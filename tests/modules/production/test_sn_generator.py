@@ -50,3 +50,26 @@ def test_next_sn_resets_on_new_period(db_session):
     assert gen.next_sn(rule, datetime(2026, 7, 31)) == "01"
     assert gen.next_sn(rule, datetime(2026, 7, 31)) == "02"
     assert gen.next_sn(rule, datetime(2026, 8, 1)) == "01"  # reset new day
+
+
+def test_validate_pattern_rejects_seq_non_digit_width():
+    with pytest.raises(ValueError):
+        validate_pattern("SN{SEQ:abc}")
+
+
+def test_validate_pattern_rejects_seq_empty_width():
+    with pytest.raises(ValueError):
+        validate_pattern("SN{SEQ:}")
+
+
+def test_next_sn_refreshes_from_locked_row(db_session):
+    from lightmes.modules.production.models import SnRule
+
+    rule = SnRule(code="RL", name="r", pattern="{SEQ:2}", seq_reset="never")
+    db_session.add(rule)
+    db_session.flush()
+    gen = SnGenerator(db_session)
+    assert gen.next_sn(rule, datetime(2026, 7, 31)) == "01"
+    # 人为把内存实例改成过期值；populate_existing 应从锁定行刷新覆盖它
+    rule.current_seq = 999
+    assert gen.next_sn(rule, datetime(2026, 7, 31)) == "02"
