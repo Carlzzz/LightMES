@@ -37,3 +37,19 @@ def test_stations_page_renders(client):
     resp = client.get("/masterdata/stations")
     assert resp.status_code == 200
     assert "工位管理" in resp.text
+
+
+def test_create_product_dup_error_escapes_html(client, db_session):
+    # first create a product whose code contains an HTML/script payload
+    payload = "<img src=x onerror=alert(1)>"
+    client.post("/masterdata/products", data={
+        "code": payload, "name": "x", "type": "component",
+        "unit": "pcs", "track_mode": "none"})
+    # second create with same code triggers the dup-code error fragment
+    resp = client.post("/masterdata/products", data={
+        "code": payload, "name": "y", "type": "component",
+        "unit": "pcs", "track_mode": "none"})
+    assert resp.status_code == 200
+    # payload must be escaped, not reflected raw
+    assert "<img src=x onerror=alert(1)>" not in resp.text
+    assert "&lt;img" in resp.text
