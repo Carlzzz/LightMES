@@ -62,6 +62,16 @@ def test_validate_pattern_rejects_seq_empty_width():
         validate_pattern("SN{SEQ:}")
 
 
+def test_validate_pattern_rejects_missing_seq():
+    with pytest.raises(ValueError):
+        validate_pattern("SN{YYYY}")
+
+
+def test_validate_pattern_rejects_pure_literal():
+    with pytest.raises(ValueError):
+        validate_pattern("FIXED")
+
+
 def test_next_sn_refreshes_from_locked_row(db_session):
     from lightmes.modules.production.models import SnRule
 

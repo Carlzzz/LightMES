@@ -16,6 +16,8 @@ def validate_pattern(pattern: str) -> None:
                 raise ValueError("占位符 {SEQ} 必须带数字位数, 如 {SEQ:5}")
         elif name not in _KNOWN_DATE:
             raise ValueError(f"未知占位符: {{{name}}}")
+    if not any(m.group(1) == "SEQ" for m in _TOKEN.finditer(pattern)):
+        raise ValueError("pattern 必须包含 {SEQ:n} 以保证唯一")
 
 
 def period_key(seq_reset: str, now: datetime) -> str:
