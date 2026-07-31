@@ -3,13 +3,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
-from lightmes.modules.auth.router import router as auth_router
+from lightmes.modules import auth
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 app.mount("/static", StaticFiles(directory="src/lightmes/static"), name="static")
-app.include_router(auth_router)
+auth.register(app)
 
 
 @app.get("/health")
