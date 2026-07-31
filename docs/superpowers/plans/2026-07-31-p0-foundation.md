@@ -732,9 +732,7 @@ docker compose exec db psql -U mes -d lightmes -c "\d users"
 
 `tests/conftest.py`:
 ```python
-import os
 import pytest
-from sqlalchemy import text
 from lightmes.database import SessionLocal, engine
 
 
