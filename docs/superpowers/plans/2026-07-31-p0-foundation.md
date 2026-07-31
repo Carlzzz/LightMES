@@ -223,14 +223,16 @@ persistence_location /mosquitto/data/
 
 - [ ] **Step 2: 写 Dockerfile（app 镜像）**
 
-`Dockerfile`:
+`Dockerfile`（两阶段：先装依赖缓存层，再拷源码+README 装项目，避免 uv_build 构建时找不到源码/README）:
 ```dockerfile
 FROM python:3.12-slim
 WORKDIR /app
 RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
+COPY README.md ./
 COPY src ./src
+RUN uv sync --frozen --no-dev
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "lightmes.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
