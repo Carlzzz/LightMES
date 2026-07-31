@@ -1,7 +1,7 @@
 [project]
 name = "lightmes"
 version = "0.1.0"
-description = "Add your description here"
+description = "Lightweight MES for notebook shell assembly line"
 readme = "README.md"
 authors = [
     { name = "Carlzzz", email = "1757947926@qq.com" }
