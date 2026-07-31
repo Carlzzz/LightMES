@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -8,7 +10,9 @@ from lightmes.modules.auth.schemas import LoginResponse
 from lightmes.modules.auth.service import AuthService
 
 router = APIRouter()
-templates = Jinja2Templates(directory="src/lightmes/templates")
+templates = Jinja2Templates(
+    directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
+)
 
 
 @router.post("/api/auth/login", response_model=LoginResponse)
@@ -39,6 +43,10 @@ def login_submit(
 ) -> HTMLResponse:
     user = AuthService(db).authenticate(username, password)
     if user is None:
-        return HTMLResponse('<span style="color:red">用户名或密码错误</span>')
+        return templates.TemplateResponse(
+            request, "partials/login_result.html", {"user": None}
+        )
     request.session["user_id"] = user.id
-    return HTMLResponse(f'<span style="color:green">欢迎，{user.display_name}</span>')
+    return templates.TemplateResponse(
+        request, "partials/login_result.html", {"user": user}
+    )

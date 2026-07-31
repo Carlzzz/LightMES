@@ -46,3 +46,9 @@ def test_login_submit_success_returns_welcome(client):
     resp = client.post("/login", data={"username": "eve", "password": "pw12345"})
     assert resp.status_code == 200
     assert "欢迎" in resp.text
+
+
+def test_login_submit_failure_returns_error_fragment(client):
+    resp = client.post("/login", data={"username": "eve", "password": "wrong"})
+    assert resp.status_code == 200
+    assert "用户名或密码错误" in resp.text
