@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
@@ -17,6 +21,9 @@ from lightmes.modules.masterdata.schemas import (
 from lightmes.modules.masterdata.service import MasterDataService
 
 router = APIRouter()
+templates = Jinja2Templates(
+    directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
+)
 
 
 @router.post(
@@ -143,4 +150,62 @@ def get_bom(bom_id: int, db: Session = Depends(get_db)) -> BomRead:
         id=bom.id, product_id=bom.product_id, version=bom.version,
         status=bom.status,
         items=[BomItemRead.model_validate(i) for i in items],
+    )
+
+
+@router.get("/masterdata/products", response_class=HTMLResponse)
+def products_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    products = MasterDataService(db).products.list_all()
+    return templates.TemplateResponse(
+        request, "masterdata/products.html", {"products": products}
+    )
+
+
+@router.post("/masterdata/products", response_class=HTMLResponse)
+def products_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    type: str = Form(...),
+    unit: str = Form("pcs"),
+    track_mode: str = Form("none"),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    from lightmes.modules.masterdata.schemas import ProductCreate
+    svc = MasterDataService(db)
+    try:
+        product = svc.create_product(ProductCreate(
+            code=code, name=name, type=type, unit=unit, track_mode=track_mode))
+    except ValueError as e:
+        return HTMLResponse(f'<tr><td colspan="6" style="color:red">{e}</td></tr>')
+    return templates.TemplateResponse(
+        request, "masterdata/partials/product_row.html", {"product": product}
+    )
+
+
+@router.get("/masterdata/stations", response_class=HTMLResponse)
+def stations_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    stations = MasterDataService(db).stations.list_all()
+    return templates.TemplateResponse(
+        request, "masterdata/stations.html", {"stations": stations}
+    )
+
+
+@router.post("/masterdata/stations", response_class=HTMLResponse)
+def stations_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    location: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    from lightmes.modules.masterdata.schemas import StationCreate
+    svc = MasterDataService(db)
+    try:
+        station = svc.create_station(StationCreate(
+            code=code, name=name, location=location or None))
+    except ValueError as e:
+        return HTMLResponse(f'<tr><td colspan="4" style="color:red">{e}</td></tr>')
+    return templates.TemplateResponse(
+        request, "masterdata/partials/station_row.html", {"station": station}
     )

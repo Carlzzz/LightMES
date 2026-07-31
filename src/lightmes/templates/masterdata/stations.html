@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}工位管理{% endblock %}
+{% block content %}
+<h1>工位管理</h1>
+<form hx-post="/masterdata/stations" hx-target="#rows" hx-swap="beforeend"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+  <input name="code" placeholder="编码" required>
+  <input name="name" placeholder="名称" required>
+  <input name="location" placeholder="位置">
+  <button type="submit">新增</button>
+</form>
+<table border="1">
+  <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>位置</th></tr></thead>
+  <tbody id="rows">
+    {% for station in stations %}{% include "masterdata/partials/station_row.html" %}{% endfor %}
+  </tbody>
+</table>
+{% endblock %}
