@@ -223,14 +223,16 @@ persistence_location /mosquitto/data/
 
 - [ ] **Step 2: 写 Dockerfile（app 镜像）**
 
-`Dockerfile`:
+`Dockerfile`（两阶段：先装依赖缓存层，再拷源码+README 装项目，避免 uv_build 构建时找不到源码/README）:
 ```dockerfile
 FROM python:3.12-slim
 WORKDIR /app
 RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
+COPY README.md ./
 COPY src ./src
+RUN uv sync --frozen --no-dev
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "lightmes.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
@@ -608,8 +610,8 @@ git commit -m "chore: wire up alembic migrations against Base.metadata"
 
 - [ ] **Step 1: 加依赖**
 
-Run: `uv add "passlib[bcrypt]"`
-Expected: 成功。
+Run: `uv add "pwdlib[argon2,bcrypt]"`
+Expected: 成功。（用 pwdlib——passlib 的现代维护版继任者；passlib 1.7.4 已停止维护且与新版 bcrypt 冲突。`PasswordHash.recommended()` 默认选 Argon2，故需 argon2 extra。）
 
 - [ ] **Step 2: 写失败测试**
 
@@ -645,17 +647,17 @@ Expected: FAIL —— `ImportError`（`security` 无 `hash_password`）。
 
 `src/lightmes/shared/security.py`:
 ```python
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_password_hash = PasswordHash.recommended()
 
 
 def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+    return _password_hash.hash(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    return _password_hash.verify(plain, hashed)
 ```
 
 - [ ] **Step 5: 运行测试确认通过**
@@ -730,9 +732,7 @@ docker compose exec db psql -U mes -d lightmes -c "\d users"
 
 `tests/conftest.py`:
 ```python
-import os
 import pytest
-from sqlalchemy import text
 from lightmes.database import SessionLocal, engine
 
 

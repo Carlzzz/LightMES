@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: mes
+          POSTGRES_PASSWORD: mes
+          POSTGRES_DB: lightmes
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mes -d lightmes"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://mes:mes@localhost:5432/lightmes
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run migrations
+        run: uv run alembic upgrade head
+      - name: Run tests
+        run: uv run pytest -v

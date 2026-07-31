@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}登录 - LightMES{% endblock %}
+{% block content %}
+<h1>LightMES 登录</h1>
+<form hx-post="/login" hx-target="#result" hx-swap="innerHTML">
+  <input type="text" name="username" placeholder="用户名" required>
+  <input type="password" name="password" placeholder="密码" required>
+  <button type="submit">登录</button>
+</form>
+<div id="result">{{ message | default("") }}</div>
+{% endblock %}
