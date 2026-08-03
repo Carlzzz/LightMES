@@ -62,3 +62,11 @@ class StationPassResult(BaseModel):
     next_step: StepInfo | None
     is_finished: bool
     work_order_status: str
+
+
+class WipItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    sn: str
+    status: str
+    current_step_seq: int
+    current_station_id: int | None

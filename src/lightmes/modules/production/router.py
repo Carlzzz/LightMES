@@ -14,6 +14,7 @@ from lightmes.modules.production.schemas import (
 )
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.station_pass_service import StationPassService
+from lightmes.modules.production.wip_service import WipService
 from lightmes.shared.errors import DomainError, NotFoundError
 
 router = APIRouter()
@@ -133,4 +134,15 @@ def scan_submit(
         )
     return templates.TemplateResponse(
         request, "production/partials/scan_result.html", {"result": result}
+    )
+
+
+@router.get("/production/wip", response_class=HTMLResponse)
+def wip_page(
+    request: Request, work_order_id: int = 0, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    items = WipService(db).wip_by_work_order(work_order_id) if work_order_id else []
+    return templates.TemplateResponse(
+        request, "production/wip.html",
+        {"work_order_id": work_order_id, "items": items},
     )
