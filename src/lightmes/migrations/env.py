@@ -6,6 +6,8 @@ from lightmes.config import get_settings
 from lightmes.shared.base import Base
 # 导入所有模型，确保它们注册到 Base.metadata（Task 5 起逐步加）
 from lightmes.modules.auth import models as _auth_models  # noqa: F401
+from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F401
+from lightmes.modules.production import models as _production_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}产品管理{% endblock %}
+{% block content %}
+<h1>产品管理</h1>
+<form hx-post="/masterdata/products" hx-target="#rows" hx-swap="beforeend"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+  <input name="code" placeholder="编码" required>
+  <input name="name" placeholder="名称" required>
+  <select name="type">
+    <option value="finished">成品</option>
+    <option value="semi">半成品</option>
+    <option value="component">组件</option>
+    <option value="consumable">辅料</option>
+  </select>
+  <input name="unit" placeholder="单位" value="pcs">
+  <select name="track_mode">
+    <option value="none">不追踪</option>
+    <option value="serial">唯一件</option>
+    <option value="batch">批次</option>
+  </select>
+  <button type="submit">新增</button>
+</form>
+<table border="1">
+  <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>类型</th><th>单位</th><th>追踪</th></tr></thead>
+  <tbody id="rows">
+    {% for product in products %}{% include "masterdata/partials/product_row.html" %}{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

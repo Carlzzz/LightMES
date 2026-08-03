@@ -1159,7 +1159,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import SnRule
 
-_TOKEN = re.compile(r"\{([A-Z]+)(?::(\d+))?\}")
+# 匹配 {TOKEN} 或 {TOKEN:arg}，arg 允许任意非空白以便校验非法宽度
+_TOKEN = re.compile(r"\{([A-Za-z]+)(?::([^}]*))?\}")
 _KNOWN_DATE = {"YYYY", "YY", "MM", "DD"}
 
 
@@ -1167,8 +1168,8 @@ def validate_pattern(pattern: str) -> None:
     for m in _TOKEN.finditer(pattern):
         name, width = m.group(1), m.group(2)
         if name == "SEQ":
-            if width is None:
-                raise ValueError("占位符 {SEQ} 必须带位数, 如 {SEQ:5}")
+            if width is None or not width.isdigit():
+                raise ValueError("占位符 {SEQ} 必须带数字位数, 如 {SEQ:5}")
         elif name not in _KNOWN_DATE:
             raise ValueError(f"未知占位符: {{{name}}}")
 
@@ -1207,9 +1208,14 @@ class SnGenerator:
 
     def next_sn(self, rule: SnRule, now: datetime | None = None) -> str:
         now = now or datetime.now()
-        # 对该 rule 行加锁，保证并发下流水唯一
+        # 对该 rule 行加锁并强制从锁定行刷新属性（populate_existing），
+        # 否则若该实例已在 session identity map 中，读到的是内存里的旧 current_seq，
+        # 并发下两事务各自 +1 会产生重复 SN，使行锁形同虚设。
         locked = self.db.execute(
-            select(SnRule).where(SnRule.id == rule.id).with_for_update()
+            select(SnRule)
+            .where(SnRule.id == rule.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
         current_key = period_key(locked.seq_reset, now)
         if locked.seq_period_key != current_key:
@@ -1800,13 +1806,15 @@ def products_create_page(
     track_mode: str = Form("none"),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    from lightmes.modules.masterdata.schemas import ProductCreate
     svc = MasterDataService(db)
     try:
         product = svc.create_product(ProductCreate(
             code=code, name=name, type=type, unit=unit, track_mode=track_mode))
     except ValueError as e:
-        return HTMLResponse(f'<tr><td colspan="6" style="color:red">{e}</td></tr>')
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 6},
+        )
     return templates.TemplateResponse(
         request, "masterdata/partials/product_row.html", {"product": product}
     )
@@ -1828,13 +1836,15 @@ def stations_create_page(
     location: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    from lightmes.modules.masterdata.schemas import StationCreate
     svc = MasterDataService(db)
     try:
         station = svc.create_station(StationCreate(
             code=code, name=name, location=location or None))
     except ValueError as e:
-        return HTMLResponse(f'<tr><td colspan="4" style="color:red">{e}</td></tr>')
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4},
+        )
     return templates.TemplateResponse(
         request, "masterdata/partials/station_row.html", {"station": station}
     )
