@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
+from lightmes.modules.auth.dependencies import require_login
+from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, WorkOrderCreate, WorkOrderRead,
 )
@@ -15,7 +17,11 @@ router = APIRouter()
     response_model=SnRuleRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_sn_rule(data: SnRuleCreate, db: Session = Depends(get_db)) -> SnRuleRead:
+def create_sn_rule(
+    data: SnRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
+) -> SnRuleRead:
     svc = ProductionService(db)
     try:
         rule = svc.create_sn_rule(data)
@@ -31,7 +37,9 @@ def create_sn_rule(data: SnRuleCreate, db: Session = Depends(get_db)) -> SnRuleR
     status_code=status.HTTP_201_CREATED,
 )
 def create_work_order(
-    data: WorkOrderCreate, db: Session = Depends(get_db)
+    data: WorkOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
 ) -> WorkOrderRead:
     svc = ProductionService(db)
     try:
@@ -46,7 +54,9 @@ def create_work_order(
     response_model=WorkOrderRead,
 )
 def release_work_order(
-    work_order_id: int, db: Session = Depends(get_db)
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
 ) -> WorkOrderRead:
     svc = ProductionService(db)
     try:

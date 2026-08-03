@@ -1,11 +1,13 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
+from lightmes.modules.auth.dependencies import require_login, session_user_id
+from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
     BomItemRead,
@@ -32,7 +34,9 @@ templates = Jinja2Templates(
     status_code=status.HTTP_201_CREATED,
 )
 def create_product(
-    data: ProductCreate, db: Session = Depends(get_db)
+    data: ProductCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
 ) -> ProductRead:
     try:
         product = MasterDataService(db).create_product(data)
@@ -53,7 +57,9 @@ def list_products(db: Session = Depends(get_db)) -> list[ProductRead]:
     status_code=status.HTTP_201_CREATED,
 )
 def create_station(
-    data: StationCreate, db: Session = Depends(get_db)
+    data: StationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
 ) -> StationRead:
     try:
         station = MasterDataService(db).create_station(data)
@@ -74,7 +80,9 @@ def list_stations(db: Session = Depends(get_db)) -> list[StationRead]:
     status_code=status.HTTP_201_CREATED,
 )
 def create_routing(
-    data: RoutingCreate, db: Session = Depends(get_db)
+    data: RoutingCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
 ) -> RoutingRead:
     svc = MasterDataService(db)
     try:
@@ -125,7 +133,11 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
     response_model=BomRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_bom(data: BomCreate, db: Session = Depends(get_db)) -> BomRead:
+def create_bom(
+    data: BomCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
+) -> BomRead:
     svc = MasterDataService(db)
     try:
         bom = svc.create_bom(data)
@@ -171,6 +183,8 @@ def products_create_page(
     track_mode: str = Form("none"),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
+    if session_user_id(request) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
     svc = MasterDataService(db)
     try:
         product = svc.create_product(ProductCreate(
@@ -200,6 +214,8 @@ def stations_create_page(
     location: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
+    if session_user_id(request) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
     svc = MasterDataService(db)
     try:
         station = svc.create_station(StationCreate(
