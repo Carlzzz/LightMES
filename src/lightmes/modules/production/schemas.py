@@ -41,3 +41,24 @@ class WorkOrderRead(BaseModel):
     produced_qty: int
     planned_start: datetime | None
     planned_end: datetime | None
+
+
+class StationPassInput(BaseModel):
+    station_id: int
+    work_order_code: str | None = None
+    sn: str | None = None
+    operator_id: int | None = None
+
+
+class StepInfo(BaseModel):
+    seq: int
+    name: str
+    station_id: int
+
+
+class StationPassResult(BaseModel):
+    sn: str
+    passed_step: StepInfo
+    next_step: StepInfo | None
+    is_finished: bool
+    work_order_status: str
