@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import require_login, session_user_id
+from lightmes.modules.auth.dependencies import current_user_or_none, require_login
 from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
@@ -183,7 +183,7 @@ def products_create_page(
     track_mode: str = Form("none"),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if session_user_id(request) is None:
+    if current_user_or_none(request, db) is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
     svc = MasterDataService(db)
     try:
@@ -214,7 +214,7 @@ def stations_create_page(
     location: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if session_user_id(request) is None:
+    if current_user_or_none(request, db) is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
     svc = MasterDataService(db)
     try:
