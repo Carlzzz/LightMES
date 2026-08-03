@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, JSON, Numeric, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, JSON, Numeric, text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -28,6 +28,12 @@ class Station(Base, TimestampMixin):
 
 class Routing(Base, TimestampMixin):
     __tablename__ = "routings"
+    __table_args__ = (
+        Index(
+            "uq_active_routing_per_product", "product_id",
+            unique=True, postgresql_where=text("status = 'active'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(unique=True, index=True)
@@ -52,6 +58,12 @@ class RoutingStep(Base, TimestampMixin):
 
 class Bom(Base, TimestampMixin):
     __tablename__ = "boms"
+    __table_args__ = (
+        Index(
+            "uq_active_bom_per_product", "product_id",
+            unique=True, postgresql_where=text("status = 'active'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
