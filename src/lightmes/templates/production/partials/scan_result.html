@@ -1,0 +1,12 @@
+{% if error %}
+<div style="color:red">✗ {{ error }}</div>
+{% else %}
+<div style="color:green">
+  ✓ {{ result.sn }} — 已过 工序{{ result.passed_step.seq }} {{ result.passed_step.name }}
+  {% if result.is_finished %}
+    <strong>[完工]</strong>
+  {% else %}
+    → 下一站: 工序{{ result.next_step.seq }} {{ result.next_step.name }}
+  {% endif %}
+</div>
+{% endif %}
