@@ -1,13 +1,14 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
 from lightmes.modules import auth, masterdata, production
+from lightmes.shared.errors import DomainError
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -20,6 +21,11 @@ app.mount(
 auth.register(app)
 masterdata.register(app)
 production.register(app)
+
+
+@app.exception_handler(DomainError)
+def _domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 _templates = Jinja2Templates(
