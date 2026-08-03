@@ -129,6 +129,9 @@ def scan_submit(
                 station_id=station_id, work_order_code=code_or_sn,
                 operator_id=user.id))
     except DomainError as e:
+        # 事务中已 flush 的写入（如首站生成的 SerialUnit / SN 流水）必须回滚，
+        # 否则 get_db 的成功路径会把它们 commit，留下孤儿数据。
+        db.rollback()
         return templates.TemplateResponse(
             request, "production/partials/scan_result.html", {"error": e.detail}
         )

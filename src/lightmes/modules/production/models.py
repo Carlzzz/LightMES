@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -63,6 +63,8 @@ class StationPass(Base, TimestampMixin):
     operator_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), default=None
     )
-    pass_time: Mapped[datetime] = mapped_column(server_default=func.now())
+    pass_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     result: Mapped[str] = mapped_column(default="pass")
     remark: Mapped[str | None] = mapped_column(default=None)

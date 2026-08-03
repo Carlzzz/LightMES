@@ -2,7 +2,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
-from lightmes.modules.production.models import SerialUnit, StationPass
+from lightmes.modules.production.models import SerialUnit, StationPass, WorkOrder
 from lightmes.modules.production.repository import (
     SerialUnitRepository, StationPassRepository, SnRuleRepository,
     WorkOrderRepository,
@@ -101,13 +101,21 @@ class StationPassService:
             raise ConflictError("该产品正被其他工位处理，请重试")
         self.db.refresh(su)
 
-        # 8. 末站完工
+        # 8. 末站完工（produced_qty 用原子 UPDATE，避免两个不同 SN 并发完工丢更新）
         is_last = expected.seq == steps[-1].seq
         if is_last:
             su.status = "finished"
-            wo.produced_qty += 1
-            if wo.produced_qty >= wo.qty:
-                wo.status = "completed"
+            new_qty = self.db.execute(
+                update(WorkOrder)
+                .where(WorkOrder.id == wo.id)
+                .values(produced_qty=WorkOrder.produced_qty + 1)
+                .returning(WorkOrder.produced_qty)
+            ).scalar_one()
+            if new_qty >= wo.qty:
+                self.db.execute(
+                    update(WorkOrder).where(WorkOrder.id == wo.id).values(status="completed")
+                )
+            self.db.refresh(wo)
 
         # 9. 翻转工单为在制
         if wo.status == "released":

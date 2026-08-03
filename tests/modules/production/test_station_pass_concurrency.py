@@ -9,7 +9,7 @@
 import threading
 import uuid
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from lightmes.database import SessionLocal
 from lightmes.modules.masterdata.models import Product, Routing, RoutingStep, Station
@@ -138,6 +138,120 @@ def test_double_scan_same_sn_raises_conflict():
             delete(StationPass).where(StationPass.serial_unit_id == su_id)
         )
         cleanup.execute(delete(SerialUnit).where(SerialUnit.id == su_id))
+        cleanup.execute(delete(WorkOrder).where(WorkOrder.id == wo_id))
+        cleanup.execute(delete(SnRule).where(SnRule.id == rule_id))
+        cleanup.execute(
+            delete(RoutingStep).where(RoutingStep.routing_id == routing_id)
+        )
+        cleanup.execute(delete(Routing).where(Routing.id == routing_id))
+        cleanup.execute(delete(Station).where(Station.id == station_id))
+        cleanup.execute(delete(Product).where(Product.id == product_id))
+        cleanup.commit()
+    finally:
+        cleanup.close()
+
+
+def test_two_different_units_complete_same_wo_atomically():
+    """两个不同 SN 并发完工同一工单（单工序路线，首站即末站）。
+
+    每个线程对同一 work_order 用 work_order_code 做首站过站，各自生成新 SN 并
+    立即完工。produced_qty 必须用原子 UPDATE，避免 ORM read-modify-write 丢更新：
+    并发下最终恰好 produced_qty==2，工单转 completed。
+    """
+    tag = uuid.uuid4().hex[:8]
+    wo_id = wo_code = rule_id = routing_id = station_id = product_id = None
+
+    # --- setup：真实会话，提交后关闭 ---
+    setup = SessionLocal()
+    try:
+        md = MasterDataService(setup)
+        p = md.create_product(
+            ProductCreate(code=f"CC2-P-{tag}", name="壳", type="finished")
+        )
+        s1 = md.create_station(StationCreate(code=f"CC2-S-{tag}", name="上料"))
+        r = md.create_routing(RoutingCreate(
+            code=f"CC2-R-{tag}", name="路线", product_id=p.id,
+            steps=[RoutingStepCreate(seq=1, station_id=s1.id, name="上料")],
+        ))
+        prod = ProductionService(setup)
+        rule = prod.create_sn_rule(SnRuleCreate(
+            code=f"CC2-L-{tag}", name="r", pattern=f"CC2{tag}{{SEQ:4}}"
+        ))
+        wo = prod.create_work_order(WorkOrderCreate(
+            code=f"CC2-W-{tag}", product_id=p.id, routing_id=r.id,
+            qty=2, sn_rule_id=rule.id,
+        ))
+        prod.release_work_order(wo.id)
+        setup.commit()
+        wo_id = wo.id
+        wo_code = wo.code
+        rule_id = rule.id
+        routing_id = r.id
+        station_id = s1.id
+        product_id = p.id
+    finally:
+        setup.close()
+
+    barrier = threading.Barrier(2)
+    results: list[object] = []
+    errors: list[Exception] = []
+    lock = threading.Lock()
+
+    def worker() -> None:
+        s = SessionLocal()
+        try:
+            barrier.wait(timeout=15)
+            res = StationPassService(s).pass_station(
+                StationPassInput(station_id=station_id, work_order_code=wo_code)
+            )
+            s.commit()
+            with lock:
+                results.append(res)
+        except Exception as e:  # noqa: BLE001 - barrier 异常等
+            s.rollback()
+            with lock:
+                errors.append(e)
+        finally:
+            s.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # --- 断言：两个不同 SN 都成功完工 ---
+    assert not errors, f"并发出错: {errors}"
+    assert len(results) == 2, f"期望 2 个成功, 实际 {results}"
+    sns = {r.sn for r in results}
+    assert len(sns) == 2, f"两个线程应产出不同 SN, 实际 {sns}"
+
+    # --- produced_qty 原子累加：恰好 2，工单 completed ---
+    check = SessionLocal()
+    try:
+        wo = check.get(WorkOrder, wo_id)
+        assert wo is not None
+        assert wo.produced_qty == 2, (
+            f"并发完工 produced_qty 丢失更新: {wo.produced_qty}"
+        )
+        assert wo.status == "completed", (
+            f"工单应转 completed, 实际 {wo.status}"
+        )
+    finally:
+        check.close()
+
+    # --- 清理：按 FK 依赖顺序直接 DELETE ---
+    cleanup = SessionLocal()
+    try:
+        su_ids = list(cleanup.execute(
+            select(SerialUnit.id).where(SerialUnit.work_order_id == wo_id)
+        ).scalars())
+        for su_id in su_ids:
+            cleanup.execute(
+                delete(StationPass).where(StationPass.serial_unit_id == su_id)
+            )
+        if su_ids:
+            cleanup.execute(delete(SerialUnit).where(SerialUnit.id.in_(su_ids)))
         cleanup.execute(delete(WorkOrder).where(WorkOrder.id == wo_id))
         cleanup.execute(delete(SnRule).where(SnRule.id == rule_id))
         cleanup.execute(
