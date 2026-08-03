@@ -631,6 +631,7 @@ Expected: FAIL —— ImportError（`station_pass_service` 不存在）。
 
 `src/lightmes/modules/production/station_pass_service.py`:
 ```python
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
@@ -714,16 +715,27 @@ class StationPassService:
             raise BusinessRuleError(f"该工序已过站: 工序 {expected.seq}")
 
         # 7. 写过站 + 乐观锁更新 serial_unit
+        #    用带 version 条件的 UPDATE 做真正的乐观锁：仅当 version 仍为读到的值才更新。
+        #    并发双扫时后提交者影响 0 行 → 抛 ConflictError（否则两次都成功、produced_qty 重复+1）。
         self.passes.add(StationPass(
             serial_unit_id=su.id, work_order_id=wo.id,
             routing_step_id=expected.id, station_id=data.station_id,
             operator_id=data.operator_id, result="pass",
         ))
         prev_version = su.version
-        su.current_step_seq = expected.seq
-        su.current_station_id = data.station_id
-        su.version = prev_version + 1
-        self.db.flush()
+        result = self.db.execute(
+            update(SerialUnit)
+            .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
+            .values(
+                current_step_seq=expected.seq,
+                current_station_id=data.station_id,
+                version=prev_version + 1,
+            )
+        )
+        if result.rowcount == 0:
+            raise ConflictError("该产品正被其他工位处理，请重试")
+        # 让 ORM 实例与刚写入的行一致（后续 8/9 步读 su 字段）
+        self.db.refresh(su)
 
         # 8. 末站完工
         is_last = expected.seq == steps[-1].seq
