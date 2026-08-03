@@ -1,3 +1,4 @@
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
@@ -87,10 +88,18 @@ class StationPassService:
             operator_id=data.operator_id, result="pass",
         ))
         prev_version = su.version
-        su.current_step_seq = expected.seq
-        su.current_station_id = data.station_id
-        su.version = prev_version + 1
-        self.db.flush()
+        result = self.db.execute(
+            update(SerialUnit)
+            .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
+            .values(
+                current_step_seq=expected.seq,
+                current_station_id=data.station_id,
+                version=prev_version + 1,
+            )
+        )
+        if result.rowcount == 0:
+            raise ConflictError("该产品正被其他工位处理，请重试")
+        self.db.refresh(su)
 
         # 8. 末站完工
         is_last = expected.seq == steps[-1].seq
