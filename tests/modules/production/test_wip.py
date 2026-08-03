@@ -66,3 +66,40 @@ def test_wip_page_renders(db_session):
         assert "W001" in resp.text
     finally:
         app.dependency_overrides.clear()
+
+
+def test_finished_sn_excluded_from_wip(db_session):
+    s1, s2, wo = _line(db_session)
+    pass_svc = StationPassService(db_session)
+    # 第一单过完两站（seq1@s1 → seq2@s2），末站完工
+    res = pass_svc.pass_station(StationPassInput(station_id=s1.id, work_order_code="WWO"))
+    assert res.is_finished is False
+    finished_sn = res.sn
+    res2 = pass_svc.pass_station(StationPassInput(station_id=s2.id, sn=finished_sn))
+    assert res2.is_finished is True
+    # 第二单只过首站，仍在制
+    in_process_sn = pass_svc.pass_station(
+        StationPassInput(station_id=s1.id, work_order_code="WWO")).sn
+    wip = WipService(db_session).wip_by_work_order(wo.id)
+    wip_sns = [w.sn for w in wip]
+    assert finished_sn not in wip_sns
+    assert in_process_sn in wip_sns
+    # 完工于 s2 但 status=finished，站级在制列表也应排除
+    station_wip_sns = [w.sn for w in WipService(db_session).wip_by_station(s2.id)]
+    assert finished_sn not in station_wip_sns
+
+
+def test_wip_page_empty_without_work_order(db_session):
+    from fastapi.testclient import TestClient
+    from lightmes.main import app
+    from lightmes.database import get_db
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        client = TestClient(app)
+        resp = client.get("/production/wip")
+        assert resp.status_code == 200
+        assert "WIP 看板" in resp.text
+        # 无 work_order_id → 空列表，tbody 中无数据行，仅表头一行 <tr>
+        assert resp.text.count("<tr>") == 1
+    finally:
+        app.dependency_overrides.clear()
