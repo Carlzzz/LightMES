@@ -8,8 +8,11 @@ from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, StationPassInput, ComponentInput,
 )
+from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.production.station_pass_service import StationPassService
 from lightmes.modules.trace.trace_service import TraceService
+from lightmes.modules.trace.genealogy_service import GenealogyService
+from lightmes.modules.trace.repository import GenealogyBindRepository
 from lightmes.shared.errors import NotFoundError, ValidationError
 
 
@@ -65,3 +68,20 @@ def test_genealogy_unknown_sn(db_session):
 def test_where_used_requires_a_key(db_session):
     with pytest.raises(ValidationError):
         TraceService(db_session).where_used()
+
+
+def test_where_used_sees_unbound_history(db_session):
+    """召回保证：逆向追溯 must 看到已解绑（被换下的）零件历史。
+
+    组件先绑定后解绑（如返工换料），where_used 仍应返回父件且 status=unbound。
+    该用例钉死"召回必须看到被移除零件"的承诺，防止未来误加 active-only 过滤。
+    """
+    sn = _pass_with_components(db_session)
+    su = SerialUnitRepository(db_session).get_by_sn(sn)
+    bind = GenealogyBindRepository(db_session).list_active_by_parent(su.id)[0]
+    GenealogyService(db_session).unbind(bind.id, reason="返工换料", operator_id=None)
+
+    parents = TraceService(db_session).where_used(component_sn="MB-100")
+    assert len(parents) == 1
+    assert parents[0].parent_sn_id == su.id
+    assert parents[0].status == "unbound"

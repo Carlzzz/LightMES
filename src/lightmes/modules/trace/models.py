@@ -1,11 +1,20 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Numeric, func
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
 
 class GenealogyBind(Base, TimestampMixin):
     __tablename__ = "genealogy_binds"
+    # DB 层兜底：同一唯一件 SN 最多一条 active 绑定（应用层 SELECT 后 INSERT 有 TOCTOU 竞态）
+    __table_args__ = (
+        Index(
+            "uq_active_component_sn",
+            "component_sn",
+            unique=True,
+            postgresql_where=text("status = 'active' AND component_sn IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     parent_sn_id: Mapped[int] = mapped_column(

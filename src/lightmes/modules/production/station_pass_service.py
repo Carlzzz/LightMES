@@ -129,20 +129,24 @@ class StationPassService:
         is_last = expected.seq == steps[-1].seq
         if is_last:
             su.status = "finished"
-            event_bus.publish(SerialUnitFinished(
-                serial_unit_id=su.id, sn=su.sn, work_order_id=wo.id,
-            ))
-            new_qty = self.db.execute(
-                update(WorkOrder)
-                .where(WorkOrder.id == wo.id)
-                .values(produced_qty=WorkOrder.produced_qty + 1)
-                .returning(WorkOrder.produced_qty)
-            ).scalar_one()
-            if new_qty >= wo.qty:
-                self.db.execute(
-                    update(WorkOrder).where(WorkOrder.id == wo.id).values(status="completed")
-                )
-            self.db.refresh(wo)
+            # 返工件再完工不重复计数：一个物理 SN 只计一次 produced_qty /
+            # SerialUnitFinished / completed 翻转（is_counted 首次完工置 True）。
+            if not su.is_counted:
+                su.is_counted = True
+                event_bus.publish(SerialUnitFinished(
+                    serial_unit_id=su.id, sn=su.sn, work_order_id=wo.id,
+                ))
+                new_qty = self.db.execute(
+                    update(WorkOrder)
+                    .where(WorkOrder.id == wo.id)
+                    .values(produced_qty=WorkOrder.produced_qty + 1)
+                    .returning(WorkOrder.produced_qty)
+                ).scalar_one()
+                if new_qty >= wo.qty:
+                    self.db.execute(
+                        update(WorkOrder).where(WorkOrder.id == wo.id).values(status="completed")
+                    )
+                self.db.refresh(wo)
 
         # 9. 翻转工单为在制 + 返工件复位
         if wo.status == "released":
