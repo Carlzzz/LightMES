@@ -99,7 +99,8 @@ def test_wip_page_empty_without_work_order(db_session):
         resp = client.get("/production/wip")
         assert resp.status_code == 200
         assert "WIP 看板" in resp.text
-        # 无 work_order_id → 空列表，tbody 中无数据行，仅表头一行 <tr>
-        assert resp.text.count("<tr>") == 1
+        # 无 work_order_id → 无数据表格，显示空状态提示，且无任何数据行
+        assert resp.text.count("<tr>") == 0
+        assert "暂无在制品" in resp.text
     finally:
         app.dependency_overrides.clear()

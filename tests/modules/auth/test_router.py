@@ -39,13 +39,14 @@ def test_api_login_failure(client):
 def test_login_page_renders(client):
     resp = client.get("/login")
     assert resp.status_code == 200
-    assert "LightMES 登录" in resp.text
+    assert "LightMES" in resp.text
+    assert "登录" in resp.text
 
 
-def test_login_submit_success_returns_welcome(client):
+def test_login_submit_success_redirects_home(client):
     resp = client.post("/login", data={"username": "eve", "password": "pw12345"})
-    assert resp.status_code == 200
-    assert "欢迎" in resp.text
+    assert resp.status_code == 204
+    assert resp.headers.get("HX-Redirect") == "/"
 
 
 def test_login_submit_failure_returns_error_fragment(client):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,12 @@ def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "login.html")
 
 
+@router.get("/logout")
+def logout(request: Request) -> Response:
+    request.session.clear()
+    return Response(status_code=302, headers={"Location": "/login"})
+
+
 @router.post("/login", response_class=HTMLResponse)
 def login_submit(
     request: Request,
@@ -47,6 +53,5 @@ def login_submit(
             request, "partials/login_result.html", {"user": None}
         )
     request.session["user_id"] = user.id
-    return templates.TemplateResponse(
-        request, "partials/login_result.html", {"user": user}
-    )
+    # 登录成功：让 HTMX 整页跳转到首页
+    return Response(status_code=204, headers={"HX-Redirect": "/"})

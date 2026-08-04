@@ -1,18 +1,26 @@
 {% extends "base.html" %}
 {% block title %}工位管理{% endblock %}
 {% block content %}
-<h1>工位管理</h1>
-<form hx-post="/masterdata/stations" hx-target="#rows" hx-swap="beforeend"
-      hx-on::after-request="if(event.detail.successful) this.reset()">
-  <input name="code" placeholder="编码" required>
-  <input name="name" placeholder="名称" required>
-  <input name="location" placeholder="位置">
-  <button type="submit">新增</button>
-</form>
-<table border="1">
-  <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>位置</th></tr></thead>
-  <tbody id="rows">
-    {% for station in stations %}{% include "masterdata/partials/station_row.html" %}{% endfor %}
-  </tbody>
-</table>
+<h1 class="page-title">工位管理</h1>
+
+<div class="card">
+  <div class="card__title">新增工位</div>
+  <form class="form-row" hx-post="/masterdata/stations" hx-target="#rows" hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="field"><label>编码</label><input name="code" placeholder="如 ST-装配" required></div>
+    <div class="field"><label>名称</label><input name="name" placeholder="工位名称" required></div>
+    <div class="field"><label>位置</label><input name="location" placeholder="车间位置（可选）"></div>
+    <button type="submit">新增</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">工位列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>位置</th></tr></thead>
+    <tbody id="rows">
+      {% for station in stations %}{% include "masterdata/partials/station_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

@@ -81,7 +81,7 @@ def _login(client, db_session, username="op", password="pw12345", display_name="
     resp = client.post(
         "/login", data={"username": username, "password": password}
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 204
     return user
 
 

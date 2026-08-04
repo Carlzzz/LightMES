@@ -1,16 +1,34 @@
 {% extends "base.html" %}
 {% block title %}WIP 看板{% endblock %}
 {% block content %}
-<h1>WIP 看板 — 工单 {{ work_order_id }}</h1>
-<table border="1">
-  <thead><tr><th>SN</th><th>状态</th><th>当前工序</th><th>当前工位</th></tr></thead>
-  <tbody>
-    {% for w in items %}
-    <tr>
-      <td>{{ w.sn }}</td><td>{{ w.status }}</td>
-      <td>{{ w.current_step_seq }}</td><td>{{ w.current_station_id or "" }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<h1 class="page-title">WIP 看板 <small>工单 #{{ work_order_id }}</small></h1>
+
+<div class="card">
+  <div class="card__title">查询工单在制品</div>
+  <form class="form-row" method="get" action="/production/wip">
+    <div class="field"><label>工单 ID</label><input name="work_order_id" value="{{ work_order_id }}"></div>
+    <button type="submit">查询</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">在制品列表</div>
+  {% if items %}
+  <table class="data-table">
+    <thead><tr><th>SN</th><th>状态</th><th>当前工序</th><th>当前工位</th></tr></thead>
+    <tbody>
+      {% for w in items %}
+      <tr>
+        <td>{{ w.sn }}</td>
+        <td><span class="badge">{{ w.status }}</span></td>
+        <td>{{ w.current_step_seq }}</td>
+        <td>{{ w.current_station_id or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="nav-card__desc">该工单暂无在制品（或未输入工单 ID）。</div>
+  {% endif %}
+</div>
 {% endblock %}

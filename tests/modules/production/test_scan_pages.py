@@ -24,7 +24,7 @@ def _login(client, db_session):
     AuthService(db_session).create_user(
         UserCreate(username="op", password="pw12345", display_name="Op"))
     db_session.flush()
-    assert client.post("/login", data={"username": "op", "password": "pw12345"}).status_code == 200
+    assert client.post("/login", data={"username": "op", "password": "pw12345"}).status_code == 204
 
 
 def _line_2step(db_session):
@@ -71,7 +71,7 @@ def test_scan_page_renders(client, db_session):
     _login(client, db_session)
     resp = client.get("/production/scan?station_id=7")
     assert resp.status_code == 200
-    assert "工位 7" in resp.text
+    assert 'value="7"' in resp.text  # 当前工位回填到表单
 
 
 def test_scan_first_pass_success_fragment(client, db_session):

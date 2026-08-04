@@ -1,12 +1,13 @@
 {% if error %}
-<div style="color:red">✗ {{ error }}</div>
+<div class="alert alert--danger">✗ {{ error }}</div>
 {% else %}
-<div style="color:green">
-  ✓ {{ result.sn }} — 已过 工序{{ result.passed_step.seq }} {{ result.passed_step.name }}
+<div class="alert alert--ok">
+  ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_step.seq }} {{ result.passed_step.name }}
   {% if result.is_finished %}
-    <strong>[完工]</strong>
+    <span class="badge">完工</span>
   {% else %}
-    → 下一站: 工序{{ result.next_step.seq }} {{ result.next_step.name }}
+    → 下一站：工序{{ result.next_step.seq }} {{ result.next_step.name }}
   {% endif %}
+  {% if result.bound_count %}<span class="badge">已绑定 {{ result.bound_count }} 组件</span>{% endif %}
 </div>
 {% endif %}

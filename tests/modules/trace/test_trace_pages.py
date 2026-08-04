@@ -27,7 +27,7 @@ def _login(client, db_session):
     AuthService(db_session).create_user(
         UserCreate(username="tr", password="pw12345", display_name="Tr"))
     db_session.flush()
-    assert client.post("/login", data={"username": "tr", "password": "pw12345"}).status_code == 200
+    assert client.post("/login", data={"username": "tr", "password": "pw12345"}).status_code == 204
 
 
 def _passed_sn(db_session):

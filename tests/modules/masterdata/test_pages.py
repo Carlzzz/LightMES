@@ -18,7 +18,8 @@ def _login(client, db_session):
         UserCreate(username="op", password="pw12345", display_name="Op"))
     db_session.flush()
     r = client.post("/login", data={"username": "op", "password": "pw12345"})
-    assert r.status_code == 200
+    assert r.status_code == 204
+    assert r.headers.get("HX-Redirect") == "/"
 
 
 def test_home_page(client):

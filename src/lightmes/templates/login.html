@@ -1,11 +1,25 @@
 {% extends "base.html" %}
 {% block title %}登录 - LightMES{% endblock %}
+{% block chrome %}{% endblock %}
 {% block content %}
-<h1>LightMES 登录</h1>
-<form hx-post="/login" hx-target="#result" hx-swap="innerHTML">
-  <input type="text" name="username" placeholder="用户名" required>
-  <input type="password" name="password" placeholder="密码" required>
-  <button type="submit">登录</button>
-</form>
-<div id="result">{{ message | default("") }}</div>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-card__logo">◆</div>
+    <h1>LightMES</h1>
+    <div class="auth-card__sub">笔记本外壳组装制造执行系统</div>
+    <form hx-post="/login" hx-target="#result" hx-swap="innerHTML">
+      <div class="field">
+        <label>用户名</label>
+        <input type="text" name="username" placeholder="请输入用户名" required autofocus>
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" name="password" placeholder="请输入密码" required>
+      </div>
+      <button type="submit" class="btn--block">登录</button>
+    </form>
+    <div id="result" class="result-slot"></div>
+    <div class="helper">演示账号：admin / admin123</div>
+  </div>
+</div>
 {% endblock %}

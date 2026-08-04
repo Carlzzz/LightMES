@@ -2,10 +2,26 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}LightMES{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
   <script src="/static/vendor/htmx.min.js"></script>
 </head>
 <body>
-  {% block content %}{% endblock %}
+  {% block chrome %}
+  <header class="app-bar">
+    <a class="app-bar__brand" href="/">
+      <span class="app-bar__logo">◆</span> LightMES
+    </a>
+    <span class="app-bar__spacer"></span>
+    <a class="app-bar__link" href="/">首页</a>
+    <a class="app-bar__link" href="/production/scan?station_id=0">扫码过站</a>
+    <a class="app-bar__link" href="/trace/query">追溯</a>
+    <a class="app-bar__link" href="/logout">退出</a>
+  </header>
+  {% endblock %}
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
 </body>
 </html>
