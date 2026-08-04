@@ -15,14 +15,13 @@
   <div class="card__title">在制品列表</div>
   {% if items %}
   <table class="data-table">
-    <thead><tr><th>SN</th><th>状态</th><th>当前工序</th><th>当前工位</th></tr></thead>
+    <thead><tr><th>SN</th><th>状态</th><th>当前工序</th></tr></thead>
     <tbody>
       {% for w in items %}
       <tr>
         <td>{{ w.sn }}</td>
         <td><span class="badge">{{ w.status }}</span></td>
-        <td>{{ w.current_step_seq }}</td>
-        <td>{{ w.current_station_id or "" }}</td>
+        <td>{{ w.current_operation_seq }}</td>
       </tr>
       {% endfor %}
     </tbody>

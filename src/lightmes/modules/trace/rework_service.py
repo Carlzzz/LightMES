@@ -26,9 +26,9 @@ class ReworkService:
             raise NotFoundError(f"SN 不存在: {sn}")
         if su.status == "scrapped":
             raise BusinessRuleError(f"SN 已判废，不可返工: {sn}")
-        if target_seq < 0 or target_seq >= su.current_step_seq:
+        if target_seq < 0 or target_seq >= su.current_operation_seq:
             raise ValidationError(
-                f"返工目标工序 {target_seq} 必须小于当前 {su.current_step_seq}")
+                f"返工目标工序 {target_seq} 必须小于当前 {su.current_operation_seq}")
         for bind_id in (unbind_bind_ids or []):
             bind = self.genealogy.binds.get(bind_id)
             if bind is None or bind.parent_sn_id != su.id:
@@ -38,7 +38,7 @@ class ReworkService:
         result = self.db.execute(
             update(SerialUnit)
             .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
-            .values(status="reworking", current_step_seq=target_seq,
+            .values(status="reworking", current_operation_seq=target_seq,
                     version=prev_version + 1)
         )
         if result.rowcount == 0:

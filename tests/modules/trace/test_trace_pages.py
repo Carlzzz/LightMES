@@ -49,7 +49,8 @@ def _passed_sn(db_session):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="PWO", product_id=fin.id, routing_id=r.id, qty=5, sn_rule_id=rule.id))
+        code="PWO", product_id=fin.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     res = StationPassService(db_session).pass_station(StationPassInput(
         station_id=s.id, work_order_code="PWO",

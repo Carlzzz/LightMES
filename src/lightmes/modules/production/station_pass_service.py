@@ -66,11 +66,11 @@ class StationPassService:
             new_sn = self.sn_gen.next_sn(rule)
             su = self.serial_units.add(SerialUnit(
                 sn=new_sn, work_order_id=wo.id, product_id=wo.product_id,
-                status="in_process", current_step_seq=0,
+                status="in_process", current_operation_seq=0,
             ))
 
         # 4. 期望下一工序
-        next_steps = [s for s in steps if s.seq > su.current_step_seq]
+        next_steps = [s for s in steps if s.seq > su.current_operation_seq]
         if not next_steps:
             raise BusinessRuleError("已完工，无后续工序")
         expected = next_steps[0]
@@ -81,8 +81,8 @@ class StationPassService:
                 f"应到工位(工序 {expected.seq} {expected.name})，当前工位不符"
             )
 
-        # 6. 防重复：由"期望下一工序 = 第一个 seq > current_step_seq"天然保证——
-        #    正常流程过完某工序后 current_step_seq 即推进，该工序不会再被选为 expected；
+        # 6. 防重复：由"期望下一工序 = 第一个 seq > current_operation_seq"天然保证——
+        #    正常流程过完某工序后 current_operation_seq 即推进，该工序不会再被选为 expected；
         #    返工回退后旧的 pass 记录保留但不阻挡（§5.4）。无需额外 exists_pass 守卫。
 
         # 7. 写过站 + 乐观锁更新 serial_unit
@@ -96,8 +96,7 @@ class StationPassService:
             update(SerialUnit)
             .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
             .values(
-                current_step_seq=expected.seq,
-                current_station_id=data.station_id,
+                current_operation_seq=expected.seq,
                 version=prev_version + 1,
             )
         )

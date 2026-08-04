@@ -66,14 +66,6 @@ class SerialUnitRepository:
             select(SerialUnit).where(SerialUnit.work_order_id == work_order_id)
         ).scalars().all())
 
-    def list_in_process_by_station(self, station_id: int) -> list[SerialUnit]:
-        return list(self.db.execute(
-            select(SerialUnit).where(
-                SerialUnit.current_station_id == station_id,
-                SerialUnit.status == "in_process",
-            )
-        ).scalars().all())
-
 
 class StationPassRepository:
     def __init__(self, db: Session) -> None:

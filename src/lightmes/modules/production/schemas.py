@@ -24,6 +24,7 @@ class WorkOrderCreate(BaseModel):
     code: str
     product_id: int
     routing_id: int
+    line_id: int
     qty: int
     sn_rule_id: int | None = None
 
@@ -34,6 +35,7 @@ class WorkOrderRead(BaseModel):
     code: str
     product_id: int
     routing_id: int
+    line_id: int
     sn_rule_id: int | None
     qty: int
     status: str
@@ -77,5 +79,4 @@ class WipItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     sn: str
     status: str
-    current_step_seq: int
-    current_station_id: int | None
+    current_operation_seq: int

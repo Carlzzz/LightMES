@@ -26,6 +26,7 @@ class WorkOrder(Base, TimestampMixin):
     code: Mapped[str] = mapped_column(unique=True, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     routing_id: Mapped[int] = mapped_column(ForeignKey("routings.id"))
+    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"))
     sn_rule_id: Mapped[int | None] = mapped_column(
         ForeignKey("sn_rules.id"), default=None
     )
@@ -45,10 +46,7 @@ class SerialUnit(Base, TimestampMixin):
     work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"))
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     status: Mapped[str] = mapped_column(default="in_process")
-    current_step_seq: Mapped[int] = mapped_column(default=0)
-    current_station_id: Mapped[int | None] = mapped_column(
-        ForeignKey("stations.id"), default=None
-    )
+    current_operation_seq: Mapped[int] = mapped_column(default=0)
     version: Mapped[int] = mapped_column(default=0)
     # 是否已计入工单完工数；返工再完工不重复计数（一个物理 SN 只计一次）
     is_counted: Mapped[bool] = mapped_column(default=False, server_default="false")

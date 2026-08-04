@@ -28,7 +28,8 @@ def _single_step_line(db_session, qty=5):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRFL", name="r", pattern="RR{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="RRFWO", product_id=p.id, routing_id=r.id, qty=qty, sn_rule_id=rule.id))
+        code="RRFWO", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=qty, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return p, s, wo
 
@@ -50,10 +51,10 @@ def test_rework_finished_recount_not_double_counted(db_session):
     assert su.status == "finished"
     assert wo_repo.get(wo.id).produced_qty == 1
 
-    # 完工件可返工（rework 仅拒 scrapped；target_seq < current_step_seq）
+    # 完工件可返工（rework 仅拒 scrapped；target_seq < current_operation_seq）
     reworked = ReworkService(db_session).rework(res.sn, target_seq=0, reason="返修")
     assert reworked.status == "reworking"
-    assert reworked.current_step_seq == 0
+    assert reworked.current_operation_seq == 0
 
     # 重过单工序：再次末站完工
     r2 = pass_svc.pass_station(StationPassInput(station_id=s.id, sn=res.sn))

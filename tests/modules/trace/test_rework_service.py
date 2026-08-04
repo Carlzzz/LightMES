@@ -44,7 +44,8 @@ def _two_step_line(db_session):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRL", name="r", pattern="R{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="RWO", product_id=fin.id, routing_id=r.id, qty=10, sn_rule_id=rule.id))
+        code="RWO", product_id=fin.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return fin, comp, s1, s2, wo
 
@@ -54,10 +55,10 @@ def test_rework_rolls_back_step_and_status(db_session):
     pass_svc = StationPassService(db_session)
     res = pass_svc.pass_station(StationPassInput(station_id=s1.id, work_order_code="RWO"))
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
-    assert su.current_step_seq == 1
+    assert su.current_operation_seq == 1
     reworked = ReworkService(db_session).rework(res.sn, target_seq=0, reason="上料错误")
     assert reworked.status == "reworking"
-    assert reworked.current_step_seq == 0
+    assert reworked.current_operation_seq == 0
 
 
 def test_rework_unbinds_components(db_session):
@@ -83,7 +84,7 @@ def test_rework_then_repass_resets_in_process(db_session):
     r2 = pass_svc.pass_station(StationPassInput(station_id=s1.id, sn=res.sn))
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
     assert su.status == "in_process"
-    assert su.current_step_seq == 1
+    assert su.current_operation_seq == 1
 
 
 def test_rework_target_seq_must_be_less(db_session):
@@ -133,7 +134,8 @@ def _three_step_line(db_session):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRL3", name="r", pattern="R3{SEQ:2}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="RWO3", product_id=fin.id, routing_id=r.id, qty=10, sn_rule_id=rule.id))
+        code="RWO3", product_id=fin.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return fin, s1, s2, s3, wo
 
@@ -149,7 +151,7 @@ def test_rework_then_multistep_repass_all_steps(db_session):
 
     旧守卫 `status != "reworking"` 只豁免返工后的首次重过：第 2 次重过时 SN 状态
     已被复位为 in_process，命中原始运行的 pass 记录，误报"该工序已过站"。§5.4 要求
-    旧 pass 记录"保留但不阻挡"，故需无条件放行（期望下一工序的 seq>current_step_seq
+    旧 pass 记录"保留但不阻挡"，故需无条件放行（期望下一工序的 seq>current_operation_seq
     选择逻辑本身就是防重复机制）。
     """
     fin, s1, s2, s3, wo = _three_step_line(db_session)
@@ -160,13 +162,13 @@ def test_rework_then_multistep_repass_all_steps(db_session):
     assert r3.passed_step.seq == 3
     assert r3.is_finished is True
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
-    assert su.current_step_seq == 3
+    assert su.current_operation_seq == 3
     assert su.status == "finished"
 
-    # 完工件可返工（rework 仅拒 scrapped，且 target_seq < current_step_seq）
+    # 完工件可返工（rework 仅拒 scrapped，且 target_seq < current_operation_seq）
     reworked = ReworkService(db_session).rework(res.sn, target_seq=0, reason="返修")
     assert reworked.status == "reworking"
-    assert reworked.current_step_seq == 0
+    assert reworked.current_operation_seq == 0
 
     # 连续重过 1 → 2 → 3：每一步都必须成功（旧守卫在第 2 步即抛"该工序已过站"）
     rp1 = pass_svc.pass_station(StationPassInput(station_id=s1.id, sn=res.sn))
@@ -180,5 +182,5 @@ def test_rework_then_multistep_repass_all_steps(db_session):
     assert rp3.is_finished is True
 
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
-    assert su.current_step_seq == 3
+    assert su.current_operation_seq == 3
     assert su.status == "finished"

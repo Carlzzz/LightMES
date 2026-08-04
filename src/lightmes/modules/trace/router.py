@@ -115,4 +115,4 @@ def rework_submit(
         return HTMLResponse(f'<div style="color:red">✗ {escape(e.detail)}</div>')
     return HTMLResponse(
         f'<div style="color:green">✓ {escape(su.sn)} '
-        f'已返工至工序 {su.current_step_seq}</div>')
+        f'已返工至工序 {su.current_operation_seq}</div>')

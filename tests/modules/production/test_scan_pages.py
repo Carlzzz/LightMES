@@ -52,7 +52,8 @@ def _line_2step(db_session):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PG2L", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="PG2W", product_id=p.id, routing_id=r.id, qty=5, sn_rule_id=rule.id))
+        code="PG2W", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return s1, s2, wo
 
@@ -71,7 +72,8 @@ def _line(db_session):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="PWO", product_id=p.id, routing_id=r.id, qty=5, sn_rule_id=rule.id))
+        code="PWO", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return s1
 

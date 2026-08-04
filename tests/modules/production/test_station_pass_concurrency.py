@@ -70,14 +70,14 @@ def test_double_scan_same_sn_raises_conflict():
         ))
         wo = prod.create_work_order(WorkOrderCreate(
             code=f"CC-W-{tag}", product_id=p.id, routing_id=r.id,
-            qty=10, sn_rule_id=rule.id,
+            line_id=line.id, qty=10, sn_rule_id=rule.id,
         ))
         prod.release_work_order(wo.id)
-        # 手动创建唯一一个 SU：status=in_process, current_step_seq=0, version=0
+        # 手动创建唯一一个 SU：status=in_process, current_operation_seq=0, version=0
         # 两个线程都瞄着同一个 SN、同一道工序。
         su = SerialUnit(
             sn=sn, work_order_id=wo.id, product_id=p.id,
-            status="in_process", current_step_seq=0, version=0,
+            status="in_process", current_operation_seq=0, version=0,
         )
         setup.add(su)
         setup.commit()
@@ -210,7 +210,7 @@ def test_two_different_units_complete_same_wo_atomically():
         ))
         wo = prod.create_work_order(WorkOrderCreate(
             code=f"CC2-W-{tag}", product_id=p.id, routing_id=r.id,
-            qty=2, sn_rule_id=rule.id,
+            line_id=line.id, qty=2, sn_rule_id=rule.id,
         ))
         prod.release_work_order(wo.id)
         setup.commit()

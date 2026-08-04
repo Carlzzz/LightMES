@@ -38,7 +38,8 @@ def _setup(db_session, qty=10):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RL", name="r", pattern="SN{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="WO1", product_id=p.id, routing_id=r.id, qty=qty, sn_rule_id=rule.id))
+        code="WO1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=qty, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return p, s1, s2, wo
 
@@ -110,7 +111,8 @@ def test_pass_on_non_released_work_order_rejected(db_session):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RL2", name="r", pattern="A{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="WOC", product_id=p.id, routing_id=r.id, qty=5, sn_rule_id=rule.id))
+        code="WOC", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     # 未 release，仍是 created
     svc = StationPassService(db_session)
     with pytest.raises(BusinessRuleError):

@@ -33,7 +33,8 @@ def _line(db_session, steps_n=1):
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="EVRL", name="r", pattern="E{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="EVWO", product_id=p.id, routing_id=r.id, qty=5, sn_rule_id=rule.id))
+        code="EVWO", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return stations, wo
 

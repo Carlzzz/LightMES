@@ -20,7 +20,8 @@ def test_serial_unit_persist_and_lookup(db_session):
     r = md.create_routing(RoutingCreate(code="SUR", name="路线", product_id=p.id,
         operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
     wo = ProductionService(db_session).create_work_order(
-        WorkOrderCreate(code="SUWO", product_id=p.id, routing_id=r.id, qty=5))
+        WorkOrderCreate(code="SUWO", product_id=p.id, routing_id=r.id,
+                        line_id=line.id, qty=5))
     repo = SerialUnitRepository(db_session)
     su = repo.add(SerialUnit(sn="SN0001", work_order_id=wo.id, product_id=p.id))
     assert su.id is not None
@@ -51,7 +52,8 @@ def test_station_pass_exists_check(db_session):
     db_session.flush()
     step_id = md.routings.steps_of(r.id)[0].id
     wo = ProductionService(db_session).create_work_order(
-        WorkOrderCreate(code="SPWO", product_id=p.id, routing_id=r.id, qty=5))
+        WorkOrderCreate(code="SPWO", product_id=p.id, routing_id=r.id,
+                        line_id=line.id, qty=5))
     su = SerialUnitRepository(db_session).add(
         SerialUnit(sn="SN9", work_order_id=wo.id, product_id=p.id))
     sp_repo = StationPassRepository(db_session)

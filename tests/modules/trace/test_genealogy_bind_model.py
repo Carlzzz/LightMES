@@ -19,7 +19,8 @@ def _finished_sn(db_session):
     r = md.create_routing(RoutingCreate(code="GBR", name="路线", product_id=p.id,
         operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
     wo = ProductionService(db_session).create_work_order(
-        WorkOrderCreate(code="GBWO", product_id=p.id, routing_id=r.id, qty=5))
+        WorkOrderCreate(code="GBWO", product_id=p.id, routing_id=r.id,
+                        line_id=line.id, qty=5))
     su = SerialUnitRepository(db_session).add(
         SerialUnit(sn="GBSN1", work_order_id=wo.id, product_id=p.id))
     return su, p
