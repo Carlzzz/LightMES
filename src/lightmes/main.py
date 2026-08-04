@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
-from lightmes.modules import auth, masterdata, production
+from lightmes.modules import auth, masterdata, production, trace
 from lightmes.shared.errors import DomainError
 
 settings = get_settings()
@@ -21,6 +21,7 @@ app.mount(
 auth.register(app)
 masterdata.register(app)
 production.register(app)
+trace.register(app)
 
 
 @app.exception_handler(DomainError)
