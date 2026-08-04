@@ -11,6 +11,8 @@ from lightmes.modules.production.schemas import (
     StationPassInput, StationPassResult, StepInfo,
 )
 from lightmes.modules.production.sn_generator import SnGenerator
+from lightmes.shared.events import event_bus
+from lightmes.modules.production.events import StationPassed, SerialUnitFinished
 from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError
 
 
@@ -105,6 +107,9 @@ class StationPassService:
         is_last = expected.seq == steps[-1].seq
         if is_last:
             su.status = "finished"
+            event_bus.publish(SerialUnitFinished(
+                serial_unit_id=su.id, sn=su.sn, work_order_id=wo.id,
+            ))
             new_qty = self.db.execute(
                 update(WorkOrder)
                 .where(WorkOrder.id == wo.id)
@@ -122,6 +127,11 @@ class StationPassService:
             wo.status = "in_process"
 
         self.db.flush()
+
+        event_bus.publish(StationPassed(
+            serial_unit_id=su.id, sn=su.sn, work_order_id=wo.id,
+            routing_step_id=expected.id, station_id=data.station_id,
+        ))
 
         remaining = [s for s in steps if s.seq > expected.seq]
         next_info = (
