@@ -18,11 +18,20 @@ class BindView(BaseModel):
     status: str
 
 
-class PassView(BaseModel):
-    routing_step_id: int
-    station_id: int
+class OpRecordView(BaseModel):
+    operation_id: int
+    work_station_id: int
+    line_id: int
     result: str
-    pass_time: datetime
+    end_time: datetime
+
+
+class ParamView(BaseModel):
+    param_key: str
+    param_value: str
+    unit: str | None = None
+    source: str
+    recorded_at: datetime
 
 
 class GenealogyView(BaseModel):
@@ -32,8 +41,9 @@ class GenealogyView(BaseModel):
 
 class HistoryView(BaseModel):
     sn: str
-    passes: list[PassView]
+    records: list[OpRecordView]
     components: list[BindView]
+    params: list[ParamView]
 
 
 class ParentRef(BaseModel):

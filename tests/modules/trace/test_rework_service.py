@@ -6,11 +6,12 @@ from lightmes.modules.masterdata.schemas import (
 )
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
-    SnRuleCreate, WorkOrderCreate, OperationPassInput, ComponentInput,
+    SnRuleCreate, WorkOrderCreate, OperationPassInput, ComponentInput, ParamInput,
 )
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.trace.rework_service import ReworkService
+from lightmes.modules.trace.trace_service import TraceService
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.repository import GenealogyBindRepository
 from lightmes.shared.errors import NotFoundError, BusinessRuleError, ValidationError
@@ -121,6 +122,33 @@ def _three_step_line(db_session):
         qty=10, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     return fin, w1, w2, w3, wo
+
+
+def test_rework_history_accumulates_records_and_params(db_session):
+    """返工重过后履历/工艺参数必须累加：旧 operation_record 保留，重过追加新记录。
+
+    该用例同时验证 TraceService.history_of 读 operation_record/operation_param，
+    与 Task 6 放宽的 len(h.passes)==0 无回归（履历非空且随重过增长）。
+    """
+    fin, comp, w1, w2, wo = _two_step_line(db_session)
+    pass_svc = OperationPassService(db_session)
+    res = pass_svc.pass_operation(OperationPassInput(
+        work_station_id=w1.id, work_order_code="RWO",
+        params=[ParamInput(param_key="torque", param_value="1.5", unit="N·m")]))
+    ReworkService(db_session).rework(res.sn, target_seq=0, reason="返修")
+    pass_svc.pass_operation(OperationPassInput(
+        work_station_id=w1.id, sn=res.sn,
+        params=[ParamInput(param_key="torque", param_value="1.8", unit="N·m")]))
+
+    h = TraceService(db_session).history_of(res.sn)
+    assert len(h.records) == 2
+    assert len(h.params) == 2
+    values = {p.param_value for p in h.params}
+    assert values == {"1.5", "1.8"}
+    # 两次重过均为同一工序（重过同一 OP1）
+    op_ids = {r.operation_id for r in h.records}
+    assert len(op_ids) == 1
+    assert all(r.result == "pass" for r in h.records)
 
 
 def test_rework_unknown_sn(db_session):
