@@ -84,3 +84,28 @@ class BomItem(Base, TimestampMixin):
     component_product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     qty: Mapped[float] = mapped_column(Numeric(12, 3), default=1)
     track_mode: Mapped[str] = mapped_column()  # denormalized from component product
+
+
+class Line(Base, TimestampMixin):
+    __tablename__ = "lines"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(unique=True, index=True)
+    name: Mapped[str] = mapped_column()
+    description: Mapped[str | None] = mapped_column(default=None)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class WorkStation(Base, TimestampMixin):
+    __tablename__ = "work_stations"
+    __table_args__ = (
+        UniqueConstraint("line_id", "seq", name="uq_work_station_line_seq"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(unique=True, index=True)
+    name: Mapped[str] = mapped_column()
+    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"))
+    seq: Mapped[int] = mapped_column()
+    description: Mapped[str | None] = mapped_column(default=None)
+    is_active: Mapped[bool] = mapped_column(default=True)

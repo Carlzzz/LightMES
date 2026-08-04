@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
     BomItem,
+    Line,
     Product,
     Routing,
     RoutingStep,
     Station,
+    WorkStation,
 )
 
 
@@ -115,3 +117,49 @@ class BomRepository:
                 select(BomItem).where(BomItem.bom_id == bom_id)
             ).scalars().all()
         )
+
+
+class LineRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, line: Line) -> Line:
+        self.db.add(line)
+        self.db.flush()
+        return line
+
+    def get(self, id: int) -> Line | None:
+        return self.db.get(Line, id)
+
+    def get_by_code(self, code: str) -> Line | None:
+        return self.db.execute(
+            select(Line).where(Line.code == code)
+        ).scalar_one_or_none()
+
+    def list_all(self) -> list[Line]:
+        return list(self.db.execute(select(Line)).scalars().all())
+
+
+class WorkStationRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, ws: WorkStation) -> WorkStation:
+        self.db.add(ws)
+        self.db.flush()
+        return ws
+
+    def get(self, id: int) -> WorkStation | None:
+        return self.db.get(WorkStation, id)
+
+    def get_by_code(self, code: str) -> WorkStation | None:
+        return self.db.execute(
+            select(WorkStation).where(WorkStation.code == code)
+        ).scalar_one_or_none()
+
+    def list_by_line(self, line_id: int) -> list[WorkStation]:
+        return list(self.db.execute(
+            select(WorkStation)
+            .where(WorkStation.line_id == line_id)
+            .order_by(WorkStation.seq)
+        ).scalars().all())

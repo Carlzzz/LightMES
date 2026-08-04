@@ -99,3 +99,37 @@ class BomRead(BaseModel):
     version: str
     status: str
     items: list[BomItemRead]
+
+
+class LineCreate(BaseModel):
+    code: str
+    name: str
+    description: str | None = None
+
+
+class LineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    description: str | None
+    is_active: bool
+
+
+class WorkStationCreate(BaseModel):
+    code: str
+    name: str
+    line_id: int
+    seq: int
+    description: str | None = None
+
+
+class WorkStationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    line_id: int
+    seq: int
+    description: str | None
+    is_active: bool

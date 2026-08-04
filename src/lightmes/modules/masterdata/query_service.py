@@ -1,6 +1,19 @@
 from sqlalchemy.orm import Session
-from lightmes.modules.masterdata.models import Bom, BomItem, Product, Routing, RoutingStep
-from lightmes.modules.masterdata.repository import BomRepository, RoutingRepository
+from lightmes.modules.masterdata.models import (
+    Bom,
+    BomItem,
+    Line,
+    Product,
+    Routing,
+    RoutingStep,
+    WorkStation,
+)
+from lightmes.modules.masterdata.repository import (
+    BomRepository,
+    LineRepository,
+    RoutingRepository,
+    WorkStationRepository,
+)
 
 
 class MasterDataQueryService:
@@ -10,6 +23,8 @@ class MasterDataQueryService:
         self.db = db
         self._routings = RoutingRepository(db)
         self._boms = BomRepository(db)
+        self._lines = LineRepository(db)
+        self._work_stations = WorkStationRepository(db)
 
     def get_product(self, product_id: int) -> Product | None:
         return self.db.get(Product, product_id)
@@ -28,3 +43,9 @@ class MasterDataQueryService:
         if bom is None:
             return []
         return self._boms.items_of(bom.id)
+
+    def get_line(self, line_id: int) -> Line | None:
+        return self._lines.get(line_id)
+
+    def get_work_station(self, work_station_id: int) -> WorkStation | None:
+        return self._work_stations.get(work_station_id)
