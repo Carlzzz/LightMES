@@ -631,10 +631,11 @@ Expected: FAIL —— ImportError（`station_pass_service` 不存在）。
 
 `src/lightmes/modules/production/station_pass_service.py`:
 ```python
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
-from lightmes.modules.production.models import SerialUnit, StationPass
+from lightmes.modules.production.models import SerialUnit, StationPass, WorkOrder
 from lightmes.modules.production.repository import (
     SerialUnitRepository, StationPassRepository, SnRuleRepository,
     WorkOrderRepository,
@@ -714,24 +715,46 @@ class StationPassService:
             raise BusinessRuleError(f"该工序已过站: 工序 {expected.seq}")
 
         # 7. 写过站 + 乐观锁更新 serial_unit
+        #    用带 version 条件的 UPDATE 做真正的乐观锁：仅当 version 仍为读到的值才更新。
+        #    并发双扫时后提交者影响 0 行 → 抛 ConflictError（否则两次都成功、produced_qty 重复+1）。
         self.passes.add(StationPass(
             serial_unit_id=su.id, work_order_id=wo.id,
             routing_step_id=expected.id, station_id=data.station_id,
             operator_id=data.operator_id, result="pass",
         ))
         prev_version = su.version
-        su.current_step_seq = expected.seq
-        su.current_station_id = data.station_id
-        su.version = prev_version + 1
-        self.db.flush()
+        result = self.db.execute(
+            update(SerialUnit)
+            .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
+            .values(
+                current_step_seq=expected.seq,
+                current_station_id=data.station_id,
+                version=prev_version + 1,
+            )
+        )
+        if result.rowcount == 0:
+            raise ConflictError("该产品正被其他工位处理，请重试")
+        # 让 ORM 实例与刚写入的行一致（后续 8/9 步读 su 字段）
+        self.db.refresh(su)
 
-        # 8. 末站完工
+        # 8. 末站完工。produced_qty 用原子自增（不同 SN 并发完工会各读到旧值、
+        #    plain += 1 丢更新 → 计数偏低、completed 漏触发）。用 RETURNING 取权威新值。
         is_last = expected.seq == steps[-1].seq
         if is_last:
             su.status = "finished"
-            wo.produced_qty += 1
-            if wo.produced_qty >= wo.qty:
-                wo.status = "completed"
+            new_qty = self.db.execute(
+                update(WorkOrder)
+                .where(WorkOrder.id == wo.id)
+                .values(produced_qty=WorkOrder.produced_qty + 1)
+                .returning(WorkOrder.produced_qty)
+            ).scalar_one()
+            if new_qty >= wo.qty:
+                self.db.execute(
+                    update(WorkOrder)
+                    .where(WorkOrder.id == wo.id)
+                    .values(status="completed")
+                )
+            self.db.refresh(wo)
 
         # 9. 翻转工单为在制
         if wo.status == "released":
@@ -1052,6 +1075,11 @@ def scan_submit(
                 station_id=station_id, work_order_code=code_or_sn,
                 operator_id=user.id))
     except DomainError as e:
+        # 关键：页面 catch 了异常并正常返回，get_db 会走成功路径 commit。
+        # 若不回滚，校验失败前已 flush 的写入（首件生成的 SerialUnit、消耗的 SN 流水、
+        # ConflictError 前写的 station_pass）会被提交，污染 P1c 依赖的 serial_unit/station_pass。
+        # 因此凡"吞掉领域异常并正常返回"的处理器，必须先 rollback。
+        db.rollback()
         return templates.TemplateResponse(
             request, "production/partials/scan_result.html", {"error": e.detail}
         )
@@ -1059,7 +1087,7 @@ def scan_submit(
         request, "production/partials/scan_result.html", {"result": result}
     )
 ```
-说明：`api_pass_station` 不 catch DomainError（全局 handler 处理）；页面处理器 catch 后渲染红片段。页面的"先 SN 后工单号"猜测仅便利，API 不做。
+说明：`api_pass_station` 不 catch DomainError（异常逃逸到 get_db → rollback，安全）；页面处理器 catch 后**先 db.rollback() 再**渲染红片段（否则 get_db 成功路径会 commit 掉被拒扫描的残留行）。这是所有 HTMX 写处理器的通用约定，P1c 新写处理器须遵守。页面的"先 SN 后工单号"猜测仅便利，API 不做。
 
 - [ ] **Step 5: 运行测试确认通过 + 回归 + Commit**
 

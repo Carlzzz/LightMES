@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}扫码过站{% endblock %}
+{% block content %}
+<h1>扫码过站 — 工位 {{ station_id }}</h1>
+<form hx-post="/production/scan" hx-target="#result" hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) this.querySelector('[name=code_or_sn]').value=''">
+  <input type="hidden" name="station_id" value="{{ station_id }}">
+  <input name="code_or_sn" placeholder="扫工单号(首件)或SN" required autofocus>
+  <button type="submit">过站</button>
+</form>
+<div id="result"></div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}WIP 看板{% endblock %}
+{% block content %}
+<h1>WIP 看板 — 工单 {{ work_order_id }}</h1>
+<table border="1">
+  <thead><tr><th>SN</th><th>状态</th><th>当前工序</th><th>当前工位</th></tr></thead>
+  <tbody>
+    {% for w in items %}
+    <tr>
+      <td>{{ w.sn }}</td><td>{{ w.status }}</td>
+      <td>{{ w.current_step_seq }}</td><td>{{ w.current_station_id or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
