@@ -50,6 +50,8 @@ class SerialUnit(Base, TimestampMixin):
         ForeignKey("stations.id"), default=None
     )
     version: Mapped[int] = mapped_column(default=0)
+    # 是否已计入工单完工数；返工再完工不重复计数（一个物理 SN 只计一次）
+    is_counted: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class StationPass(Base, TimestampMixin):

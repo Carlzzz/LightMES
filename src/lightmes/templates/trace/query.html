@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}追溯查询{% endblock %}
+{% block content %}
+<h1>追溯查询</h1>
+<form hx-post="/trace/query" hx-target="#result" hx-swap="innerHTML">
+  <select name="query_type">
+    <option value="genealogy">正向: 成品SN→组件</option>
+    <option value="where_used_sn">反向: 组件SN→成品</option>
+    <option value="where_used_batch">反向: 组件批次→成品</option>
+    <option value="history">履历: 成品SN</option>
+  </select>
+  <input name="value" placeholder="输入 SN 或批次号" required>
+  <button type="submit">查询</button>
+</form>
+<div id="result"></div>
+{% endblock %}
