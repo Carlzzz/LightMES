@@ -20,7 +20,8 @@ class GenealogyService:
 
     def bind_components(
         self, parent_su, components: list[ComponentBind],
-        operator_id: int | None, station_pass_id: int | None,
+        operator_id: int | None, station_pass_id: int | None = None,
+        operation_record_id: int | None = None,
     ) -> list[GenealogyBind]:
         items = self.query.get_active_bom_items(parent_su.product_id)
         if not items:
@@ -52,6 +53,7 @@ class GenealogyService:
                 qty=comp.qty,
                 operator_id=operator_id,
                 station_pass_id=station_pass_id,
+                operation_record_id=operation_record_id,
                 status="active",
             ))
             event_bus.publish(GenealogyBound(
