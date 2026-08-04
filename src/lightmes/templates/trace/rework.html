@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}返工{% endblock %}
+{% block content %}
+<h1>返工 / 拆解</h1>
+<form hx-post="/trace/rework" hx-target="#result" hx-swap="innerHTML">
+  <input name="sn" placeholder="成品SN" required>
+  <input name="target_seq" type="number" placeholder="回退到工序序号" required>
+  <input name="reason" placeholder="返工原因">
+  <button type="submit">返工</button>
+</form>
+<div id="result"></div>
+{% endblock %}
