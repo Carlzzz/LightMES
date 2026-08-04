@@ -43,11 +43,19 @@ class WorkOrderRead(BaseModel):
     planned_end: datetime | None
 
 
+class ComponentInput(BaseModel):
+    component_product_id: int
+    component_sn: str | None = None
+    component_batch_no: str | None = None
+    qty: float = 1
+
+
 class StationPassInput(BaseModel):
     station_id: int
     work_order_code: str | None = None
     sn: str | None = None
     operator_id: int | None = None
+    components: list[ComponentInput] = []
 
 
 class StepInfo(BaseModel):
@@ -62,6 +70,7 @@ class StationPassResult(BaseModel):
     next_step: StepInfo | None
     is_finished: bool
     work_order_status: str
+    bound_count: int = 0
 
 
 class WipItem(BaseModel):

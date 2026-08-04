@@ -11,6 +11,8 @@ from lightmes.modules.production.schemas import (
     StationPassInput, StationPassResult, StepInfo,
 )
 from lightmes.modules.production.sn_generator import SnGenerator
+from lightmes.modules.trace.genealogy_service import GenealogyService
+from lightmes.modules.trace.schemas import ComponentBind
 from lightmes.shared.events import event_bus
 from lightmes.modules.production.events import StationPassed, SerialUnitFinished
 from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError
@@ -84,7 +86,7 @@ class StationPassService:
             raise BusinessRuleError(f"该工序已过站: 工序 {expected.seq}")
 
         # 7. 写过站 + 乐观锁更新 serial_unit
-        self.passes.add(StationPass(
+        station_pass = self.passes.add(StationPass(
             serial_unit_id=su.id, work_order_id=wo.id,
             routing_step_id=expected.id, station_id=data.station_id,
             operator_id=data.operator_id, result="pass",
@@ -102,6 +104,26 @@ class StationPassService:
         if result.rowcount == 0:
             raise ConflictError("该产品正被其他工位处理，请重试")
         self.db.refresh(su)
+
+        # 7b. 组件绑定（同事务；失败则回滚整个过站，含已生成的 SN）
+        bound_count = 0
+        if data.components:
+            try:
+                binds = GenealogyService(self.db).bind_components(
+                    su,
+                    [ComponentBind(
+                        component_product_id=c.component_product_id,
+                        component_sn=c.component_sn,
+                        component_batch_no=c.component_batch_no,
+                        qty=c.qty,
+                    ) for c in data.components],
+                    operator_id=data.operator_id,
+                    station_pass_id=station_pass.id,
+                )
+            except Exception:
+                self.db.rollback()
+                raise
+            bound_count = len(binds)
 
         # 8. 末站完工（produced_qty 用原子 UPDATE，避免两个不同 SN 并发完工丢更新）
         is_last = expected.seq == steps[-1].seq
@@ -122,9 +144,11 @@ class StationPassService:
                 )
             self.db.refresh(wo)
 
-        # 9. 翻转工单为在制
+        # 9. 翻转工单为在制 + 返工件复位
         if wo.status == "released":
             wo.status = "in_process"
+        if su.status == "reworking":
+            su.status = "in_process"
 
         self.db.flush()
 
@@ -146,4 +170,5 @@ class StationPassService:
             next_step=next_info,
             is_finished=su.status == "finished",
             work_order_status=wo.status,
+            bound_count=bound_count,
         )
