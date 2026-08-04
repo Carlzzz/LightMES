@@ -52,24 +52,6 @@ class SerialUnit(Base, TimestampMixin):
     is_counted: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
-class StationPass(Base, TimestampMixin):
-    __tablename__ = "station_passes"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    serial_unit_id: Mapped[int] = mapped_column(ForeignKey("serial_units.id"))
-    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"))
-    routing_step_id: Mapped[int] = mapped_column(ForeignKey("routing_steps.id"))
-    station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
-    operator_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id"), default=None
-    )
-    pass_time: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    result: Mapped[str] = mapped_column(default="pass")
-    remark: Mapped[str | None] = mapped_column(default=None)
-
-
 class OperationRecord(Base, TimestampMixin):
     __tablename__ = "operation_records"
 

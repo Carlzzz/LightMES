@@ -6,7 +6,6 @@ from lightmes.modules.masterdata.models import (
     Operation,
     Product,
     Routing,
-    RoutingStep,
     WorkStation,
 )
 from lightmes.modules.masterdata.repository import (
@@ -32,9 +31,6 @@ class MasterDataQueryService:
 
     def get_routing(self, routing_id: int) -> Routing | None:
         return self.db.get(Routing, routing_id)
-
-    def get_ordered_steps(self, routing_id: int) -> list[RoutingStep]:
-        return self._routings.steps_of(routing_id)
 
     def get_operations(self, routing_id: int) -> list[Operation]:
         return self._routings.operations_of(routing_id)

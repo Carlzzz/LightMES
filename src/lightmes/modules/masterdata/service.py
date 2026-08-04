@@ -6,7 +6,6 @@ from lightmes.modules.masterdata.models import (
     Operation,
     Product,
     Routing,
-    Station,
     WorkStation,
 )
 from lightmes.modules.masterdata.repository import (
@@ -14,7 +13,6 @@ from lightmes.modules.masterdata.repository import (
     LineRepository,
     ProductRepository,
     RoutingRepository,
-    StationRepository,
     WorkStationRepository,
 )
 from lightmes.modules.masterdata.schemas import (
@@ -22,7 +20,6 @@ from lightmes.modules.masterdata.schemas import (
     LineCreate,
     ProductCreate,
     RoutingCreate,
-    StationCreate,
     WorkStationCreate,
 )
 
@@ -31,7 +28,6 @@ class MasterDataService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.products = ProductRepository(db)
-        self.stations = StationRepository(db)
         self.routings = RoutingRepository(db)
         self.boms = BomRepository(db)
         self.lines = LineRepository(db)
@@ -49,17 +45,6 @@ class MasterDataService:
             spec=data.spec,
         )
         return self.products.add(product)
-
-    def create_station(self, data: StationCreate) -> Station:
-        if self.stations.get_by_code(data.code) is not None:
-            raise ValueError(f"工位编码已存在: {data.code}")
-        station = Station(
-            code=data.code,
-            name=data.name,
-            description=data.description,
-            location=data.location,
-        )
-        return self.stations.add(station)
 
     def create_routing(self, data: RoutingCreate) -> Routing:
         if self.routings.get_by_code(data.code) is not None:

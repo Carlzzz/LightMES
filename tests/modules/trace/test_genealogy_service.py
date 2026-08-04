@@ -55,7 +55,7 @@ def test_bind_serial_and_batch(db_session):
     binds = svc.bind_components(su, [
         ComponentBind(component_product_id=c_ser.id, component_sn="MB-1"),
         ComponentBind(component_product_id=c_bat.id, component_batch_no="LOT-1", qty=4),
-    ], operator_id=None, station_pass_id=None)
+    ], operator_id=None)
     assert len(binds) == 2
     types = {b.component_type for b in binds}
     assert types == {"serial", "batch"}
@@ -68,7 +68,7 @@ def test_bind_component_not_in_bom_rejected(db_session):
     with pytest.raises(BusinessRuleError):
         svc.bind_components(su, [
             ComponentBind(component_product_id=other.id, component_sn="X-1")],
-            operator_id=None, station_pass_id=None)
+            operator_id=None)
 
 
 def test_serial_component_requires_sn(db_session):
@@ -78,7 +78,7 @@ def test_serial_component_requires_sn(db_session):
     with pytest.raises(ValidationError):
         svc.bind_components(su, [
             ComponentBind(component_product_id=c_ser.id)],  # 缺 sn
-            operator_id=None, station_pass_id=None)
+            operator_id=None)
 
 
 def test_batch_component_requires_batch_no(db_session):
@@ -88,7 +88,7 @@ def test_batch_component_requires_batch_no(db_session):
     with pytest.raises(ValidationError):
         svc.bind_components(su, [
             ComponentBind(component_product_id=c_bat.id)],  # 缺 batch_no
-            operator_id=None, station_pass_id=None)
+            operator_id=None)
 
 
 def test_unique_component_occupancy_rejected(db_session):
@@ -98,11 +98,11 @@ def test_unique_component_occupancy_rejected(db_session):
     svc = GenealogyService(db_session)
     svc.bind_components(su1, [
         ComponentBind(component_product_id=c_ser.id, component_sn="MB-DUP")],
-        operator_id=None, station_pass_id=None)
+        operator_id=None)
     with pytest.raises(ConflictError):
         svc.bind_components(su2, [
             ComponentBind(component_product_id=c_ser.id, component_sn="MB-DUP")],
-            operator_id=None, station_pass_id=None)
+            operator_id=None)
 
 
 def test_unbind(db_session):
@@ -111,7 +111,7 @@ def test_unbind(db_session):
     svc = GenealogyService(db_session)
     binds = svc.bind_components(su, [
         ComponentBind(component_product_id=c_bat.id, component_batch_no="LOT-7")],
-        operator_id=None, station_pass_id=None)
+        operator_id=None)
     unbound = svc.unbind(binds[0].id, reason="返工换料", operator_id=None)
     assert unbound.status == "unbound"
     assert unbound.unbind_reason == "返工换料"
@@ -140,4 +140,3 @@ def test_bind_with_operation_record_id(db_session):
     assert len(binds) == 1
     b = binds[0]
     assert b.operation_record_id == rec.id
-    assert b.station_pass_id is None

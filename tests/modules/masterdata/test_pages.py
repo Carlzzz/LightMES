@@ -45,12 +45,6 @@ def test_create_product_via_page_returns_row(client, db_session):
     assert "UI-1" in resp.text
 
 
-def test_stations_page_renders(client):
-    resp = client.get("/masterdata/stations")
-    assert resp.status_code == 200
-    assert "工位管理" in resp.text
-
-
 def test_create_product_dup_error_escapes_html(client, db_session):
     _login(client, db_session)
     # first create a product whose code contains an HTML/script payload
@@ -73,15 +67,6 @@ def test_create_product_via_page_requires_login(client):
         "/masterdata/products",
         data={"code": "NO-LOGIN", "name": "x", "type": "component",
               "unit": "pcs", "track_mode": "none"},
-    )
-    assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
-
-
-def test_create_station_via_page_requires_login(client):
-    resp = client.post(
-        "/masterdata/stations",
-        data={"code": "NO-LOGIN-ST", "name": "x"},
     )
     assert resp.status_code == 401
     assert resp.headers.get("HX-Redirect") == "/login"

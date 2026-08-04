@@ -1,4 +1,4 @@
-"""灌一条示范产线 + 工单，用于本地体验完整过站→绑定→追溯→返工闭环。
+"""灌一条示范产线（产线 + 作业站 + 工序）+ 工单，用于本地体验完整过站→绑定→追溯→返工闭环。
 
 幂等：已存在的编码跳过创建，可重复运行。
 运行：
@@ -9,7 +9,7 @@
 from lightmes.database import SessionLocal
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
     BomCreate, BomItemCreate,
 )
 from lightmes.modules.production.service import ProductionService
@@ -21,9 +21,14 @@ def _get_or_create_product(md: MasterDataService, data: ProductCreate):
     return existing if existing else md.create_product(data)
 
 
-def _get_or_create_station(md: MasterDataService, data: StationCreate):
-    existing = md.stations.get_by_code(data.code)
-    return existing if existing else md.create_station(data)
+def _get_or_create_line(md: MasterDataService, data: LineCreate):
+    existing = md.lines.get_by_code(data.code)
+    return existing if existing else md.create_line(data)
+
+
+def _get_or_create_work_station(md: MasterDataService, data: WorkStationCreate):
+    existing = md.work_stations.get_by_code(data.code)
+    return existing if existing else md.create_work_station(data)
 
 
 def main() -> None:
@@ -32,7 +37,17 @@ def main() -> None:
         md = MasterDataService(db)
         prod = ProductionService(db)
 
-        # 1) 成品 + 组件（唯一件主板 + 批次件螺丝）
+        # 1) 产线 + 三个作业站（seq 1/2/3，均属 LINE-A）
+        line = _get_or_create_line(md, LineCreate(
+            code="LINE-A", name="笔记本外壳A线"))
+        ws1 = _get_or_create_work_station(md, WorkStationCreate(
+            code="WS-上料", name="上料", line_id=line.id, seq=1))
+        ws2 = _get_or_create_work_station(md, WorkStationCreate(
+            code="WS-装配", name="装配", line_id=line.id, seq=2))
+        ws3 = _get_or_create_work_station(md, WorkStationCreate(
+            code="WS-检测", name="检测", line_id=line.id, seq=3))
+
+        # 2) 成品 + 组件（唯一件主板 + 批次件螺丝）
         shell = _get_or_create_product(md, ProductCreate(
             code="NBK-SHELL-A", name="笔记本外壳A", type="finished", unit="pcs",
             track_mode="serial"))
@@ -43,20 +58,18 @@ def main() -> None:
             code="SCREW-M2", name="M2螺丝", type="consumable", unit="pcs",
             track_mode="batch"))
 
-        # 2) 三个工位
-        s1 = _get_or_create_station(md, StationCreate(code="ST-上料", name="上料工位"))
-        s2 = _get_or_create_station(md, StationCreate(code="ST-装配", name="装配工位"))
-        s3 = _get_or_create_station(md, StationCreate(code="ST-检测", name="检测工位"))
-
-        # 3) 工艺路线（3 工序）—— 若成品已有 active 路线则跳过
-        routing = md.routings.get_active_by_product(shell.id)
+        # 3) 工艺路线（3 工序分别分配到 3 作业站）—— 按编码幂等
+        routing = md.routings.get_by_code("RT-SHELL-A")
         if routing is None:
             routing = md.create_routing(RoutingCreate(
                 code="RT-SHELL-A", name="外壳A主路线", product_id=shell.id,
-                steps=[
-                    RoutingStepCreate(seq=1, station_id=s1.id, name="上料"),
-                    RoutingStepCreate(seq=2, station_id=s2.id, name="装配"),
-                    RoutingStepCreate(seq=3, station_id=s3.id, name="检测"),
+                operations=[
+                    OperationCreate(seq=1, code="OP-上料", name="上料",
+                                    default_work_station_id=ws1.id),
+                    OperationCreate(seq=2, code="OP-装配", name="装配",
+                                    default_work_station_id=ws2.id),
+                    OperationCreate(seq=3, code="OP-检测", name="检测",
+                                    default_work_station_id=ws3.id),
                 ]))
 
         # 4) BOM（主板 x1 唯一件 + 螺丝 x4 批次件）—— 若已有 active BOM 则跳过
@@ -73,36 +86,38 @@ def main() -> None:
                 code="SN-SHELL", name="外壳SN规则", pattern="SN{YY}{MM}{DD}{SEQ:5}",
                 seq_reset="daily", product_id=shell.id))
 
-        # 6) 工单（qty=10）并下达 —— 若已存在则复用
+        # 6) 工单（绑 LINE-A + qty=10）并下达 —— 若已存在则复用
         wo = prod.work_orders.get_by_code("WO-DEMO-001")
         if wo is None:
             wo = prod.create_work_order(WorkOrderCreate(
                 code="WO-DEMO-001", product_id=shell.id, routing_id=routing.id,
-                qty=10, sn_rule_id=rule.id))
+                line_id=line.id, qty=10, sn_rule_id=rule.id))
         if wo.status == "created":
             prod.release_work_order(wo.id)
 
         db.commit()
 
         print("=== 示范产线已就绪 ===")
+        print(f"产线:   {line.code} (id={line.id})")
+        print(f"作业站: 上料 id={ws1.id} | 装配 id={ws2.id} | 检测 id={ws3.id}")
         print(f"成品:   {shell.code} (id={shell.id})")
         print(f"组件:   {mainboard.code} 唯一件 / {screw.code} 批次件")
-        print(f"工位:   上料 id={s1.id} | 装配 id={s2.id} | 检测 id={s3.id}")
-        print(f"工艺路线: {routing.code} (id={routing.id}) 3 工序")
+        print(f"工艺路线: {routing.code} (id={routing.id}) 3 工序各绑一作业站")
         print(f"SN规则: {rule.code}  pattern=SN{{YY}}{{MM}}{{DD}}{{SEQ:5}}")
-        print(f"工单:   {wo.code} (id={wo.id}) qty=10 status={wo.status}")
+        print(f"工单:   {wo.code} (id={wo.id}) line_id={wo.line_id} qty=10 status={wo.status}")
         print()
         print("--- 怎么玩（先在 /login 用 admin/admin123 登录）---")
-        print(f"1. 首件上料: 打开 /production/scan?station_id={s1.id}")
-        print("   在输入框填工单号 WO-DEMO-001 → 提交 → 生成 SN 并过上料站")
-        print(f"2. 装配: /production/scan?station_id={s2.id}  输入上一步生成的 SN")
-        print(f"3. 检测(末站完工): /production/scan?station_id={s3.id}  输入该 SN")
+        print("过站 API（OperationPassService，字段: work_station_id + work_order_code / sn）:")
+        print(f"1. 首件上料: POST /api/production/pass  {{work_station_id: {ws1.id}, work_order_code: 'WO-DEMO-001'}}")
+        print(f"   或页面 /production/scan?work_station_id={ws1.id} 输入工单号 WO-DEMO-001 → 生成 SN 并过上料站")
+        print(f"2. 装配:     {{work_station_id: {ws2.id}, sn: '<上一步的SN>'}}")
+        print(f"3. 检测(末站完工): {{work_station_id: {ws3.id}, sn: '<该SN>'}}")
         print(f"4. WIP 看板: /production/wip?work_order_id={wo.id}")
         print("5. 追溯查询: /trace/query  (输入成品 SN 看履历/正向；输入组件SN/批次看反向)")
         print("6. 返工: /trace/rework  (输入 SN + 回退到的工序序号)")
         print()
-        print("提示: 组件绑定目前经过站 API 的 components 参数完成；扫码页暂未加组件输入行，")
-        print("      要体验绑定+追溯，用 API 过站（见下）或告诉我补扫码页组件输入。")
+        print("提示: 过站时用 components 参数绑定主板SN/螺丝批次（见 operation_pass 测试），")
+        print("      用 params 参数录入扭矩等工序参数；扫码页暂未加组件输入行。")
     finally:
         db.close()
 
