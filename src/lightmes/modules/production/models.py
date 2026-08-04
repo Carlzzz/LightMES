@@ -68,3 +68,41 @@ class StationPass(Base, TimestampMixin):
     )
     result: Mapped[str] = mapped_column(default="pass")
     remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class OperationRecord(Base, TimestampMixin):
+    __tablename__ = "operation_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    serial_unit_id: Mapped[int] = mapped_column(ForeignKey("serial_units.id"))
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"))
+    operation_id: Mapped[int] = mapped_column(ForeignKey("operations.id"))
+    work_station_id: Mapped[int] = mapped_column(ForeignKey("work_stations.id"))
+    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"))
+    operator_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), default=None
+    )
+    start_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    end_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    result: Mapped[str] = mapped_column(default="pass")
+    remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class OperationParam(Base, TimestampMixin):
+    __tablename__ = "operation_params"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation_record_id: Mapped[int] = mapped_column(
+        ForeignKey("operation_records.id")
+    )
+    param_key: Mapped[str] = mapped_column()
+    param_value: Mapped[str] = mapped_column()
+    unit: Mapped[str | None] = mapped_column(default=None)
+    source: Mapped[str] = mapped_column(default="manual")  # manual/auto
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

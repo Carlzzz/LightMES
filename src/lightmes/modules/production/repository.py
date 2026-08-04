@@ -1,6 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import (
+    OperationParam,
+    OperationRecord,
     SerialUnit,
     SnRule,
     StationPass,
@@ -91,4 +93,46 @@ class StationPassRepository:
             select(StationPass)
             .where(StationPass.serial_unit_id == serial_unit_id)
             .order_by(StationPass.pass_time)
+        ).scalars().all())
+
+
+class OperationRecordRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, rec: OperationRecord) -> OperationRecord:
+        self.db.add(rec)
+        self.db.flush()
+        return rec
+
+    def list_by_serial_unit(self, serial_unit_id: int) -> list[OperationRecord]:
+        return list(self.db.execute(
+            select(OperationRecord)
+            .where(OperationRecord.serial_unit_id == serial_unit_id)
+            .order_by(OperationRecord.end_time)
+        ).scalars().all())
+
+
+class OperationParamRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, param: OperationParam) -> OperationParam:
+        self.db.add(param)
+        self.db.flush()
+        return param
+
+    def list_by_record(self, record_id: int) -> list[OperationParam]:
+        return list(self.db.execute(
+            select(OperationParam).where(
+                OperationParam.operation_record_id == record_id)
+        ).scalars().all())
+
+    def list_by_serial_unit(self, serial_unit_id: int) -> list[OperationParam]:
+        return list(self.db.execute(
+            select(OperationParam)
+            .join(OperationRecord,
+                  OperationParam.operation_record_id == OperationRecord.id)
+            .where(OperationRecord.serial_unit_id == serial_unit_id)
+            .order_by(OperationParam.recorded_at)
         ).scalars().all())
