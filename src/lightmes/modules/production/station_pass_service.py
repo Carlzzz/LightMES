@@ -81,8 +81,8 @@ class StationPassService:
                 f"应到工位(工序 {expected.seq} {expected.name})，当前工位不符"
             )
 
-        # 6. 防重复（保险）
-        if self.passes.exists_pass(su.id, expected.id):
+        # 6. 防重复（保险）；返工回退后允许重新过同一工序
+        if su.status != "reworking" and self.passes.exists_pass(su.id, expected.id):
             raise BusinessRuleError(f"该工序已过站: 工序 {expected.seq}")
 
         # 7. 写过站 + 乐观锁更新 serial_unit

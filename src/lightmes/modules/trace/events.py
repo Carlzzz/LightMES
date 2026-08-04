@@ -15,3 +15,10 @@ class GenealogyUnbound(Event):
     bind_id: int
     parent_sn_id: int
     reason: str | None
+
+
+@dataclass
+class SerialUnitReworkStarted(Event):
+    serial_unit_id: int
+    sn: str
+    target_seq: int
