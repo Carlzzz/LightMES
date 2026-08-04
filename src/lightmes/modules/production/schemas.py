@@ -52,27 +52,35 @@ class ComponentInput(BaseModel):
     qty: float = 1
 
 
-class StationPassInput(BaseModel):
-    station_id: int
+class ParamInput(BaseModel):
+    param_key: str
+    param_value: str
+    unit: str | None = None
+
+
+class OperationPassInput(BaseModel):
+    work_station_id: int
     work_order_code: str | None = None
     sn: str | None = None
     operator_id: int | None = None
     components: list[ComponentInput] = []
+    params: list[ParamInput] = []
 
 
-class StepInfo(BaseModel):
+class OpInfo(BaseModel):
     seq: int
     name: str
-    station_id: int
+    work_station_id: int
 
 
-class StationPassResult(BaseModel):
+class OperationPassResult(BaseModel):
     sn: str
-    passed_step: StepInfo
-    next_step: StepInfo | None
+    passed_op: OpInfo
+    next_op: OpInfo | None
     is_finished: bool
     work_order_status: str
     bound_count: int = 0
+    param_count: int = 0
 
 
 class WipItem(BaseModel):

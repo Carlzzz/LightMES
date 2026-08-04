@@ -9,11 +9,11 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none, require_login
 from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
-    SnRuleCreate, SnRuleRead, StationPassInput, StationPassResult, WorkOrderCreate,
+    SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
     WorkOrderRead,
 )
 from lightmes.modules.production.service import ProductionService
-from lightmes.modules.production.station_pass_service import StationPassService
+from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
 from lightmes.shared.errors import DomainError, NotFoundError
 
@@ -89,44 +89,44 @@ def get_work_order(
     return WorkOrderRead.model_validate(wo)
 
 
-@router.post("/api/production/pass", response_model=StationPassResult)
-def api_pass_station(
-    data: StationPassInput,
+@router.post("/api/production/pass", response_model=OperationPassResult)
+def api_pass_operation(
+    data: OperationPassInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_login),
-) -> StationPassResult:
+) -> OperationPassResult:
     data.operator_id = current_user.id
-    return StationPassService(db).pass_station(data)  # DomainError→全局handler
+    return OperationPassService(db).pass_operation(data)  # DomainError→全局handler
 
 
 @router.get("/production/scan", response_class=HTMLResponse)
 def scan_page(
-    request: Request, station_id: int = 0, db: Session = Depends(get_db)
+    request: Request, work_station_id: int = 0, db: Session = Depends(get_db)
 ) -> HTMLResponse:
     return templates.TemplateResponse(
-        request, "production/scan.html", {"station_id": station_id}
+        request, "production/scan.html", {"work_station_id": work_station_id}
     )
 
 
 @router.post("/production/scan", response_class=HTMLResponse)
 def scan_submit(
     request: Request,
-    station_id: int = Form(...),
+    work_station_id: int = Form(...),
     code_or_sn: str = Form(...),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    svc = StationPassService(db)
+    svc = OperationPassService(db)
     # 页面便利：先按 SN 试，NotFound 再当工单号试首站
     try:
         try:
-            result = svc.pass_station(StationPassInput(
-                station_id=station_id, sn=code_or_sn, operator_id=user.id))
+            result = svc.pass_operation(OperationPassInput(
+                work_station_id=work_station_id, sn=code_or_sn, operator_id=user.id))
         except NotFoundError:
-            result = svc.pass_station(StationPassInput(
-                station_id=station_id, work_order_code=code_or_sn,
+            result = svc.pass_operation(OperationPassInput(
+                work_station_id=work_station_id, work_order_code=code_or_sn,
                 operator_id=user.id))
     except DomainError as e:
         # 事务中已 flush 的写入（如首站生成的 SerialUnit / SN 流水）必须回滚，

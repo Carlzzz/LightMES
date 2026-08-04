@@ -1,14 +1,12 @@
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
-    RoutingCreate, OperationCreate,
+    ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
 )
-from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
-    SnRuleCreate, WorkOrderCreate, StationPassInput,
+    SnRuleCreate, WorkOrderCreate, OperationPassInput,
 )
-from lightmes.modules.production.station_pass_service import StationPassService
+from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.repository import SerialUnitRepository, WorkOrderRepository
 from lightmes.modules.trace.rework_service import ReworkService
 
@@ -18,20 +16,17 @@ def _single_step_line(db_session, qty=5):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="RRF", name="壳", type="finished"))
     line = md.create_line(LineCreate(code="RRFL", name="线"))
-    s = md.create_station(StationCreate(code="RRFS", name="装配"))
     w = md.create_work_station(WorkStationCreate(
         code="RRFSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="RRFR", name="路线", product_id=p.id,
         operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
-    db_session.add(RoutingStep(routing_id=r.id, seq=1, station_id=s.id, name="装配"))
-    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRFL", name="r", pattern="RR{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(
         code="RRFWO", product_id=p.id, routing_id=r.id, line_id=line.id,
         qty=qty, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
-    return p, s, wo
+    return p, w, wo
 
 
 def test_rework_finished_recount_not_double_counted(db_session):
@@ -42,11 +37,11 @@ def test_rework_finished_recount_not_double_counted(db_session):
     工单也不得被错误地提前 completed。修复前该测试应在 produced_qty==1
     断言处失败（实际为 2）。
     """
-    p, s, wo = _single_step_line(db_session, qty=5)
-    pass_svc = StationPassService(db_session)
+    p, w, wo = _single_step_line(db_session, qty=5)
+    pass_svc = OperationPassService(db_session)
     wo_repo = WorkOrderRepository(db_session)
 
-    res = pass_svc.pass_station(StationPassInput(station_id=s.id, work_order_code="RRFWO"))
+    res = pass_svc.pass_operation(OperationPassInput(work_station_id=w.id, work_order_code="RRFWO"))
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
     assert su.status == "finished"
     assert wo_repo.get(wo.id).produced_qty == 1
@@ -57,7 +52,7 @@ def test_rework_finished_recount_not_double_counted(db_session):
     assert reworked.current_operation_seq == 0
 
     # 重过单工序：再次末站完工
-    r2 = pass_svc.pass_station(StationPassInput(station_id=s.id, sn=res.sn))
+    r2 = pass_svc.pass_operation(OperationPassInput(work_station_id=w.id, sn=res.sn))
     assert r2.is_finished is True
     su2 = SerialUnitRepository(db_session).get_by_sn(res.sn)
     assert su2.status == "finished"
