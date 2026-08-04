@@ -91,6 +91,7 @@ class Operation(Base, TimestampMixin):
     __tablename__ = "operations"
     __table_args__ = (
         UniqueConstraint("routing_id", "seq", name="uq_operation_routing_seq"),
+        UniqueConstraint("routing_id", "code", name="uq_operation_routing_code"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
