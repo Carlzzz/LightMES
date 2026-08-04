@@ -8,15 +8,17 @@ def test_serial_unit_persist_and_lookup(db_session):
     # 需要一个 work_order + product；直接建最小依赖
     from lightmes.modules.masterdata.service import MasterDataService
     from lightmes.modules.masterdata.schemas import (
-        ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+        ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
     )
     from lightmes.modules.production.service import ProductionService
     from lightmes.modules.production.schemas import WorkOrderCreate
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="SUP", name="壳", type="finished"))
-    s = md.create_station(StationCreate(code="SUS", name="工位"))
+    line = md.create_line(LineCreate(code="SUL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="SUW", name="作业站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="SUR", name="路线", product_id=p.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
     wo = ProductionService(db_session).create_work_order(
         WorkOrderCreate(code="SUWO", product_id=p.id, routing_id=r.id, qty=5))
     repo = SerialUnitRepository(db_session)
@@ -30,15 +32,23 @@ def test_serial_unit_persist_and_lookup(db_session):
 def test_station_pass_exists_check(db_session):
     from lightmes.modules.masterdata.service import MasterDataService
     from lightmes.modules.masterdata.schemas import (
-        ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+        ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+        RoutingCreate, OperationCreate,
     )
+    from lightmes.modules.masterdata.models import RoutingStep
     from lightmes.modules.production.service import ProductionService
     from lightmes.modules.production.schemas import WorkOrderCreate
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="SPP", name="壳", type="finished"))
     s = md.create_station(StationCreate(code="SPS", name="工位"))
+    line = md.create_line(LineCreate(code="SPL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="SPW", name="作业站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="SPR", name="路线", product_id=p.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
+    # 旧 production 层仍写 station_pass（FK 到 routing_steps/stations）——补建旧层数据
+    db_session.add(RoutingStep(routing_id=r.id, seq=1, station_id=s.id, name="装配"))
+    db_session.flush()
     step_id = md.routings.steps_of(r.id)[0].id
     wo = ProductionService(db_session).create_work_order(
         WorkOrderCreate(code="SPWO", product_id=p.id, routing_id=r.id, qty=5))

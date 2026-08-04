@@ -1,8 +1,10 @@
 import pytest
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+    RoutingCreate, OperationCreate,
 )
+from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, StationPassInput,
@@ -15,13 +17,24 @@ def _setup(db_session, qty=10):
     """建产品 + 两工位两工序路线 + SN规则 + 已下达工单。返回 (p, s1, s2, wo)。"""
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="FP", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="FPL", name="线"))
     s1 = md.create_station(StationCreate(code="ST1", name="上料"))
     s2 = md.create_station(StationCreate(code="ST2", name="装配"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="ST1W", name="上料站", line_id=line.id, seq=1))
+    w2 = md.create_work_station(WorkStationCreate(
+        code="ST2W", name="装配站", line_id=line.id, seq=2))
     r = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id,
-        steps=[
-            RoutingStepCreate(seq=1, station_id=s1.id, name="上料"),
-            RoutingStepCreate(seq=2, station_id=s2.id, name="装配"),
+        operations=[
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
         ]))
+    # 旧生产层 StationPassService 仍读 routing_steps —— 补建
+    db_session.add_all([
+        RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"),
+        RoutingStep(routing_id=r.id, seq=2, station_id=s2.id, name="装配"),
+    ])
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RL", name="r", pattern="SN{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(
@@ -86,9 +99,14 @@ def test_unknown_sn_rejected(db_session):
 def test_pass_on_non_released_work_order_rejected(db_session):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="FP2", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="FP2L", name="线"))
     s1 = md.create_station(StationCreate(code="STA", name="上料"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="STAW", name="上料站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="RT2", name="路线", product_id=p.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s1.id, name="上料")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id)]))
+    db_session.add(RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"))
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RL2", name="r", pattern="A{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

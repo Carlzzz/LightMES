@@ -1,7 +1,7 @@
 import pytest
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
     BomCreate, BomItemCreate,
 )
 from lightmes.modules.production.service import ProductionService
@@ -26,9 +26,11 @@ def _setup(db_session):
         BomItemCreate(component_product_id=c_ser.id, qty=1),
         BomItemCreate(component_product_id=c_bat.id, qty=4),
     ]))
-    s = md.create_station(StationCreate(code="GS", name="工位"))
+    line = md.create_line(LineCreate(code="GL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="GW", name="作业站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="GR", name="路线", product_id=fin.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
     wo = ProductionService(db_session).create_work_order(
         WorkOrderCreate(code="GWO", product_id=fin.id, routing_id=r.id, qty=10))
     def make_su(sn):

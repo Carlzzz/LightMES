@@ -4,6 +4,7 @@ from lightmes.modules.masterdata.models import (
     Bom,
     BomItem,
     Line,
+    Operation,
     Product,
     Routing,
     RoutingStep,
@@ -87,6 +88,34 @@ class RoutingRepository:
                 select(RoutingStep)
                 .where(RoutingStep.routing_id == routing_id)
                 .order_by(RoutingStep.seq)
+            ).scalars().all()
+        )
+
+    def operations_of(self, routing_id: int) -> list[Operation]:
+        return list(
+            self.db.execute(
+                select(Operation)
+                .where(Operation.routing_id == routing_id)
+                .order_by(Operation.seq)
+            ).scalars().all()
+        )
+
+
+class OperationRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, operation: Operation) -> Operation:
+        self.db.add(operation)
+        self.db.flush()
+        return operation
+
+    def operations_of(self, routing_id: int) -> list[Operation]:
+        return list(
+            self.db.execute(
+                select(Operation)
+                .where(Operation.routing_id == routing_id)
+                .order_by(Operation.seq)
             ).scalars().all()
         )
 

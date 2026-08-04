@@ -3,6 +3,7 @@ from lightmes.modules.masterdata.models import (
     Bom,
     BomItem,
     Line,
+    Operation,
     Product,
     Routing,
     RoutingStep,
@@ -34,6 +35,9 @@ class MasterDataQueryService:
 
     def get_ordered_steps(self, routing_id: int) -> list[RoutingStep]:
         return self._routings.steps_of(routing_id)
+
+    def get_operations(self, routing_id: int) -> list[Operation]:
+        return self._routings.operations_of(routing_id)
 
     def get_active_bom(self, product_id: int) -> Bom | None:
         return self._boms.get_active_by_product(product_id)

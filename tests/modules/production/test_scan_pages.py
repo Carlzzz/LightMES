@@ -6,8 +6,10 @@ from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.schemas import UserCreate
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+    RoutingCreate, OperationCreate,
 )
+from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
 from lightmes.modules.production.repository import SerialUnitRepository
@@ -30,13 +32,23 @@ def _login(client, db_session):
 def _line_2step(db_session):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="PG2", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="PG2L", name="线"))
     s1 = md.create_station(StationCreate(code="PG21", name="上料"))
     s2 = md.create_station(StationCreate(code="PG22", name="装配"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="PG21W", name="上料站", line_id=line.id, seq=1))
+    w2 = md.create_work_station(WorkStationCreate(
+        code="PG22W", name="装配站", line_id=line.id, seq=2))
     r = md.create_routing(RoutingCreate(code="PG2R", name="路线", product_id=p.id,
-        steps=[
-            RoutingStepCreate(seq=1, station_id=s1.id, name="上料"),
-            RoutingStepCreate(seq=2, station_id=s2.id, name="装配"),
+        operations=[
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
         ]))
+    db_session.add_all([
+        RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"),
+        RoutingStep(routing_id=r.id, seq=2, station_id=s2.id, name="装配"),
+    ])
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PG2L", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
@@ -48,9 +60,14 @@ def _line_2step(db_session):
 def _line(db_session):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="PGP", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="PGPL", name="线"))
     s1 = md.create_station(StationCreate(code="PST1", name="上料"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="PST1W", name="上料站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="PRT", name="路线", product_id=p.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s1.id, name="上料")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id)]))
+    db_session.add(RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"))
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

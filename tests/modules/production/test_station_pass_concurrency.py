@@ -12,12 +12,16 @@ import uuid
 from sqlalchemy import delete, select
 
 from lightmes.database import SessionLocal
-from lightmes.modules.masterdata.models import Product, Routing, RoutingStep, Station
+from lightmes.modules.masterdata.models import (
+    Line, Operation, Product, Routing, RoutingStep, Station, WorkStation,
+)
 from lightmes.modules.masterdata.schemas import (
     ProductCreate,
     RoutingCreate,
-    RoutingStepCreate,
+    OperationCreate,
     StationCreate,
+    LineCreate,
+    WorkStationCreate,
 )
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.production.models import SerialUnit, SnRule, StationPass, WorkOrder
@@ -37,6 +41,7 @@ def test_double_scan_same_sn_raises_conflict():
     tag = uuid.uuid4().hex[:8]
     sn = f"CCSN-{tag}"
     su_id = wo_id = rule_id = routing_id = station_id = product_id = None
+    line_id = work_station_id = operation_id = None
 
     # --- setup：真实会话，提交后关闭 ---
     setup = SessionLocal()
@@ -45,11 +50,20 @@ def test_double_scan_same_sn_raises_conflict():
         p = md.create_product(
             ProductCreate(code=f"CC-P-{tag}", name="壳", type="finished")
         )
+        line = md.create_line(LineCreate(code=f"CC-LN-{tag}", name="线"))
         s1 = md.create_station(StationCreate(code=f"CC-S-{tag}", name="上料"))
+        w1 = md.create_work_station(WorkStationCreate(
+            code=f"CC-W-{tag}", name="上料站", line_id=line.id, seq=1,
+        ))
         r = md.create_routing(RoutingCreate(
             code=f"CC-R-{tag}", name="路线", product_id=p.id,
-            steps=[RoutingStepCreate(seq=1, station_id=s1.id, name="上料")],
+            operations=[OperationCreate(
+                seq=1, code="OP1", name="上料", default_work_station_id=w1.id,
+            )],
         ))
+        # 旧生产层 StationPassService 仍读 routing_steps —— 补建
+        setup.add(RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"))
+        setup.flush()
         prod = ProductionService(setup)
         rule = prod.create_sn_rule(SnRuleCreate(
             code=f"CC-L-{tag}", name="r", pattern=f"CC{tag}{{SEQ:4}}"
@@ -73,6 +87,9 @@ def test_double_scan_same_sn_raises_conflict():
         routing_id = r.id
         station_id = s1.id
         product_id = p.id
+        line_id = line.id
+        work_station_id = w1.id
+        operation_id = md.routings.operations_of(r.id)[0].id
     finally:
         setup.close()
 
@@ -143,8 +160,13 @@ def test_double_scan_same_sn_raises_conflict():
         cleanup.execute(
             delete(RoutingStep).where(RoutingStep.routing_id == routing_id)
         )
+        cleanup.execute(
+            delete(Operation).where(Operation.routing_id == routing_id)
+        )
         cleanup.execute(delete(Routing).where(Routing.id == routing_id))
         cleanup.execute(delete(Station).where(Station.id == station_id))
+        cleanup.execute(delete(WorkStation).where(WorkStation.id == work_station_id))
+        cleanup.execute(delete(Line).where(Line.id == line_id))
         cleanup.execute(delete(Product).where(Product.id == product_id))
         cleanup.commit()
     finally:
@@ -160,6 +182,7 @@ def test_two_different_units_complete_same_wo_atomically():
     """
     tag = uuid.uuid4().hex[:8]
     wo_id = wo_code = rule_id = routing_id = station_id = product_id = None
+    line_id = work_station_id = operation_id = None
 
     # --- setup：真实会话，提交后关闭 ---
     setup = SessionLocal()
@@ -168,11 +191,19 @@ def test_two_different_units_complete_same_wo_atomically():
         p = md.create_product(
             ProductCreate(code=f"CC2-P-{tag}", name="壳", type="finished")
         )
+        line = md.create_line(LineCreate(code=f"CC2-LN-{tag}", name="线"))
         s1 = md.create_station(StationCreate(code=f"CC2-S-{tag}", name="上料"))
+        w1 = md.create_work_station(WorkStationCreate(
+            code=f"CC2-W-{tag}", name="上料站", line_id=line.id, seq=1,
+        ))
         r = md.create_routing(RoutingCreate(
             code=f"CC2-R-{tag}", name="路线", product_id=p.id,
-            steps=[RoutingStepCreate(seq=1, station_id=s1.id, name="上料")],
+            operations=[OperationCreate(
+                seq=1, code="OP1", name="上料", default_work_station_id=w1.id,
+            )],
         ))
+        setup.add(RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"))
+        setup.flush()
         prod = ProductionService(setup)
         rule = prod.create_sn_rule(SnRuleCreate(
             code=f"CC2-L-{tag}", name="r", pattern=f"CC2{tag}{{SEQ:4}}"
@@ -189,6 +220,9 @@ def test_two_different_units_complete_same_wo_atomically():
         routing_id = r.id
         station_id = s1.id
         product_id = p.id
+        line_id = line.id
+        work_station_id = w1.id
+        operation_id = md.routings.operations_of(r.id)[0].id
     finally:
         setup.close()
 
@@ -257,8 +291,13 @@ def test_two_different_units_complete_same_wo_atomically():
         cleanup.execute(
             delete(RoutingStep).where(RoutingStep.routing_id == routing_id)
         )
+        cleanup.execute(
+            delete(Operation).where(Operation.routing_id == routing_id)
+        )
         cleanup.execute(delete(Routing).where(Routing.id == routing_id))
         cleanup.execute(delete(Station).where(Station.id == station_id))
+        cleanup.execute(delete(WorkStation).where(WorkStation.id == work_station_id))
+        cleanup.execute(delete(Line).where(Line.id == line_id))
         cleanup.execute(delete(Product).where(Product.id == product_id))
         cleanup.commit()
     finally:

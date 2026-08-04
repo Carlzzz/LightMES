@@ -1,9 +1,10 @@
 import pytest
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
-    BomCreate, BomItemCreate,
+    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+    RoutingCreate, OperationCreate, BomCreate, BomItemCreate,
 )
+from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, StationPassInput, ComponentInput,
@@ -23,13 +24,23 @@ def _line(db_session):
         ProductCreate(code="BX", name="非BOM件", type="component", track_mode="serial"))
     md.create_bom(BomCreate(product_id=fin.id, items=[
         BomItemCreate(component_product_id=comp.id, qty=4)]))
+    line = md.create_line(LineCreate(code="BFL", name="线"))
     s1 = md.create_station(StationCreate(code="BS1", name="上料"))
     s2 = md.create_station(StationCreate(code="BS2", name="装配"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="BS1W", name="上料站", line_id=line.id, seq=1))
+    w2 = md.create_work_station(WorkStationCreate(
+        code="BS2W", name="装配站", line_id=line.id, seq=2))
     r = md.create_routing(RoutingCreate(code="BR", name="路线", product_id=fin.id,
-        steps=[
-            RoutingStepCreate(seq=1, station_id=s1.id, name="上料"),
-            RoutingStepCreate(seq=2, station_id=s2.id, name="装配"),
+        operations=[
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
         ]))
+    db_session.add_all([
+        RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"),
+        RoutingStep(routing_id=r.id, seq=2, station_id=s2.id, name="装配"),
+    ])
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="BRL", name="r", pattern="B{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

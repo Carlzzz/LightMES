@@ -12,11 +12,11 @@ from lightmes.modules.masterdata.schemas import (
     BomCreate,
     BomItemRead,
     BomRead,
+    OperationRead,
     ProductCreate,
     ProductRead,
     RoutingCreate,
     RoutingRead,
-    RoutingStepRead,
     StationCreate,
     StationRead,
 )
@@ -89,12 +89,12 @@ def create_routing(
         routing = svc.create_routing(data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    steps = svc.routings.steps_of(routing.id)
+    operations = svc.routings.operations_of(routing.id)
     return RoutingRead(
         id=routing.id, code=routing.code, name=routing.name,
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
-        steps=[RoutingStepRead.model_validate(s) for s in steps],
+        operations=[OperationRead.model_validate(o) for o in operations],
     )
 
 
@@ -107,7 +107,7 @@ def list_routings(db: Session = Depends(get_db)) -> list[RoutingRead]:
             id=r.id, code=r.code, name=r.name,
             product_id=r.product_id, version=r.version,
             status=r.status,
-            steps=[RoutingStepRead.model_validate(s) for s in svc.routings.steps_of(r.id)],
+            operations=[OperationRead.model_validate(o) for o in svc.routings.operations_of(r.id)],
         )
         for r in routings
     ]
@@ -119,12 +119,12 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
     routing = svc.routings.get(routing_id)
     if routing is None:
         raise HTTPException(status_code=404, detail="路线不存在")
-    steps = svc.routings.steps_of(routing.id)
+    operations = svc.routings.operations_of(routing.id)
     return RoutingRead(
         id=routing.id, code=routing.code, name=routing.name,
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
-        steps=[RoutingStepRead.model_validate(s) for s in steps],
+        operations=[OperationRead.model_validate(o) for o in operations],
     )
 
 

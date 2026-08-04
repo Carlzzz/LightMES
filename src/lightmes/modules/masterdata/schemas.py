@@ -38,11 +38,23 @@ class StationRead(BaseModel):
     is_active: bool
 
 
-class RoutingStepCreate(BaseModel):
+class OperationCreate(BaseModel):
     seq: int
-    station_id: int
+    code: str
     name: str
+    default_work_station_id: int
     is_mandatory: bool = True
+
+
+class OperationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    routing_id: int
+    seq: int
+    code: str
+    name: str
+    default_work_station_id: int
+    is_mandatory: bool
 
 
 class RoutingCreate(BaseModel):
@@ -50,16 +62,7 @@ class RoutingCreate(BaseModel):
     name: str
     product_id: int
     version: str = "1"
-    steps: list[RoutingStepCreate]
-
-
-class RoutingStepRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    seq: int
-    station_id: int
-    name: str
-    is_mandatory: bool
+    operations: list[OperationCreate]
 
 
 class RoutingRead(BaseModel):
@@ -70,7 +73,7 @@ class RoutingRead(BaseModel):
     product_id: int
     version: str
     status: str
-    steps: list[RoutingStepRead]
+    operations: list[OperationRead]
 
 
 class BomItemCreate(BaseModel):

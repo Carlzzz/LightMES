@@ -6,9 +6,10 @@ from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.schemas import UserCreate
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
-    BomCreate, BomItemCreate,
+    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+    RoutingCreate, OperationCreate, BomCreate, BomItemCreate,
 )
+from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, StationPassInput, ComponentInput,
@@ -37,9 +38,14 @@ def _passed_sn(db_session):
         ProductCreate(code="PC", name="主板", type="component", track_mode="serial"))
     md.create_bom(BomCreate(product_id=fin.id, items=[
         BomItemCreate(component_product_id=c.id, qty=1)]))
+    line = md.create_line(LineCreate(code="PFL", name="线"))
     s = md.create_station(StationCreate(code="PS", name="装配"))
+    w = md.create_work_station(WorkStationCreate(
+        code="PSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="PR", name="路线", product_id=fin.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
+    db_session.add(RoutingStep(routing_id=r.id, seq=1, station_id=s.id, name="装配"))
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

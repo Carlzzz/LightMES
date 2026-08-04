@@ -1,9 +1,10 @@
 import pytest
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
-    BomCreate, BomItemCreate,
+    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+    RoutingCreate, OperationCreate, BomCreate, BomItemCreate,
 )
+from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, StationPassInput, ComponentInput,
@@ -23,13 +24,23 @@ def _two_step_line(db_session):
         ProductCreate(code="RC", name="螺丝", type="consumable", track_mode="batch"))
     md.create_bom(BomCreate(product_id=fin.id, items=[
         BomItemCreate(component_product_id=comp.id, qty=4)]))
+    line = md.create_line(LineCreate(code="RFL", name="线"))
     s1 = md.create_station(StationCreate(code="RS1", name="上料"))
     s2 = md.create_station(StationCreate(code="RS2", name="装配"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="RS1W", name="上料站", line_id=line.id, seq=1))
+    w2 = md.create_work_station(WorkStationCreate(
+        code="RS2W", name="装配站", line_id=line.id, seq=2))
     r = md.create_routing(RoutingCreate(code="RR", name="路线", product_id=fin.id,
-        steps=[
-            RoutingStepCreate(seq=1, station_id=s1.id, name="上料"),
-            RoutingStepCreate(seq=2, station_id=s2.id, name="装配"),
+        operations=[
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
         ]))
+    db_session.add_all([
+        RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"),
+        RoutingStep(routing_id=r.id, seq=2, station_id=s2.id, name="装配"),
+    ])
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRL", name="r", pattern="R{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
@@ -97,15 +108,28 @@ def test_scrap_terminal(db_session):
 def _three_step_line(db_session):
     md = MasterDataService(db_session)
     fin = md.create_product(ProductCreate(code="RF3", name="成品", type="finished"))
+    line = md.create_line(LineCreate(code="RF3L", name="线"))
     s1 = md.create_station(StationCreate(code="RS31", name="上料"))
     s2 = md.create_station(StationCreate(code="RS32", name="装配"))
     s3 = md.create_station(StationCreate(code="RS33", name="测试"))
+    w1 = md.create_work_station(WorkStationCreate(
+        code="RS31W", name="上料站", line_id=line.id, seq=1))
+    w2 = md.create_work_station(WorkStationCreate(
+        code="RS32W", name="装配站", line_id=line.id, seq=2))
+    w3 = md.create_work_station(WorkStationCreate(
+        code="RS33W", name="测试站", line_id=line.id, seq=3))
     r = md.create_routing(RoutingCreate(code="RR3", name="路线", product_id=fin.id,
-        steps=[
-            RoutingStepCreate(seq=1, station_id=s1.id, name="上料"),
-            RoutingStepCreate(seq=2, station_id=s2.id, name="装配"),
-            RoutingStepCreate(seq=3, station_id=s3.id, name="测试"),
+        operations=[
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
+            OperationCreate(seq=3, code="OP3", name="测试", default_work_station_id=w3.id),
         ]))
+    db_session.add_all([
+        RoutingStep(routing_id=r.id, seq=1, station_id=s1.id, name="上料"),
+        RoutingStep(routing_id=r.id, seq=2, station_id=s2.id, name="装配"),
+        RoutingStep(routing_id=r.id, seq=3, station_id=s3.id, name="测试"),
+    ])
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRL3", name="r", pattern="R3{SEQ:2}"))
     wo = prod.create_work_order(WorkOrderCreate(

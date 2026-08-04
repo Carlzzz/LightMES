@@ -1,7 +1,9 @@
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, StationCreate, LineCreate, WorkStationCreate,
+    RoutingCreate, OperationCreate,
 )
+from lightmes.modules.masterdata.models import RoutingStep
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, StationPassInput,
@@ -15,9 +17,14 @@ def _single_step_line(db_session, qty=5):
     """单工序路线：首站即末站。返工后可原地重过、再次完工。"""
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="RRF", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="RRFL", name="线"))
     s = md.create_station(StationCreate(code="RRFS", name="装配"))
+    w = md.create_work_station(WorkStationCreate(
+        code="RRFSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="RRFR", name="路线", product_id=p.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
+    db_session.add(RoutingStep(routing_id=r.id, seq=1, station_id=s.id, name="装配"))
+    db_session.flush()
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRFL", name="r", pattern="RR{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(

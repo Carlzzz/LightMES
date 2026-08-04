@@ -3,16 +3,18 @@ from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
 )
 
 
 def _line(db_session):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="WP", name="壳", type="finished"))
-    s = md.create_station(StationCreate(code="WS", name="工位"))
+    line = md.create_line(LineCreate(code="WPL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="WPW", name="作业站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="WR", name="路线", product_id=p.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
     return p, r
 
 
