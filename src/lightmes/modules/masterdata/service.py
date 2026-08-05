@@ -77,6 +77,8 @@ class MasterDataService:
                 name=op.name,
                 default_work_station_id=op.default_work_station_id,
                 is_mandatory=op.is_mandatory,
+                required_skill_id=op.required_skill_id,
+                required_level=op.required_level,
             ))
         self.db.flush()
         return routing

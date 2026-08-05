@@ -41,6 +41,8 @@ class OperationCreate(BaseModel):
     name: str
     default_work_station_id: int
     is_mandatory: bool = True
+    required_skill_id: int | None = None
+    required_level: int | None = None
 
 
 class OperationRead(BaseModel):

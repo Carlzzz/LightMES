@@ -1,3 +1,4 @@
+from itertools import zip_longest
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -323,9 +324,11 @@ def routings_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespon
     products = svc.products.list_all()
     work_stations = svc.work_stations.list_all()
     routings = svc.routings.list_all()
+    skills = SkillService(db).list_skills()
     return templates.TemplateResponse(
         request, "masterdata/routings.html",
-        {"products": products, "work_stations": work_stations, "routings": routings}
+        {"products": products, "work_stations": work_stations,
+         "routings": routings, "skills": skills}
     )
 
 
@@ -339,6 +342,8 @@ def routings_create_page(
     op_code: list[str] = Form(default=[]),
     op_name: list[str] = Form(default=[]),
     op_ws: list[str] = Form(default=[]),
+    op_skill: list[str] = Form(default=[]),
+    op_level: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     if current_user_or_none(request, db) is None:
@@ -346,12 +351,16 @@ def routings_create_page(
     svc = MasterDataService(db)
     try:
         operations = []
-        for seq, c, n, ws in zip(op_seq, op_code, op_name, op_ws):
+        for seq, c, n, ws, sk_id, lvl in zip_longest(
+            op_seq, op_code, op_name, op_ws, op_skill, op_level, fillvalue=""
+        ):
             if not c.strip() or not ws.strip():
                 continue  # 空工序行忽略
             operations.append(OperationCreate(
                 seq=int(seq), code=c.strip(), name=n.strip(),
-                default_work_station_id=int(ws)))
+                default_work_station_id=int(ws),
+                required_skill_id=int(sk_id) if sk_id.strip() else None,
+                required_level=int(lvl) if lvl.strip() else None))
         routing = svc.create_routing(RoutingCreate(
             code=code, name=name, product_id=product_id, operations=operations))
     except ValueError as e:
