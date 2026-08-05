@@ -1,10 +1,17 @@
-from sqlalchemy import ForeignKey, Index, JSON, Numeric, text, UniqueConstraint
+from datetime import datetime
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
 
 class Product(Base, TimestampMixin):
     __tablename__ = "products"
+    __table_args__ = (
+        Index(
+            "uq_products_erp_ref", "erp_ref",
+            unique=True, postgresql_where=text("erp_ref IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(unique=True, index=True)
@@ -13,6 +20,9 @@ class Product(Base, TimestampMixin):
     spec: Mapped[str | None] = mapped_column(default=None)
     unit: Mapped[str] = mapped_column(default="pcs")
     track_mode: Mapped[str] = mapped_column(default="none")  # serial/batch/none
+    source: Mapped[str] = mapped_column(default="manual", server_default="manual")
+    erp_ref: Mapped[str | None] = mapped_column(index=True, default=None)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class Routing(Base, TimestampMixin):
@@ -22,6 +32,10 @@ class Routing(Base, TimestampMixin):
             "uq_active_routing_per_product", "product_id",
             unique=True, postgresql_where=text("status = 'active'"),
         ),
+        Index(
+            "uq_routings_erp_ref", "erp_ref",
+            unique=True, postgresql_where=text("erp_ref IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -30,6 +44,9 @@ class Routing(Base, TimestampMixin):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     version: Mapped[str] = mapped_column(default="1")
     status: Mapped[str] = mapped_column(default="active")  # active/inactive
+    source: Mapped[str] = mapped_column(default="manual", server_default="manual")
+    erp_ref: Mapped[str | None] = mapped_column(index=True, default=None)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class Bom(Base, TimestampMixin):
@@ -39,12 +56,19 @@ class Bom(Base, TimestampMixin):
             "uq_active_bom_per_product", "product_id",
             unique=True, postgresql_where=text("status = 'active'"),
         ),
+        Index(
+            "uq_boms_erp_ref", "erp_ref",
+            unique=True, postgresql_where=text("erp_ref IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     version: Mapped[str] = mapped_column(default="1")
     status: Mapped[str] = mapped_column(default="active")  # active/inactive
+    source: Mapped[str] = mapped_column(default="manual", server_default="manual")
+    erp_ref: Mapped[str | None] = mapped_column(index=True, default=None)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class BomItem(Base, TimestampMixin):

@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
@@ -19,6 +20,9 @@ class ProductRead(BaseModel):
     unit: str
     track_mode: str
     spec: str | None
+    source: str
+    erp_ref: str | None
+    synced_at: datetime | None
 
 
 class OperationCreate(BaseModel):
@@ -56,6 +60,9 @@ class RoutingRead(BaseModel):
     product_id: int
     version: str
     status: str
+    source: str
+    erp_ref: str | None
+    synced_at: datetime | None
     operations: list[OperationRead]
 
 
@@ -84,6 +91,9 @@ class BomRead(BaseModel):
     product_id: int
     version: str
     status: str
+    source: str
+    erp_ref: str | None
+    synced_at: datetime | None
     items: list[BomItemRead]
 
 

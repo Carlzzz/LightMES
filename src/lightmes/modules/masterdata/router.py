@@ -69,6 +69,7 @@ def create_routing(
         id=routing.id, code=routing.code, name=routing.name,
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
+        source=routing.source, erp_ref=routing.erp_ref, synced_at=routing.synced_at,
         operations=[OperationRead.model_validate(o) for o in operations],
     )
 
@@ -82,6 +83,7 @@ def list_routings(db: Session = Depends(get_db)) -> list[RoutingRead]:
             id=r.id, code=r.code, name=r.name,
             product_id=r.product_id, version=r.version,
             status=r.status,
+            source=r.source, erp_ref=r.erp_ref, synced_at=r.synced_at,
             operations=[OperationRead.model_validate(o) for o in svc.routings.operations_of(r.id)],
         )
         for r in routings
@@ -99,6 +101,7 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
         id=routing.id, code=routing.code, name=routing.name,
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
+        source=routing.source, erp_ref=routing.erp_ref, synced_at=routing.synced_at,
         operations=[OperationRead.model_validate(o) for o in operations],
     )
 
@@ -122,6 +125,7 @@ def create_bom(
     return BomRead(
         id=bom.id, product_id=bom.product_id, version=bom.version,
         status=bom.status,
+        source=bom.source, erp_ref=bom.erp_ref, synced_at=bom.synced_at,
         items=[BomItemRead.model_validate(i) for i in items],
     )
 
@@ -136,6 +140,7 @@ def get_bom(bom_id: int, db: Session = Depends(get_db)) -> BomRead:
     return BomRead(
         id=bom.id, product_id=bom.product_id, version=bom.version,
         status=bom.status,
+        source=bom.source, erp_ref=bom.erp_ref, synced_at=bom.synced_at,
         items=[BomItemRead.model_validate(i) for i in items],
     )
 
