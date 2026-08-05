@@ -128,7 +128,30 @@ class Operation(Base, TimestampMixin):
     )
     is_mandatory: Mapped[bool] = mapped_column(default=True)
     # 预留（P2c/P2d 填逻辑，本期仅建列）
-    required_skill_id: Mapped[int | None] = mapped_column(default=None)
+    required_skill_id: Mapped[int | None] = mapped_column(
+        ForeignKey("skill.id"), default=None)
     required_level: Mapped[int | None] = mapped_column(default=None)
     sop_id: Mapped[int | None] = mapped_column(default=None)
     panels: Mapped[dict | None] = mapped_column(JSON, default=None)
+
+
+class Skill(Base, TimestampMixin):
+    __tablename__ = "skill"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(unique=True, index=True)
+    name: Mapped[str] = mapped_column()
+    max_level: Mapped[int] = mapped_column()
+    description: Mapped[str | None] = mapped_column(default=None)
+
+
+class OperatorSkill(Base, TimestampMixin):
+    __tablename__ = "operator_skill"
+    __table_args__ = (
+        UniqueConstraint("user_id", "skill_id", name="uq_operator_skill_user_skill"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skill.id"))
+    level: Mapped[int] = mapped_column()
