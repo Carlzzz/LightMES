@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}BOM 管理{% endblock %}
+{% block content %}
+<h1 class="page-title">BOM 管理 <small>ERP 同步 / 本地</small></h1>
+<div class="card">
+  <div class="card__title">BOM 列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>成品</th><th>版本</th><th>状态</th><th>来源</th></tr></thead>
+    <tbody>
+      {% for b in boms %}
+      <tr><td>{{ b.id }}</td><td>{{ b.product_id }}</td><td>{{ b.version }}</td><td>{{ b.status }}</td>
+      <td>{% if b.source=="erp" %}<span class="badge">ERP</span>{% else %}<span class="badge">本地</span>{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

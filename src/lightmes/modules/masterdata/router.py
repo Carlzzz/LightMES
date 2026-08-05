@@ -13,6 +13,7 @@ from lightmes.modules.masterdata.schemas import (
     BomItemRead,
     BomRead,
     LineCreate,
+    OperationCreate,
     OperationRead,
     ProductCreate,
     ProductRead,
@@ -174,7 +175,7 @@ def products_create_page(
     except ValueError as e:
         return templates.TemplateResponse(
             request, "masterdata/partials/error_row.html",
-            {"error": str(e), "colspan": 6})
+            {"error": str(e), "colspan": 7})
     return templates.TemplateResponse(
         request, "masterdata/partials/product_row.html", {"product": product}
     )
@@ -243,6 +244,61 @@ def work_stations_create_page(
             {"error": str(e), "colspan": 5})
     return templates.TemplateResponse(
         request, "masterdata/partials/work_station_row.html", {"ws": ws}
+    )
+
+
+@router.get("/masterdata/routings", response_class=HTMLResponse)
+def routings_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    svc = MasterDataService(db)
+    products = svc.products.list_all()
+    work_stations = svc.work_stations.list_all()
+    routings = svc.routings.list_all()
+    return templates.TemplateResponse(
+        request, "masterdata/routings.html",
+        {"products": products, "work_stations": work_stations, "routings": routings}
+    )
+
+
+@router.post("/masterdata/routings", response_class=HTMLResponse)
+def routings_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    product_id: int = Form(...),
+    op_seq: list[str] = Form(default=[]),
+    op_code: list[str] = Form(default=[]),
+    op_name: list[str] = Form(default=[]),
+    op_ws: list[str] = Form(default=[]),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    operations = []
+    for seq, c, n, ws in zip(op_seq, op_code, op_name, op_ws):
+        if not c.strip() or not ws.strip():
+            continue  # 空工序行忽略
+        operations.append(OperationCreate(
+            seq=int(seq), code=c.strip(), name=n.strip(),
+            default_work_station_id=int(ws)))
+    svc = MasterDataService(db)
+    try:
+        routing = svc.create_routing(RoutingCreate(
+            code=code, name=name, product_id=product_id, operations=operations))
+    except ValueError as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 6})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/routing_result.html", {"routing": routing}
+    )
+
+
+@router.get("/masterdata/boms", response_class=HTMLResponse)
+def boms_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    boms = MasterDataService(db).boms.list_all()
+    return templates.TemplateResponse(
+        request, "masterdata/boms.html", {"boms": boms}
     )
 
 

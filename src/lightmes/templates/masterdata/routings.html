@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}工艺路径管理{% endblock %}
+{% block content %}
+<h1 class="page-title">工艺路径管理</h1>
+<div class="card">
+  <div class="card__title">新建工艺路径</div>
+  <form hx-post="/masterdata/routings" hx-target="#result" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="form-row">
+      <div class="field"><label>路线编码</label><input name="code" required></div>
+      <div class="field"><label>名称</label><input name="name" required></div>
+      <div class="field"><label>产品</label>
+        <select name="product_id">{% for p in products %}<option value="{{ p.id }}">{{ p.code }} {{ p.name }}</option>{% endfor %}</select>
+      </div>
+    </div>
+    <p class="nav-card__desc" style="margin:12px 0 6px">工序（按 seq 顺序，作业站从下拉选；留空的行忽略）</p>
+    {% for i in range(1, 6) %}
+    <div class="form-row">
+      <div class="field"><label>seq</label><input name="op_seq" type="number" value="{{ i }}"></div>
+      <div class="field"><label>工序码</label><input name="op_code" placeholder="可留空"></div>
+      <div class="field"><label>工序名</label><input name="op_name" placeholder="可留空"></div>
+      <div class="field"><label>作业站</label>
+        <select name="op_ws"><option value="">--</option>{% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }}</option>{% endfor %}</select>
+      </div>
+    </div>
+    {% endfor %}
+    <button type="submit">保存路线</button>
+  </form>
+  <div id="result" class="result-slot"></div>
+</div>
+<div class="card">
+  <div class="card__title">路线列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>产品</th><th>状态</th><th>来源</th></tr></thead>
+    <tbody>
+      {% for r in routings %}
+      <tr><td>{{ r.id }}</td><td>{{ r.code }}</td><td>{{ r.name }}</td><td>{{ r.product_id }}</td>
+      <td>{{ r.status }}</td><td>{% if r.source=="erp" %}ERP{% else %}本地{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
