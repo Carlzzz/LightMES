@@ -26,6 +26,17 @@ def test_home_page(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "LightMES" in resp.text
+    # home nav must link every master-data management page + ERP import
+    for href in [
+        "/masterdata/products",
+        "/masterdata/lines",
+        "/masterdata/work-stations",
+        "/masterdata/routings",
+        "/masterdata/boms",
+        "/production/sn-rules",
+        "/integration/import",
+    ]:
+        assert href in resp.text
 
 
 def test_products_page_renders(client):
