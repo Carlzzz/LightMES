@@ -22,3 +22,7 @@ class ConflictError(DomainError):
 
 class BusinessRuleError(DomainError):
     status_code = 422
+
+
+class SkillError(DomainError):
+    status_code = 422
