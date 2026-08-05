@@ -87,6 +87,17 @@ class BomCreate(BaseModel):
     items: list[BomItemCreate]
 
 
+class BomItemUpsert(BaseModel):
+    component_code: str
+    qty: float = 1
+
+
+class BomUpsert(BaseModel):
+    erp_ref: str
+    product_code: str
+    items: list[BomItemUpsert]
+
+
 class BomItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

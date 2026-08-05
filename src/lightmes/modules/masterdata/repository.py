@@ -101,6 +101,16 @@ class BomRepository:
             ).scalars().all()
         )
 
+    def get_by_erp_ref(self, erp_ref: str) -> Bom | None:
+        return self.db.execute(
+            select(Bom).where(Bom.erp_ref == erp_ref)
+        ).scalar_one_or_none()
+
+    def delete_items(self, bom_id: int) -> None:
+        for it in self.items_of(bom_id):
+            self.db.delete(it)
+        self.db.flush()
+
 
 class LineRepository:
     def __init__(self, db: Session) -> None:

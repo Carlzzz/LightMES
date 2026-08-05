@@ -18,6 +18,7 @@ from lightmes.modules.masterdata.repository import (
 )
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
+    BomUpsert,
     LineCreate,
     ProductCreate,
     ProductUpsert,
@@ -145,3 +146,31 @@ class MasterDataService:
             synced_at=datetime.now(timezone.utc),
         )
         return self.products.add(product), "created"
+
+    def upsert_bom(self, data: "BomUpsert") -> tuple[Bom, str]:
+        product = self.products.get_by_code(data.product_code)
+        if product is None:
+            raise ValueError(f"成品不存在: {data.product_code}")
+        resolved = []
+        for it in data.items:
+            comp = self.products.get_by_code(it.component_code)
+            if comp is None:
+                raise ValueError(f"组件不存在: {it.component_code}")
+            resolved.append((comp, it.qty))
+        existing = self.boms.get_by_erp_ref(data.erp_ref)
+        if existing is not None:
+            self.boms.delete_items(existing.id)
+            for comp, qty in resolved:
+                self.db.add(BomItem(bom_id=existing.id,
+                    component_product_id=comp.id, qty=qty, track_mode=comp.track_mode))
+            existing.synced_at = datetime.now(timezone.utc)
+            self.db.flush()
+            return existing, "updated"
+        bom = Bom(product_id=product.id, source="erp", erp_ref=data.erp_ref,
+                  synced_at=datetime.now(timezone.utc))
+        self.boms.add(bom)
+        for comp, qty in resolved:
+            self.db.add(BomItem(bom_id=bom.id, component_product_id=comp.id,
+                qty=qty, track_mode=comp.track_mode))
+        self.db.flush()
+        return bom, "created"
