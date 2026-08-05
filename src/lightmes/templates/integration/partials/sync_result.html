@@ -1,0 +1,6 @@
+<div class="alert {% if result.errors %}alert--danger{% else %}alert--ok{% endif %}">
+  新增 {{ result.created }} · 更新 {{ result.updated }} · 跳过 {{ result.skipped }}
+</div>
+{% if result.errors %}
+<ul>{% for e in result.errors %}<li style="color:var(--danger)">{{ e }}</li>{% endfor %}</ul>
+{% endif %}
