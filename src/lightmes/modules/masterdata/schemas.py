@@ -21,28 +21,23 @@ class ProductRead(BaseModel):
     spec: str | None
 
 
-class StationCreate(BaseModel):
+class OperationCreate(BaseModel):
+    seq: int
     code: str
     name: str
-    description: str | None = None
-    location: str | None = None
+    default_work_station_id: int
+    is_mandatory: bool = True
 
 
-class StationRead(BaseModel):
+class OperationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    routing_id: int
+    seq: int
     code: str
     name: str
-    description: str | None
-    location: str | None
-    is_active: bool
-
-
-class RoutingStepCreate(BaseModel):
-    seq: int
-    station_id: int
-    name: str
-    is_mandatory: bool = True
+    default_work_station_id: int
+    is_mandatory: bool
 
 
 class RoutingCreate(BaseModel):
@@ -50,16 +45,7 @@ class RoutingCreate(BaseModel):
     name: str
     product_id: int
     version: str = "1"
-    steps: list[RoutingStepCreate]
-
-
-class RoutingStepRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    seq: int
-    station_id: int
-    name: str
-    is_mandatory: bool
+    operations: list[OperationCreate]
 
 
 class RoutingRead(BaseModel):
@@ -70,7 +56,7 @@ class RoutingRead(BaseModel):
     product_id: int
     version: str
     status: str
-    steps: list[RoutingStepRead]
+    operations: list[OperationRead]
 
 
 class BomItemCreate(BaseModel):
@@ -99,3 +85,37 @@ class BomRead(BaseModel):
     version: str
     status: str
     items: list[BomItemRead]
+
+
+class LineCreate(BaseModel):
+    code: str
+    name: str
+    description: str | None = None
+
+
+class LineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    description: str | None
+    is_active: bool
+
+
+class WorkStationCreate(BaseModel):
+    code: str
+    name: str
+    line_id: int
+    seq: int
+    description: str | None = None
+
+
+class WorkStationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    line_id: int
+    seq: int
+    description: str | None
+    is_active: bool

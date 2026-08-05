@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}扫码过站{% endblock %}
 {% block content %}
-<h1 class="page-title">扫码过站 <small>当前工位 #{{ station_id }}</small></h1>
+<h1 class="page-title">扫码过站 <small>当前作业站 #{{ work_station_id }}</small></h1>
 
 <div class="card">
   <div class="card__title">过站扫描</div>
   <form class="form-row" hx-post="/production/scan" hx-target="#result" hx-swap="innerHTML"
         hx-on::after-request="if(event.detail.successful) this.querySelector('[name=code_or_sn]').value=''">
-    <div class="field"><label>工位</label><input name="station_id" value="{{ station_id }}"></div>
+    <div class="field"><label>作业站</label><input name="work_station_id" value="{{ work_station_id }}"></div>
     <div class="field" style="flex:1">
       <label>扫码 / 输入</label>
       <input name="code_or_sn" placeholder="首件填工单号，后续填 SN" required autofocus>

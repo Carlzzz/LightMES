@@ -1,9 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import (
+    OperationParam,
+    OperationRecord,
     SerialUnit,
     SnRule,
-    StationPass,
     WorkOrder,
 )
 
@@ -66,37 +67,44 @@ class SerialUnitRepository:
             select(SerialUnit).where(SerialUnit.work_order_id == work_order_id)
         ).scalars().all())
 
-    def list_in_process_by_station(self, station_id: int) -> list[SerialUnit]:
-        return list(self.db.execute(
-            select(SerialUnit).where(
-                SerialUnit.current_station_id == station_id,
-                SerialUnit.status == "in_process",
-            )
-        ).scalars().all())
 
-
-class StationPassRepository:
+class OperationRecordRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def add(self, sp: StationPass) -> StationPass:
-        self.db.add(sp)
+    def add(self, rec: OperationRecord) -> OperationRecord:
+        self.db.add(rec)
         self.db.flush()
-        return sp
+        return rec
 
-    def exists_pass(self, serial_unit_id: int, routing_step_id: int) -> bool:
-        row = self.db.execute(
-            select(StationPass.id).where(
-                StationPass.serial_unit_id == serial_unit_id,
-                StationPass.routing_step_id == routing_step_id,
-                StationPass.result == "pass",
-            )
-        ).first()
-        return row is not None
-
-    def list_by_serial_unit(self, serial_unit_id: int) -> list[StationPass]:
+    def list_by_serial_unit(self, serial_unit_id: int) -> list[OperationRecord]:
         return list(self.db.execute(
-            select(StationPass)
-            .where(StationPass.serial_unit_id == serial_unit_id)
-            .order_by(StationPass.pass_time)
+            select(OperationRecord)
+            .where(OperationRecord.serial_unit_id == serial_unit_id)
+            .order_by(OperationRecord.end_time)
+        ).scalars().all())
+
+
+class OperationParamRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, param: OperationParam) -> OperationParam:
+        self.db.add(param)
+        self.db.flush()
+        return param
+
+    def list_by_record(self, record_id: int) -> list[OperationParam]:
+        return list(self.db.execute(
+            select(OperationParam).where(
+                OperationParam.operation_record_id == record_id)
+        ).scalars().all())
+
+    def list_by_serial_unit(self, serial_unit_id: int) -> list[OperationParam]:
+        return list(self.db.execute(
+            select(OperationParam)
+            .join(OperationRecord,
+                  OperationParam.operation_record_id == OperationRecord.id)
+            .where(OperationRecord.serial_unit_id == serial_unit_id)
+            .order_by(OperationParam.recorded_at)
         ).scalars().all())

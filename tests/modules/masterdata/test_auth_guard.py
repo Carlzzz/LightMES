@@ -44,14 +44,6 @@ def test_api_create_sn_rule_requires_login(client):
     assert resp.status_code == 401
 
 
-def test_api_create_station_requires_login(client):
-    resp = client.post(
-        "/api/masterdata/stations",
-        json={"code": "ST-X", "name": "x"},
-    )
-    assert resp.status_code == 401
-
-
 def test_api_create_routing_requires_login(client):
     resp = client.post(
         "/api/masterdata/routings",
@@ -59,7 +51,9 @@ def test_api_create_routing_requires_login(client):
             "code": "RT-X",
             "name": "x",
             "product_id": 1,
-            "steps": [{"seq": 1, "station_id": 1, "name": "s1"}],
+            "operations": [
+                {"seq": 1, "code": "OP1", "name": "s1", "default_work_station_id": 1},
+            ],
         },
     )
     assert resp.status_code == 401

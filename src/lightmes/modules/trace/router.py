@@ -79,16 +79,30 @@ def query_submit(
             parents = svc.where_used(component_batch_no=value)
             rows = _where_used_rows(db, parents)
             html = f"<p>批次 {escape(value)} 装入:</p><ul>{rows}</ul>"
+        elif query_type == "params":
+            params = svc.params_of(value)
+            rows = "".join(
+                f"<li>{escape(p.param_key)} = {escape(p.param_value)}"
+                f"{(' ' + escape(p.unit)) if p.unit else ''} "
+                f"[{escape(p.source)}] {p.recorded_at}</li>"
+                for p in params)
+            html = f"<p>SN {escape(value)} 工艺参数:</p><ul>{rows}</ul>"
         else:  # history
             h = svc.history_of(value)
-            passes = "".join(
-                f"<li>工序#{p.routing_step_id} 工位#{p.station_id} "
-                f"{escape(p.result)} {p.pass_time}</li>"
-                for p in h.passes)
+            recs = "".join(
+                f"<li>工序#{r.operation_id} 作业站#{r.work_station_id} "
+                f"产线#{r.line_id} {escape(r.result)} {r.end_time}</li>"
+                for r in h.records)
             comps = "".join(
                 f"<li>{escape(c.component_ref)} [{escape(c.status)}]</li>"
                 for c in h.components)
-            html = f"<p>SN {escape(h.sn)} 履历:</p><ul>{passes}</ul><p>组件:</p><ul>{comps}</ul>"
+            param_rows = "".join(
+                f"<li>{escape(p.param_key)} = {escape(p.param_value)}"
+                f"{(' ' + escape(p.unit)) if p.unit else ''}</li>"
+                for p in h.params)
+            html = (f"<p>SN {escape(h.sn)} 履历:</p><ul>{recs}</ul>"
+                    f"<p>组件:</p><ul>{comps}</ul>"
+                    f"<p>工艺参数:</p><ul>{param_rows}</ul>")
     except DomainError as e:
         return HTMLResponse(f'<div style="color:red">✗ {escape(e.detail)}</div>')
     return HTMLResponse(html)
@@ -115,4 +129,4 @@ def rework_submit(
         return HTMLResponse(f'<div style="color:red">✗ {escape(e.detail)}</div>')
     return HTMLResponse(
         f'<div style="color:green">✓ {escape(su.sn)} '
-        f'已返工至工序 {su.current_step_seq}</div>')
+        f'已返工至工序 {su.current_operation_seq}</div>')

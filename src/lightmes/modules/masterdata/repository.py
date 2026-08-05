@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
     BomItem,
+    Line,
+    Operation,
     Product,
     Routing,
-    RoutingStep,
-    Station,
+    WorkStation,
 )
 
 
@@ -29,27 +30,6 @@ class ProductRepository:
 
     def list_all(self) -> list[Product]:
         return list(self.db.execute(select(Product)).scalars().all())
-
-
-class StationRepository:
-    def __init__(self, db: Session) -> None:
-        self.db = db
-
-    def add(self, station: Station) -> Station:
-        self.db.add(station)
-        self.db.flush()
-        return station
-
-    def get(self, id: int) -> Station | None:
-        return self.db.get(Station, id)
-
-    def get_by_code(self, code: str) -> Station | None:
-        return self.db.execute(
-            select(Station).where(Station.code == code)
-        ).scalar_one_or_none()
-
-    def list_all(self) -> list[Station]:
-        return list(self.db.execute(select(Station)).scalars().all())
 
 
 class RoutingRepository:
@@ -79,12 +59,12 @@ class RoutingRepository:
     def list_all(self) -> list[Routing]:
         return list(self.db.execute(select(Routing)).scalars().all())
 
-    def steps_of(self, routing_id: int) -> list[RoutingStep]:
+    def operations_of(self, routing_id: int) -> list[Operation]:
         return list(
             self.db.execute(
-                select(RoutingStep)
-                .where(RoutingStep.routing_id == routing_id)
-                .order_by(RoutingStep.seq)
+                select(Operation)
+                .where(Operation.routing_id == routing_id)
+                .order_by(Operation.seq)
             ).scalars().all()
         )
 
@@ -115,3 +95,49 @@ class BomRepository:
                 select(BomItem).where(BomItem.bom_id == bom_id)
             ).scalars().all()
         )
+
+
+class LineRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, line: Line) -> Line:
+        self.db.add(line)
+        self.db.flush()
+        return line
+
+    def get(self, id: int) -> Line | None:
+        return self.db.get(Line, id)
+
+    def get_by_code(self, code: str) -> Line | None:
+        return self.db.execute(
+            select(Line).where(Line.code == code)
+        ).scalar_one_or_none()
+
+    def list_all(self) -> list[Line]:
+        return list(self.db.execute(select(Line)).scalars().all())
+
+
+class WorkStationRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, ws: WorkStation) -> WorkStation:
+        self.db.add(ws)
+        self.db.flush()
+        return ws
+
+    def get(self, id: int) -> WorkStation | None:
+        return self.db.get(WorkStation, id)
+
+    def get_by_code(self, code: str) -> WorkStation | None:
+        return self.db.execute(
+            select(WorkStation).where(WorkStation.code == code)
+        ).scalar_one_or_none()
+
+    def list_by_line(self, line_id: int) -> list[WorkStation]:
+        return list(self.db.execute(
+            select(WorkStation)
+            .where(WorkStation.line_id == line_id)
+            .order_by(WorkStation.seq)
+        ).scalars().all())

@@ -3,12 +3,13 @@ from lightmes.shared.events import Event
 
 
 @dataclass
-class StationPassed(Event):
+class OperationPassed(Event):
     serial_unit_id: int
     sn: str
     work_order_id: int
-    routing_step_id: int
-    station_id: int
+    operation_id: int
+    work_station_id: int
+    line_id: int
 
 
 @dataclass

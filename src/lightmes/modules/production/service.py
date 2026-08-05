@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from lightmes.modules.masterdata.models import Product, Routing
+from lightmes.modules.masterdata.models import Line, Product, Routing
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.models import SnRule, WorkOrder
 from lightmes.modules.production.repository import (
     SnRuleRepository, WorkOrderRepository,
@@ -29,13 +30,27 @@ class ProductionService:
             raise ValueError(f"工单号已存在: {data.code}")
         if self.db.get(Product, data.product_id) is None:
             raise ValueError(f"产品不存在: {data.product_id}")
-        if self.db.get(Routing, data.routing_id) is None:
+        routing = self.db.get(Routing, data.routing_id)
+        if routing is None:
             raise ValueError(f"路线不存在: {data.routing_id}")
+        if self.db.get(Line, data.line_id) is None:
+            raise ValueError(f"产线不存在: {data.line_id}")
         if data.sn_rule_id is not None and self.sn_rules.get(data.sn_rule_id) is None:
             raise ValueError(f"SN 规则不存在: {data.sn_rule_id}")
+        # 一致性校验：路线必须属于产品；所有工序默认作业站必须在工单产线上
+        if routing.product_id != data.product_id:
+            raise ValueError(f"路线 {data.routing_id} 不属于产品 {data.product_id}")
+        masterdata = MasterDataQueryService(self.db)
+        for op in masterdata.get_operations(data.routing_id):
+            ws = masterdata.get_work_station(op.default_work_station_id)
+            if ws is None or ws.line_id != data.line_id:
+                raise ValueError(
+                    f"工序 {op.seq} 的默认作业站不属于产线 {data.line_id}"
+                )
         wo = WorkOrder(
             code=data.code, product_id=data.product_id,
-            routing_id=data.routing_id, sn_rule_id=data.sn_rule_id,
+            routing_id=data.routing_id, line_id=data.line_id,
+            sn_rule_id=data.sn_rule_id,
             qty=data.qty, status="created",
         )
         return self.work_orders.add(wo)

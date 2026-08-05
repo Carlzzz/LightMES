@@ -31,8 +31,8 @@ class GenealogyBind(Base, TimestampMixin):
     operator_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), default=None
     )
-    station_pass_id: Mapped[int | None] = mapped_column(
-        ForeignKey("station_passes.id"), default=None
+    operation_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("operation_records.id"), default=None
     )
     status: Mapped[str] = mapped_column(default="active")  # active/unbound
     unbind_time: Mapped[datetime | None] = mapped_column(

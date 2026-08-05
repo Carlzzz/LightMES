@@ -2,22 +2,25 @@ from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
     BomItem,
+    Line,
+    Operation,
     Product,
     Routing,
-    RoutingStep,
-    Station,
+    WorkStation,
 )
 from lightmes.modules.masterdata.repository import (
     BomRepository,
+    LineRepository,
     ProductRepository,
     RoutingRepository,
-    StationRepository,
+    WorkStationRepository,
 )
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
+    LineCreate,
     ProductCreate,
     RoutingCreate,
-    StationCreate,
+    WorkStationCreate,
 )
 
 
@@ -25,9 +28,10 @@ class MasterDataService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.products = ProductRepository(db)
-        self.stations = StationRepository(db)
         self.routings = RoutingRepository(db)
         self.boms = BomRepository(db)
+        self.lines = LineRepository(db)
+        self.work_stations = WorkStationRepository(db)
 
     def create_product(self, data: ProductCreate) -> Product:
         if self.products.get_by_code(data.code) is not None:
@@ -42,28 +46,17 @@ class MasterDataService:
         )
         return self.products.add(product)
 
-    def create_station(self, data: StationCreate) -> Station:
-        if self.stations.get_by_code(data.code) is not None:
-            raise ValueError(f"工位编码已存在: {data.code}")
-        station = Station(
-            code=data.code,
-            name=data.name,
-            description=data.description,
-            location=data.location,
-        )
-        return self.stations.add(station)
-
     def create_routing(self, data: RoutingCreate) -> Routing:
         if self.routings.get_by_code(data.code) is not None:
             raise ValueError(f"路线编码已存在: {data.code}")
         if self.products.get(data.product_id) is None:
             raise ValueError(f"产品不存在: {data.product_id}")
-        seqs = [s.seq for s in data.steps]
+        seqs = [o.seq for o in data.operations]
         if len(seqs) != len(set(seqs)):
             raise ValueError("工序 seq 不能重复")
-        for step in data.steps:
-            if self.stations.get(step.station_id) is None:
-                raise ValueError(f"工位不存在: {step.station_id}")
+        for op in data.operations:
+            if self.work_stations.get(op.default_work_station_id) is None:
+                raise ValueError(f"作业站不存在: {op.default_work_station_id}")
         has_active = self.routings.get_active_by_product(data.product_id) is not None
         routing = Routing(
             code=data.code,
@@ -73,13 +66,14 @@ class MasterDataService:
             status="inactive" if has_active else "active",
         )
         self.routings.add(routing)
-        for step in data.steps:
-            self.db.add(RoutingStep(
+        for op in data.operations:
+            self.db.add(Operation(
                 routing_id=routing.id,
-                seq=step.seq,
-                station_id=step.station_id,
-                name=step.name,
-                is_mandatory=step.is_mandatory,
+                seq=op.seq,
+                code=op.code,
+                name=op.name,
+                default_work_station_id=op.default_work_station_id,
+                is_mandatory=op.is_mandatory,
             ))
         self.db.flush()
         return routing
@@ -112,3 +106,20 @@ class MasterDataService:
             ))
         self.db.flush()
         return bom
+
+    def create_line(self, data: LineCreate) -> Line:
+        if self.lines.get_by_code(data.code) is not None:
+            raise ValueError(f"产线编码已存在: {data.code}")
+        line = Line(code=data.code, name=data.name, description=data.description)
+        return self.lines.add(line)
+
+    def create_work_station(self, data: WorkStationCreate) -> WorkStation:
+        if self.work_stations.get_by_code(data.code) is not None:
+            raise ValueError(f"作业站编码已存在: {data.code}")
+        if self.lines.get(data.line_id) is None:
+            raise ValueError(f"产线不存在: {data.line_id}")
+        ws = WorkStation(
+            code=data.code, name=data.name, line_id=data.line_id,
+            seq=data.seq, description=data.description,
+        )
+        return self.work_stations.add(ws)

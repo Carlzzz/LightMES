@@ -12,13 +12,11 @@ from lightmes.modules.masterdata.schemas import (
     BomCreate,
     BomItemRead,
     BomRead,
+    OperationRead,
     ProductCreate,
     ProductRead,
     RoutingCreate,
     RoutingRead,
-    RoutingStepRead,
-    StationCreate,
-    StationRead,
 )
 from lightmes.modules.masterdata.service import MasterDataService
 
@@ -52,29 +50,6 @@ def list_products(db: Session = Depends(get_db)) -> list[ProductRead]:
 
 
 @router.post(
-    "/api/masterdata/stations",
-    response_model=StationRead,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_station(
-    data: StationCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
-) -> StationRead:
-    try:
-        station = MasterDataService(db).create_station(data)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    return StationRead.model_validate(station)
-
-
-@router.get("/api/masterdata/stations", response_model=list[StationRead])
-def list_stations(db: Session = Depends(get_db)) -> list[StationRead]:
-    stations = MasterDataService(db).stations.list_all()
-    return [StationRead.model_validate(s) for s in stations]
-
-
-@router.post(
     "/api/masterdata/routings",
     response_model=RoutingRead,
     status_code=status.HTTP_201_CREATED,
@@ -89,12 +64,12 @@ def create_routing(
         routing = svc.create_routing(data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    steps = svc.routings.steps_of(routing.id)
+    operations = svc.routings.operations_of(routing.id)
     return RoutingRead(
         id=routing.id, code=routing.code, name=routing.name,
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
-        steps=[RoutingStepRead.model_validate(s) for s in steps],
+        operations=[OperationRead.model_validate(o) for o in operations],
     )
 
 
@@ -107,7 +82,7 @@ def list_routings(db: Session = Depends(get_db)) -> list[RoutingRead]:
             id=r.id, code=r.code, name=r.name,
             product_id=r.product_id, version=r.version,
             status=r.status,
-            steps=[RoutingStepRead.model_validate(s) for s in svc.routings.steps_of(r.id)],
+            operations=[OperationRead.model_validate(o) for o in svc.routings.operations_of(r.id)],
         )
         for r in routings
     ]
@@ -119,12 +94,12 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
     routing = svc.routings.get(routing_id)
     if routing is None:
         raise HTTPException(status_code=404, detail="路线不存在")
-    steps = svc.routings.steps_of(routing.id)
+    operations = svc.routings.operations_of(routing.id)
     return RoutingRead(
         id=routing.id, code=routing.code, name=routing.name,
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
-        steps=[RoutingStepRead.model_validate(s) for s in steps],
+        operations=[OperationRead.model_validate(o) for o in operations],
     )
 
 
@@ -198,32 +173,3 @@ def products_create_page(
     )
 
 
-@router.get("/masterdata/stations", response_class=HTMLResponse)
-def stations_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    stations = MasterDataService(db).stations.list_all()
-    return templates.TemplateResponse(
-        request, "masterdata/stations.html", {"stations": stations}
-    )
-
-
-@router.post("/masterdata/stations", response_class=HTMLResponse)
-def stations_create_page(
-    request: Request,
-    code: str = Form(...),
-    name: str = Form(...),
-    location: str = Form(""),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    if current_user_or_none(request, db) is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    svc = MasterDataService(db)
-    try:
-        station = svc.create_station(StationCreate(
-            code=code, name=name, location=location or None))
-    except ValueError as e:
-        return templates.TemplateResponse(
-            request, "masterdata/partials/error_row.html",
-            {"error": str(e), "colspan": 4})
-    return templates.TemplateResponse(
-        request, "masterdata/partials/station_row.html", {"station": station}
-    )

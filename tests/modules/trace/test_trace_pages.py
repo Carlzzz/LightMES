@@ -6,14 +6,14 @@ from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.schemas import UserCreate
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, StationCreate, RoutingCreate, RoutingStepCreate,
+    ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
     BomCreate, BomItemCreate,
 )
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
-    SnRuleCreate, WorkOrderCreate, StationPassInput, ComponentInput,
+    SnRuleCreate, WorkOrderCreate, OperationPassInput, ComponentInput, ParamInput,
 )
-from lightmes.modules.production.station_pass_service import StationPassService
+from lightmes.modules.production.operation_pass_service import OperationPassService
 
 
 @pytest.fixture()
@@ -37,17 +37,21 @@ def _passed_sn(db_session):
         ProductCreate(code="PC", name="主板", type="component", track_mode="serial"))
     md.create_bom(BomCreate(product_id=fin.id, items=[
         BomItemCreate(component_product_id=c.id, qty=1)]))
-    s = md.create_station(StationCreate(code="PS", name="装配"))
+    line = md.create_line(LineCreate(code="PFL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="PSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="PR", name="路线", product_id=fin.id,
-        steps=[RoutingStepCreate(seq=1, station_id=s.id, name="装配")]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(
-        code="PWO", product_id=fin.id, routing_id=r.id, qty=5, sn_rule_id=rule.id))
+        code="PWO", product_id=fin.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
-    res = StationPassService(db_session).pass_station(StationPassInput(
-        station_id=s.id, work_order_code="PWO",
-        components=[ComponentInput(component_product_id=c.id, component_sn="MB-7")]))
+    res = OperationPassService(db_session).pass_operation(OperationPassInput(
+        work_station_id=w.id, work_order_code="PWO",
+        components=[ComponentInput(component_product_id=c.id, component_sn="MB-7")],
+        params=[ParamInput(param_key="torque", param_value="1.5", unit="N·m")]))
     return res.sn
 
 
@@ -73,6 +77,25 @@ def test_query_reverse_where_used(client, db_session):
         data={"query_type": "where_used_sn", "value": "MB-7"})
     assert resp.status_code == 200
     assert sn in resp.text
+
+
+def test_query_history_records_and_params(client, db_session):
+    sn = _passed_sn(db_session)
+    _login(client, db_session)
+    resp = client.post("/trace/query", data={"query_type": "history", "value": sn})
+    assert resp.status_code == 200
+    assert "工序#" in resp.text
+    assert "torque" in resp.text
+    assert "MB-7" in resp.text
+
+
+def test_query_params(client, db_session):
+    sn = _passed_sn(db_session)
+    _login(client, db_session)
+    resp = client.post("/trace/query", data={"query_type": "params", "value": sn})
+    assert resp.status_code == 200
+    assert "torque" in resp.text
+    assert "1.5" in resp.text
 
 
 def test_api_genealogy_requires_login(client, db_session):

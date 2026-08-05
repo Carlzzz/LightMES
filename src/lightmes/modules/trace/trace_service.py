@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
 
 from lightmes.modules.production.repository import (
-    SerialUnitRepository, StationPassRepository,
+    SerialUnitRepository, OperationRecordRepository, OperationParamRepository,
 )
 from lightmes.modules.trace.models import GenealogyBind
 from lightmes.modules.trace.repository import GenealogyBindRepository
 from lightmes.modules.trace.schemas import (
-    BindView, PassView, GenealogyView, HistoryView, ParentRef,
+    BindView, OpRecordView, ParamView, GenealogyView, HistoryView, ParentRef,
 )
 from lightmes.shared.errors import NotFoundError, ValidationError
 
@@ -26,7 +26,8 @@ class TraceService:
         self.db = db
         self.binds = GenealogyBindRepository(db)
         self.serial_units = SerialUnitRepository(db)
-        self.passes = StationPassRepository(db)
+        self.records = OperationRecordRepository(db)
+        self.params = OperationParamRepository(db)
 
     def genealogy_of(self, sn: str, include_unbound: bool = False) -> GenealogyView:
         su = self.serial_units.get_by_sn(sn)
@@ -58,13 +59,26 @@ class TraceService:
         su = self.serial_units.get_by_sn(sn)
         if su is None:
             raise NotFoundError(f"SN 不存在: {sn}")
-        passes = self.passes.list_by_serial_unit(su.id)
+        records = self.records.list_by_serial_unit(su.id)
         binds = self.binds.list_by_parent(su.id)
+        params = self.params.list_by_serial_unit(su.id)
         return HistoryView(
             sn=sn,
-            passes=[PassView(
-                routing_step_id=p.routing_step_id, station_id=p.station_id,
-                result=p.result, pass_time=p.pass_time,
-            ) for p in passes],
+            records=[OpRecordView(
+                operation_id=r.operation_id, work_station_id=r.work_station_id,
+                line_id=r.line_id, result=r.result, end_time=r.end_time)
+                for r in records],
             components=[_bind_view(b) for b in binds],
+            params=[ParamView(
+                param_key=p.param_key, param_value=p.param_value, unit=p.unit,
+                source=p.source, recorded_at=p.recorded_at) for p in params],
         )
+
+    def params_of(self, sn: str) -> list[ParamView]:
+        su = self.serial_units.get_by_sn(sn)
+        if su is None:
+            raise NotFoundError(f"SN 不存在: {sn}")
+        return [ParamView(
+            param_key=p.param_key, param_value=p.param_value, unit=p.unit,
+            source=p.source, recorded_at=p.recorded_at)
+            for p in self.params.list_by_serial_unit(su.id)]
