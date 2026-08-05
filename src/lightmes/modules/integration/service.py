@@ -62,6 +62,9 @@ class FileErpSyncService(ErpSyncService):
         except Exception as e:
             result.errors.append(f"JSON 解析失败: {e}")
             return result
+        if not isinstance(records, list):
+            result.errors.append("JSON 顶层必须是数组")
+            return result
         for i, rec in enumerate(records, start=1):
             try:
                 data = BomUpsert(

@@ -40,3 +40,12 @@ def test_sync_boms_unknown_component_partial(db_session):
         "items": [{"component_code": "NOPE", "qty": 1}]}]).encode()
     r = FileErpSyncService(db_session).sync_boms(payload)
     assert r.created == 0 and r.skipped == 1 and len(r.errors) == 1
+
+def test_sync_boms_non_list_json_reported(db_session):
+    svc = FileErpSyncService(db_session)
+    # dict：本应是非法的 BOM 数组，但 JSON 合法，不应抛异常
+    r = svc.sync_boms(b'{"erp_ref": "X"}')
+    assert r.created == 0 and len(r.errors) == 1
+    # null：同样是合法 JSON 但不是数组
+    r2 = svc.sync_boms(b'null')
+    assert r2.created == 0 and len(r2.errors) == 1
