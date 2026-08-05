@@ -140,6 +140,39 @@ def scan_submit(
     )
 
 
+@router.get("/production/sn-rules", response_class=HTMLResponse)
+def sn_rules_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    rules = ProductionService(db).sn_rules.list_all()
+    return templates.TemplateResponse(
+        request, "production/sn_rules.html", {"rules": rules}
+    )
+
+
+@router.post("/production/sn-rules", response_class=HTMLResponse)
+def sn_rules_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    pattern: str = Form(...),
+    seq_reset: str = Form("never"),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = ProductionService(db)
+    try:
+        rule = svc.create_sn_rule(SnRuleCreate(
+            code=code, name=name, pattern=pattern,
+            seq_reset=seq_reset, product_id=None))
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 5})
+    return templates.TemplateResponse(
+        request, "production/partials/sn_rule_row.html", {"r": rule}
+    )
+
+
 @router.get("/production/wip", response_class=HTMLResponse)
 def wip_page(
     request: Request, work_order_id: int = 0, db: Session = Depends(get_db)

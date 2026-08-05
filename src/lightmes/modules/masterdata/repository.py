@@ -156,3 +156,8 @@ class WorkStationRepository:
             .where(WorkStation.line_id == line_id)
             .order_by(WorkStation.seq)
         ).scalars().all())
+
+    def list_all(self) -> list[WorkStation]:
+        return list(self.db.execute(
+            select(WorkStation).order_by(WorkStation.line_id, WorkStation.seq)
+        ).scalars().all())

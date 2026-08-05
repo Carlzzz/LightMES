@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}产线管理{% endblock %}
+{% block content %}
+<h1 class="page-title">产线管理</h1>
+<div class="card">
+  <div class="card__title">新增产线</div>
+  <form class="form-row" hx-post="/masterdata/lines" hx-target="#rows" hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="field"><label>编码</label><input name="code" required></div>
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field" style="flex:1"><label>描述</label><input name="description"></div>
+    <button type="submit">新增</button>
+  </form>
+</div>
+<div class="card">
+  <div class="card__title">产线列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>描述</th></tr></thead>
+    <tbody id="rows">
+      {% for line in lines %}{% include "masterdata/partials/line_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

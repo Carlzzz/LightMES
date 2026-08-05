@@ -12,11 +12,13 @@ from lightmes.modules.masterdata.schemas import (
     BomCreate,
     BomItemRead,
     BomRead,
+    LineCreate,
     OperationRead,
     ProductCreate,
     ProductRead,
     RoutingCreate,
     RoutingRead,
+    WorkStationCreate,
 )
 from lightmes.modules.masterdata.service import MasterDataService
 
@@ -175,6 +177,72 @@ def products_create_page(
             {"error": str(e), "colspan": 6})
     return templates.TemplateResponse(
         request, "masterdata/partials/product_row.html", {"product": product}
+    )
+
+
+@router.get("/masterdata/lines", response_class=HTMLResponse)
+def lines_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    lines = MasterDataService(db).lines.list_all()
+    return templates.TemplateResponse(
+        request, "masterdata/lines.html", {"lines": lines}
+    )
+
+
+@router.post("/masterdata/lines", response_class=HTMLResponse)
+def lines_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = MasterDataService(db)
+    try:
+        line = svc.create_line(LineCreate(
+            code=code, name=name, description=description or None))
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/line_row.html", {"line": line}
+    )
+
+
+@router.get("/masterdata/work-stations", response_class=HTMLResponse)
+def work_stations_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    svc = MasterDataService(db)
+    work_stations = svc.work_stations.list_all()
+    lines = svc.lines.list_all()
+    return templates.TemplateResponse(
+        request, "masterdata/work_stations.html",
+        {"work_stations": work_stations, "lines": lines}
+    )
+
+
+@router.post("/masterdata/work-stations", response_class=HTMLResponse)
+def work_stations_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    line_id: int = Form(...),
+    seq: int = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = MasterDataService(db)
+    try:
+        ws = svc.create_work_station(WorkStationCreate(
+            code=code, name=name, line_id=line_id, seq=seq))
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 5})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/work_station_row.html", {"ws": ws}
     )
 
 
