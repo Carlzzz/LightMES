@@ -88,3 +88,30 @@ def test_routing_skill_without_level_rejected(db_session):
             OperationCreate(seq=1, code="OP1", name="工序", default_work_station_id=w.id,
                             required_skill_id=s.id, required_level=None)]))
     assert md.routings.get_by_code("RTY") is None
+
+
+def test_routing_nonexistent_skill_rejected(db_session):
+    md = MasterDataService(db_session)
+    p = md.create_product(ProductCreate(code="RPZ", name="件", type="finished"))
+    line = md.create_line(LineCreate(code="RLZ", name="线"))
+    w = md.create_work_station(WorkStationCreate(code="RWZ", name="站", line_id=line.id, seq=1))
+    db_session.flush()
+    with pytest.raises(ValueError):
+        md.create_routing(RoutingCreate(code="RTZ", name="路线", product_id=p.id, operations=[
+            OperationCreate(seq=1, code="OP1", name="工序", default_work_station_id=w.id,
+                            required_skill_id=999999, required_level=1)]))
+    assert md.routings.get_by_code("RTZ") is None
+
+
+def test_routing_required_level_equals_max_ok(db_session):
+    md = MasterDataService(db_session); sk = SkillService(db_session)
+    p = md.create_product(ProductCreate(code="RPA", name="件", type="finished"))
+    line = md.create_line(LineCreate(code="RLA", name="线"))
+    w = md.create_work_station(WorkStationCreate(code="RWA", name="站", line_id=line.id, seq=1))
+    s = sk.create_skill(SkillCreate(code="SKM", name="装配", max_level=3))
+    db_session.flush()
+    routing = md.create_routing(RoutingCreate(code="RTA", name="路线", product_id=p.id, operations=[
+        OperationCreate(seq=1, code="OP1", name="工序", default_work_station_id=w.id,
+                        required_skill_id=s.id, required_level=3)]))
+    op = md.routings.operations_of(routing.id)[0]
+    assert op.required_skill_id == s.id and op.required_level == 3
