@@ -28,6 +28,11 @@ class ProductRepository:
             select(Product).where(Product.code == code)
         ).scalar_one_or_none()
 
+    def get_by_erp_ref(self, erp_ref: str) -> Product | None:
+        return self.db.execute(
+            select(Product).where(Product.erp_ref == erp_ref)
+        ).scalar_one_or_none()
+
     def list_all(self) -> list[Product]:
         return list(self.db.execute(select(Product)).scalars().all())
 

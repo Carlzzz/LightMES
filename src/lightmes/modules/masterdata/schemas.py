@@ -11,6 +11,16 @@ class ProductCreate(BaseModel):
     spec: str | None = None
 
 
+class ProductUpsert(BaseModel):
+    erp_ref: str
+    code: str
+    name: str
+    type: str
+    unit: str = "pcs"
+    track_mode: str = "none"
+    spec: str | None = None
+
+
 class ProductRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

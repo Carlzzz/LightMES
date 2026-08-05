@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
@@ -19,6 +20,7 @@ from lightmes.modules.masterdata.schemas import (
     BomCreate,
     LineCreate,
     ProductCreate,
+    ProductUpsert,
     RoutingCreate,
     WorkStationCreate,
 )
@@ -123,3 +125,23 @@ class MasterDataService:
             seq=data.seq, description=data.description,
         )
         return self.work_stations.add(ws)
+
+    def upsert_product(self, data: "ProductUpsert") -> tuple[Product, str]:
+        existing = self.products.get_by_erp_ref(data.erp_ref)
+        if existing is not None:
+            existing.code = data.code
+            existing.name = data.name
+            existing.type = data.type
+            existing.unit = data.unit
+            existing.track_mode = data.track_mode
+            existing.spec = data.spec
+            existing.synced_at = datetime.now(timezone.utc)
+            self.db.flush()
+            return existing, "updated"
+        product = Product(
+            code=data.code, name=data.name, type=data.type, unit=data.unit,
+            track_mode=data.track_mode, spec=data.spec,
+            source="erp", erp_ref=data.erp_ref,
+            synced_at=datetime.now(timezone.utc),
+        )
+        return self.products.add(product), "created"
