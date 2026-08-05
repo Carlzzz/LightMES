@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
@@ -17,8 +18,10 @@ from lightmes.modules.masterdata.repository import (
 )
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
+    BomUpsert,
     LineCreate,
     ProductCreate,
+    ProductUpsert,
     RoutingCreate,
     WorkStationCreate,
 )
@@ -123,3 +126,53 @@ class MasterDataService:
             seq=data.seq, description=data.description,
         )
         return self.work_stations.add(ws)
+
+    def upsert_product(self, data: "ProductUpsert") -> tuple[Product, str]:
+        existing = self.products.get_by_erp_ref(data.erp_ref)
+        if existing is not None:
+            existing.code = data.code
+            existing.name = data.name
+            existing.type = data.type
+            existing.unit = data.unit
+            existing.track_mode = data.track_mode
+            existing.spec = data.spec
+            existing.synced_at = datetime.now(timezone.utc)
+            self.db.flush()
+            return existing, "updated"
+        product = Product(
+            code=data.code, name=data.name, type=data.type, unit=data.unit,
+            track_mode=data.track_mode, spec=data.spec,
+            source="erp", erp_ref=data.erp_ref,
+            synced_at=datetime.now(timezone.utc),
+        )
+        return self.products.add(product), "created"
+
+    def upsert_bom(self, data: "BomUpsert") -> tuple[Bom, str]:
+        product = self.products.get_by_code(data.product_code)
+        if product is None:
+            raise ValueError(f"成品不存在: {data.product_code}")
+        resolved = []
+        for it in data.items:
+            comp = self.products.get_by_code(it.component_code)
+            if comp is None:
+                raise ValueError(f"组件不存在: {it.component_code}")
+            resolved.append((comp, it.qty))
+        existing = self.boms.get_by_erp_ref(data.erp_ref)
+        if existing is not None:
+            if product.id != existing.product_id:
+                raise ValueError(f"BOM {data.erp_ref} 的成品与已存在记录不一致")
+            self.boms.delete_items(existing.id)
+            for comp, qty in resolved:
+                self.db.add(BomItem(bom_id=existing.id,
+                    component_product_id=comp.id, qty=qty, track_mode=comp.track_mode))
+            existing.synced_at = datetime.now(timezone.utc)
+            self.db.flush()
+            return existing, "updated"
+        bom = Bom(product_id=product.id, source="erp", erp_ref=data.erp_ref,
+                  synced_at=datetime.now(timezone.utc))
+        self.boms.add(bom)
+        for comp, qty in resolved:
+            self.db.add(BomItem(bom_id=bom.id, component_product_id=comp.id,
+                qty=qty, track_mode=comp.track_mode))
+        self.db.flush()
+        return bom, "created"

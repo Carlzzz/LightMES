@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}SN规则管理{% endblock %}
+{% block content %}
+<h1 class="page-title">SN 规则管理</h1>
+<div class="card">
+  <div class="card__title">新增 SN 规则</div>
+  <form class="form-row" hx-post="/production/sn-rules" hx-target="#rows" hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="field"><label>编码</label><input name="code" required></div>
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field" style="flex:1"><label>模板</label><input name="pattern" placeholder="SN{YY}{MM}{DD}{SEQ:5}" required></div>
+    <div class="field"><label>重置</label>
+      <select name="seq_reset"><option value="never">不重置</option><option value="daily">按日</option><option value="monthly">按月</option></select>
+    </div>
+    <button type="submit">新增</button>
+  </form>
+</div>
+<div class="card">
+  <div class="card__title">SN 规则列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>模板</th><th>重置</th></tr></thead>
+    <tbody id="rows">
+      {% for r in rules %}{% include "production/partials/sn_rule_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

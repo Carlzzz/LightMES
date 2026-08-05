@@ -28,6 +28,11 @@ class ProductRepository:
             select(Product).where(Product.code == code)
         ).scalar_one_or_none()
 
+    def get_by_erp_ref(self, erp_ref: str) -> Product | None:
+        return self.db.execute(
+            select(Product).where(Product.erp_ref == erp_ref)
+        ).scalar_one_or_none()
+
     def list_all(self) -> list[Product]:
         return list(self.db.execute(select(Product)).scalars().all())
 
@@ -96,6 +101,16 @@ class BomRepository:
             ).scalars().all()
         )
 
+    def get_by_erp_ref(self, erp_ref: str) -> Bom | None:
+        return self.db.execute(
+            select(Bom).where(Bom.erp_ref == erp_ref)
+        ).scalar_one_or_none()
+
+    def delete_items(self, bom_id: int) -> None:
+        for it in self.items_of(bom_id):
+            self.db.delete(it)
+        self.db.flush()
+
 
 class LineRepository:
     def __init__(self, db: Session) -> None:
@@ -140,4 +155,9 @@ class WorkStationRepository:
             select(WorkStation)
             .where(WorkStation.line_id == line_id)
             .order_by(WorkStation.seq)
+        ).scalars().all())
+
+    def list_all(self) -> list[WorkStation]:
+        return list(self.db.execute(
+            select(WorkStation).order_by(WorkStation.line_id, WorkStation.seq)
         ).scalars().all())

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}作业站管理{% endblock %}
+{% block content %}
+<h1 class="page-title">作业站管理</h1>
+<div class="card">
+  <div class="card__title">新增作业站</div>
+  <form class="form-row" hx-post="/masterdata/work-stations" hx-target="#rows" hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="field"><label>编码</label><input name="code" required></div>
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field"><label>产线</label>
+      <select name="line_id">{% for l in lines %}<option value="{{ l.id }}">{{ l.code }} {{ l.name }}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label>顺序</label><input name="seq" type="number" required></div>
+    <button type="submit">新增</button>
+  </form>
+</div>
+<div class="card">
+  <div class="card__title">作业站列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>产线</th><th>顺序</th></tr></thead>
+    <tbody id="rows">
+      {% for ws in work_stations %}{% include "masterdata/partials/work_station_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

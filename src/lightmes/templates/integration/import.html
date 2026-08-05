@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}主数据导入{% endblock %}
+{% block content %}
+<h1 class="page-title">主数据导入 <small>模拟 ERP 下发</small></h1>
+<div class="card">
+  <div class="card__title">上传文件</div>
+  <form class="form-row" hx-post="/integration/import" hx-target="#result" hx-swap="innerHTML"
+        hx-encoding="multipart/form-data">
+    <div class="field"><label>类型</label>
+      <select name="kind">
+        <option value="products">产品 (CSV)</option>
+        <option value="boms">BOM (JSON)</option>
+      </select>
+    </div>
+    <div class="field" style="flex:1"><label>文件</label><input type="file" name="file" required></div>
+    <button type="submit">导入</button>
+  </form>
+  <div id="result" class="result-slot"></div>
+</div>
+{% endblock %}

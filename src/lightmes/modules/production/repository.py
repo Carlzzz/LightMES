@@ -26,6 +26,9 @@ class SnRuleRepository:
             select(SnRule).where(SnRule.code == code)
         ).scalar_one_or_none()
 
+    def list_all(self) -> list[SnRule]:
+        return list(self.db.execute(select(SnRule)).scalars().all())
+
 
 class WorkOrderRepository:
     def __init__(self, db: Session) -> None:
