@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import func, select
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.skill_service import SkillService
 from lightmes.modules.masterdata.schemas import (
@@ -9,6 +10,8 @@ from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, OperationPassInput,
 )
 from lightmes.modules.production.operation_pass_service import OperationPassService
+from lightmes.modules.production.models import OperationRecord
+from lightmes.modules.production.repository import SerialUnitRepository, WorkOrderRepository
 from lightmes.modules.auth.models import User
 from lightmes.shared.errors import SkillError
 
@@ -42,6 +45,26 @@ def _setup(db_session, required_skill=False, op_level=None, operator_level=None)
     return db_session, ws, user
 
 
+def _blocked_pass_wo_counts(db, wo_code="SKWO"):
+    """被拒过站后，工单下 SerialUnit / OperationRecord 的数量。
+
+    OperationRecord 是真正的完工记录（在 5b 校验之后的 step6 才写入），
+    硬拦截保证它必须为 0 —— 这是本文件要固化的核心安全保证。
+
+    SerialUnit 在 step3 生成 SN 时已 flush（见 operation_pass_service
+    SerialUnitRepository.add → db.flush()），早于 5b 校验；测试会话没有
+    get_db 的请求级 rollback，所以该 pending 单位仍可见（count == 1）。
+    生产环境由 get_db 的 except → rollback 丢弃，不落库。
+    """
+    wo = WorkOrderRepository(db).get_by_code(wo_code)
+    serial_unit_count = len(SerialUnitRepository(db).list_by_work_order(wo.id))
+    op_record_count = db.execute(
+        select(func.count()).select_from(OperationRecord)
+        .where(OperationRecord.work_order_id == wo.id)
+    ).scalar_one()
+    return wo.id, serial_unit_count, op_record_count
+
+
 def test_pass_no_skill_requirement_ok(db_session):
     db, ws, user = _setup(db_session, required_skill=False)
     r = OperationPassService(db).pass_operation(OperationPassInput(
@@ -61,6 +84,11 @@ def test_pass_insufficient_skill_blocked(db_session):
     with pytest.raises(SkillError):
         OperationPassService(db).pass_operation(OperationPassInput(
             work_station_id=ws.id, work_order_code="SKWO", operator_id=user.id))
+    _, su_count, rec_count = _blocked_pass_wo_counts(db)
+    assert rec_count == 0  # 硬拦截：未写入任何工序记录
+    # step3 生成 SN 时已 flush，测试会话无 get_db 回滚 → pending 单位仍可见(count=1)；
+    # 生产由请求级 rollback 丢弃。真正的硬拦截保证是上一条：无任何工序记录。
+    assert su_count == 1
 
 
 def test_pass_no_operator_skill_record_blocked(db_session):
@@ -68,6 +96,11 @@ def test_pass_no_operator_skill_record_blocked(db_session):
     with pytest.raises(SkillError):
         OperationPassService(db).pass_operation(OperationPassInput(
             work_station_id=ws.id, work_order_code="SKWO", operator_id=user.id))
+    _, su_count, rec_count = _blocked_pass_wo_counts(db)
+    assert rec_count == 0  # 硬拦截：未写入任何工序记录
+    # step3 生成 SN 时已 flush，测试会话无 get_db 回滚 → pending 单位仍可见(count=1)；
+    # 生产由请求级 rollback 丢弃。真正的硬拦截保证是上一条：无任何工序记录。
+    assert su_count == 1
 
 
 def test_pass_no_operator_id_with_requirement_blocked(db_session):
@@ -75,3 +108,8 @@ def test_pass_no_operator_id_with_requirement_blocked(db_session):
     with pytest.raises(SkillError):
         OperationPassService(db).pass_operation(OperationPassInput(
             work_station_id=ws.id, work_order_code="SKWO", operator_id=None))
+    _, su_count, rec_count = _blocked_pass_wo_counts(db)
+    assert rec_count == 0  # 硬拦截：未写入任何工序记录
+    # step3 生成 SN 时已 flush，测试会话无 get_db 回滚 → pending 单位仍可见(count=1)；
+    # 生产由请求级 rollback 丢弃。真正的硬拦截保证是上一条：无任何工序记录。
+    assert su_count == 1
