@@ -49,3 +49,34 @@ def test_sync_boms_non_list_json_reported(db_session):
     # null：同样是合法 JSON 但不是数组
     r2 = svc.sync_boms(b'null')
     assert r2.created == 0 and len(r2.errors) == 1
+
+
+def test_sync_boms_dup_component_partial(db_session):
+    """flush 级失败（uq_bom_item_component 重复组件）只回滚该条，不毒化整批。"""
+    md = MasterDataService(db_session)
+    md.create_product(ProductCreate(code="FIN3", name="成品", type="finished"))
+    md.create_product(ProductCreate(code="C1", name="主板", type="component", track_mode="serial"))
+    import json
+    payload = json.dumps([
+        {"erp_ref": "EB-DUP", "product_code": "FIN3",
+         "items": [{"component_code": "C1", "qty": 1},
+                   {"component_code": "C1", "qty": 2}]},  # 同组件两行 → flush IntegrityError
+        {"erp_ref": "EB-OK", "product_code": "FIN3",
+         "items": [{"component_code": "C1", "qty": 1}]},  # 合法，应创建
+    ]).encode()
+    r = FileErpSyncService(db_session).sync_boms(payload)
+    assert r.created == 1
+    assert r.skipped == 1 and len(r.errors) == 1  # dup 跳过、OK 创建、无异常传播
+    assert md.boms.get_by_erp_ref("EB-OK") is not None
+    assert md.boms.get_by_erp_ref("EB-DUP") is None
+
+
+def test_sync_products_code_collision_partial(db_session):
+    """flush 级失败（products.code 唯一冲突）只回滚该行，后续行照常创建。"""
+    md = MasterDataService(db_session)
+    md.create_product(ProductCreate(code="DUP", name="已存在", type="component"))
+    csv = b"erp_ref,code,name,type\nE1,DUP,\xe7\xa2\xb0\xe6\x92\x9e,component\nE2,FRESH,\xe6\x96\xb0,component\n"
+    r = FileErpSyncService(db_session).sync_products(csv)
+    assert r.created == 1
+    assert r.skipped == 1 and len(r.errors) == 1  # DUP 冲突跳过、FRESH 创建、无异常传播
+    assert md.products.get_by_code("FRESH") is not None

@@ -45,3 +45,14 @@ def test_upsert_bom_unknown_component_raises(db_session):
     with pytest.raises(ValueError):
         svc.upsert_bom(BomUpsert(erp_ref="EB-4", product_code="FIN", items=[
             BomItemUpsert(component_code="NOPE")]))
+
+
+def test_upsert_bom_product_change_rejected(db_session):
+    svc = _products(db_session)
+    svc.create_product(ProductCreate(code="FIN2", name="成品2", type="finished"))
+    svc.upsert_bom(BomUpsert(erp_ref="EB-X", product_code="FIN", items=[
+        BomItemUpsert(component_code="C1", qty=1)]))
+    # 同 erp_ref 换成品：不静默改挂产品，直接拒绝
+    with pytest.raises(ValueError, match="成品与已存在记录不一致"):
+        svc.upsert_bom(BomUpsert(erp_ref="EB-X", product_code="FIN2", items=[
+            BomItemUpsert(component_code="C1", qty=1)]))

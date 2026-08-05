@@ -159,6 +159,8 @@ class MasterDataService:
             resolved.append((comp, it.qty))
         existing = self.boms.get_by_erp_ref(data.erp_ref)
         if existing is not None:
+            if product.id != existing.product_id:
+                raise ValueError(f"BOM {data.erp_ref} 的成品与已存在记录不一致")
             self.boms.delete_items(existing.id)
             for comp, qty in resolved:
                 self.db.add(BomItem(bom_id=existing.id,
