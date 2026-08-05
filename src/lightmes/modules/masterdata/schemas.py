@@ -150,3 +150,33 @@ class WorkStationRead(BaseModel):
     seq: int
     description: str | None
     is_active: bool
+
+
+class SkillCreate(BaseModel):
+    code: str
+    name: str
+    max_level: int
+    description: str | None = None
+
+
+class SkillRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    max_level: int
+    description: str | None
+
+
+class OperatorSkillCreate(BaseModel):
+    user_id: int
+    skill_id: int
+    level: int
+
+
+class OperatorSkillRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    skill_id: int
+    level: int
