@@ -14,6 +14,7 @@ from lightmes.modules.masterdata.repository import (
     LineRepository,
     ProductRepository,
     RoutingRepository,
+    SkillRepository,
     WorkStationRepository,
 )
 from lightmes.modules.masterdata.schemas import (
@@ -35,6 +36,7 @@ class MasterDataService:
         self.boms = BomRepository(db)
         self.lines = LineRepository(db)
         self.work_stations = WorkStationRepository(db)
+        self.skills = SkillRepository(db)
 
     def create_product(self, data: ProductCreate) -> Product:
         if self.products.get_by_code(data.code) is not None:
@@ -60,6 +62,15 @@ class MasterDataService:
         for op in data.operations:
             if self.work_stations.get(op.default_work_station_id) is None:
                 raise ValueError(f"作业站不存在: {op.default_work_station_id}")
+            if op.required_skill_id is not None:
+                skill = self.skills.get(op.required_skill_id)
+                if skill is None:
+                    raise ValueError(f"技能不存在: {op.required_skill_id}")
+                if op.required_level is None or op.required_level < 1:
+                    raise ValueError(f"工序 {op.seq} 设置了技能要求，必须填写要求等级(>=1)")
+                if op.required_level > skill.max_level:
+                    raise ValueError(
+                        f"工序 {op.seq} 要求等级 L{op.required_level} 超过技能『{skill.name}』最高等级 L{skill.max_level}")
         has_active = self.routings.get_active_by_product(data.product_id) is not None
         routing = Routing(
             code=data.code,

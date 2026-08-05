@@ -25,7 +25,7 @@
       <div class="field"><label>技能</label>
         <select name="op_skill"><option value="">无</option>{% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
       </div>
-      <div class="field"><label>要求等级</label><input name="op_level" type="number"></div>
+      <div class="field"><label>要求等级</label><input name="op_level" type="number" min="1"></div>
     </div>
     {% endfor %}
     <button type="submit">保存路线</button>
