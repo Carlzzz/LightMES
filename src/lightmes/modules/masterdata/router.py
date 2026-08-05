@@ -273,22 +273,21 @@ def routings_create_page(
 ) -> HTMLResponse:
     if current_user_or_none(request, db) is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    operations = []
-    for seq, c, n, ws in zip(op_seq, op_code, op_name, op_ws):
-        if not c.strip() or not ws.strip():
-            continue  # 空工序行忽略
-        operations.append(OperationCreate(
-            seq=int(seq), code=c.strip(), name=n.strip(),
-            default_work_station_id=int(ws)))
     svc = MasterDataService(db)
     try:
+        operations = []
+        for seq, c, n, ws in zip(op_seq, op_code, op_name, op_ws):
+            if not c.strip() or not ws.strip():
+                continue  # 空工序行忽略
+            operations.append(OperationCreate(
+                seq=int(seq), code=c.strip(), name=n.strip(),
+                default_work_station_id=int(ws)))
         routing = svc.create_routing(RoutingCreate(
             code=code, name=name, product_id=product_id, operations=operations))
     except ValueError as e:
         db.rollback()
         return templates.TemplateResponse(
-            request, "masterdata/partials/error_row.html",
-            {"error": str(e), "colspan": 6})
+            request, "masterdata/partials/routing_error.html", {"error": str(e)})
     return templates.TemplateResponse(
         request, "masterdata/partials/routing_result.html", {"routing": routing}
     )

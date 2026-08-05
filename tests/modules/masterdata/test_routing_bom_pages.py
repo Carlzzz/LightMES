@@ -6,7 +6,7 @@ from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.schemas import UserCreate
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
-    ProductCreate, LineCreate, WorkStationCreate,
+    OperationCreate, ProductCreate, LineCreate, RoutingCreate, WorkStationCreate,
 )
 
 
@@ -38,6 +38,41 @@ def test_routing_page_and_create(client, db_session):
     })
     assert resp.status_code == 200
     assert "RT1" in resp.text or "保存" in resp.text or "成功" in resp.text
+
+
+def test_routing_create_invalid_shows_error_fragment(client, db_session):
+    md = MasterDataService(db_session)
+    p = md.create_product(ProductCreate(code="RPE", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="RLE", name="线"))
+    w = md.create_work_station(WorkStationCreate(code="RWE", name="站", line_id=line.id, seq=1))
+    md.create_routing(RoutingCreate(
+        code="RTDUP", name="已有", product_id=p.id, operations=[
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w.id),
+        ]))
+    db_session.flush()
+    _login(client, db_session)
+    resp = client.post("/masterdata/routings", data={
+        "code": "RTDUP", "name": "重复", "product_id": str(p.id),
+        "op_seq": ["1"], "op_code": ["OP1"], "op_name": ["上料"], "op_ws": [str(w.id)],
+    })
+    assert resp.status_code == 200  # graceful, not 500
+    assert "alert--danger" in resp.text
+    assert "已存在" in resp.text
+
+
+def test_routing_create_nonnumeric_seq_graceful(client, db_session):
+    md = MasterDataService(db_session)
+    p = md.create_product(ProductCreate(code="RPN", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="RLN", name="线"))
+    w = md.create_work_station(WorkStationCreate(code="RWN", name="站", line_id=line.id, seq=1))
+    db_session.flush()
+    _login(client, db_session)
+    resp = client.post("/masterdata/routings", data={
+        "code": "RTN", "name": "非数字", "product_id": str(p.id),
+        "op_seq": ["abc"], "op_code": ["OP1"], "op_name": ["上料"], "op_ws": [str(w.id)],
+    })
+    assert resp.status_code == 200  # graceful, not 500
+    assert "alert--danger" in resp.text
 
 
 def test_products_page_shows_source_badge(client, db_session):
