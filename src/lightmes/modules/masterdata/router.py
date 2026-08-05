@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none, require_login
 from lightmes.modules.auth.models import User
+from lightmes.modules.auth.repository import UserRepository
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
     BomItemRead,
@@ -19,9 +20,11 @@ from lightmes.modules.masterdata.schemas import (
     ProductRead,
     RoutingCreate,
     RoutingRead,
+    SkillCreate,
     WorkStationCreate,
 )
 from lightmes.modules.masterdata.service import MasterDataService
+from lightmes.modules.masterdata.skill_service import SkillService
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -209,6 +212,73 @@ def lines_create_page(
             {"error": str(e), "colspan": 4})
     return templates.TemplateResponse(
         request, "masterdata/partials/line_row.html", {"line": line}
+    )
+
+
+@router.get("/masterdata/skills", response_class=HTMLResponse)
+def skills_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    skills = SkillService(db).list_skills()
+    return templates.TemplateResponse(
+        request, "masterdata/skills.html", {"skills": skills}
+    )
+
+
+@router.post("/masterdata/skills", response_class=HTMLResponse)
+def skills_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    max_level: int = Form(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = SkillService(db)
+    try:
+        skill = svc.create_skill(SkillCreate(
+            code=code, name=name, max_level=max_level,
+            description=description or None))
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/skill_row.html", {"s": skill}
+    )
+
+
+@router.get("/masterdata/operator-skills", response_class=HTMLResponse)
+def operator_skills_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    svc = SkillService(db)
+    operator_skills = svc.list_operator_skills()
+    users = UserRepository(db).list_all()
+    skills = svc.list_skills()
+    return templates.TemplateResponse(
+        request, "masterdata/operator_skills.html",
+        {"operator_skills": operator_skills, "users": users, "skills": skills}
+    )
+
+
+@router.post("/masterdata/operator-skills", response_class=HTMLResponse)
+def operator_skills_create_page(
+    request: Request,
+    user_id: int = Form(...),
+    skill_id: int = Form(...),
+    level: int = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = SkillService(db)
+    try:
+        os = svc.set_operator_skill(user_id, skill_id, level)
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/operator_skill_row.html", {"os": os}
     )
 
 

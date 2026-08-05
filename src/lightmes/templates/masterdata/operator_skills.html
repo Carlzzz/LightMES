@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}人员技能{% endblock %}
+{% block content %}
+<h1 class="page-title">人员技能档案</h1>
+<div class="card">
+  <div class="card__title">设置人员技能（同人同技能重复=更新等级）</div>
+  <form class="form-row" hx-post="/masterdata/operator-skills" hx-target="#rows" hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="field"><label>人员</label>
+      <select name="user_id">{% for u in users %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label>技能</label>
+      <select name="skill_id">{% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label>等级</label><input name="level" type="number" required></div>
+    <button type="submit">保存</button>
+  </form>
+</div>
+<div class="card">
+  <div class="card__title">档案列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>人员</th><th>技能</th><th>等级</th></tr></thead>
+    <tbody id="rows">
+      {% for os in operator_skills %}{% include "masterdata/partials/operator_skill_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
