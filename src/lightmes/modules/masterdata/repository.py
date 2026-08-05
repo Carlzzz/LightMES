@@ -5,8 +5,10 @@ from lightmes.modules.masterdata.models import (
     BomItem,
     Line,
     Operation,
+    OperatorSkill,
     Product,
     Routing,
+    Skill,
     WorkStation,
 )
 
@@ -161,3 +163,38 @@ class WorkStationRepository:
         return list(self.db.execute(
             select(WorkStation).order_by(WorkStation.line_id, WorkStation.seq)
         ).scalars().all())
+
+
+class SkillRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, skill: Skill) -> Skill:
+        self.db.add(skill); self.db.flush(); return skill
+
+    def get(self, skill_id: int) -> Skill | None:
+        return self.db.get(Skill, skill_id)
+
+    def get_by_code(self, code: str) -> Skill | None:
+        return self.db.execute(
+            select(Skill).where(Skill.code == code)).scalar_one_or_none()
+
+    def list_all(self) -> list[Skill]:
+        return list(self.db.execute(select(Skill)).scalars().all())
+
+
+class OperatorSkillRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, os: OperatorSkill) -> OperatorSkill:
+        self.db.add(os); self.db.flush(); return os
+
+    def get_by_user_skill(self, user_id: int, skill_id: int) -> OperatorSkill | None:
+        return self.db.execute(
+            select(OperatorSkill).where(
+                OperatorSkill.user_id == user_id,
+                OperatorSkill.skill_id == skill_id)).scalar_one_or_none()
+
+    def list_all(self) -> list[OperatorSkill]:
+        return list(self.db.execute(select(OperatorSkill)).scalars().all())

@@ -15,3 +15,9 @@ class UserRepository:
         self.db.add(user)
         self.db.flush()
         return user
+
+    def get(self, user_id: int) -> User | None:
+        return self.db.get(User, user_id)
+
+    def list_all(self) -> list[User]:
+        return list(self.db.execute(select(User)).scalars().all())

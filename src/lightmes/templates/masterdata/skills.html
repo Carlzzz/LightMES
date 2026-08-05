@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}技能管理{% endblock %}
+{% block content %}
+<h1 class="page-title">技能管理</h1>
+<div class="card">
+  <div class="card__title">新增技能</div>
+  <form class="form-row" hx-post="/masterdata/skills" hx-target="#rows" hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <div class="field"><label>编码</label><input name="code" required></div>
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field"><label>最高等级</label><input name="max_level" type="number" required></div>
+    <div class="field" style="flex:1"><label>描述</label><input name="description"></div>
+    <button type="submit">新增</button>
+  </form>
+</div>
+<div class="card">
+  <div class="card__title">技能列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>最高等级</th></tr></thead>
+    <tbody id="rows">
+      {% for s in skills %}{% include "masterdata/partials/skill_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

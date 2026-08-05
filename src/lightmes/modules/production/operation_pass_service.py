@@ -2,6 +2,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
+from lightmes.modules.masterdata.skill_service import SkillService
 from lightmes.modules.production.models import (
     SerialUnit, OperationRecord, OperationParam, WorkOrder,
 )
@@ -16,7 +17,7 @@ from lightmes.modules.production.sn_generator import SnGenerator
 from lightmes.modules.production.events import OperationPassed, SerialUnitFinished
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.schemas import ComponentBind
-from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError
+from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError, SkillError
 from lightmes.shared.events import event_bus
 
 
@@ -87,8 +88,16 @@ class OperationPassService:
             raise BusinessRuleError(
                 f"应到工序 {expected.seq} {expected.name} 对应作业站，当前作业站不符")
 
-        # 5b. 技能校验钩子（P2c 填；本期默认放行）
-        # if expected.required_skill_id: ...
+        # 5b. 技能校验（硬拦截）：工序有技能要求时，操作员该技能等级须 >= 要求
+        if expected.required_skill_id is not None:
+            level = (SkillService(self.db).get_operator_level(
+                data.operator_id, expected.required_skill_id)
+                if data.operator_id else None)
+            if level is None or level < (expected.required_level or 0):
+                raise SkillError(
+                    f"操作员技能不足：工序 {expected.seq} {expected.name} "
+                    f"需要技能等级 L{expected.required_level}+，当前 "
+                    f"{level if level is not None else '无'}")
 
         # 6. 写工序记录 + 乐观锁更新 serial_unit
         record = self.records.add(OperationRecord(

@@ -1,3 +1,4 @@
+from itertools import zip_longest
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none, require_login
 from lightmes.modules.auth.models import User
+from lightmes.modules.auth.repository import UserRepository
 from lightmes.modules.masterdata.schemas import (
     BomCreate,
     BomItemRead,
@@ -19,9 +21,11 @@ from lightmes.modules.masterdata.schemas import (
     ProductRead,
     RoutingCreate,
     RoutingRead,
+    SkillCreate,
     WorkStationCreate,
 )
 from lightmes.modules.masterdata.service import MasterDataService
+from lightmes.modules.masterdata.skill_service import SkillService
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -212,6 +216,73 @@ def lines_create_page(
     )
 
 
+@router.get("/masterdata/skills", response_class=HTMLResponse)
+def skills_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    skills = SkillService(db).list_skills()
+    return templates.TemplateResponse(
+        request, "masterdata/skills.html", {"skills": skills}
+    )
+
+
+@router.post("/masterdata/skills", response_class=HTMLResponse)
+def skills_create_page(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    max_level: int = Form(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = SkillService(db)
+    try:
+        skill = svc.create_skill(SkillCreate(
+            code=code, name=name, max_level=max_level,
+            description=description or None))
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/skill_row.html", {"s": skill}
+    )
+
+
+@router.get("/masterdata/operator-skills", response_class=HTMLResponse)
+def operator_skills_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    svc = SkillService(db)
+    operator_skills = svc.list_operator_skills()
+    users = UserRepository(db).list_all()
+    skills = svc.list_skills()
+    return templates.TemplateResponse(
+        request, "masterdata/operator_skills.html",
+        {"operator_skills": operator_skills, "users": users, "skills": skills}
+    )
+
+
+@router.post("/masterdata/operator-skills", response_class=HTMLResponse)
+def operator_skills_create_page(
+    request: Request,
+    user_id: int = Form(...),
+    skill_id: int = Form(...),
+    level: int = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = SkillService(db)
+    try:
+        os = svc.set_operator_skill(user_id, skill_id, level)
+    except ValueError as e:
+        return templates.TemplateResponse(
+            request, "masterdata/partials/error_row.html",
+            {"error": str(e), "colspan": 4})
+    return templates.TemplateResponse(
+        request, "masterdata/partials/operator_skill_row.html", {"os": os}
+    )
+
+
 @router.get("/masterdata/work-stations", response_class=HTMLResponse)
 def work_stations_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     svc = MasterDataService(db)
@@ -253,9 +324,11 @@ def routings_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespon
     products = svc.products.list_all()
     work_stations = svc.work_stations.list_all()
     routings = svc.routings.list_all()
+    skills = SkillService(db).list_skills()
     return templates.TemplateResponse(
         request, "masterdata/routings.html",
-        {"products": products, "work_stations": work_stations, "routings": routings}
+        {"products": products, "work_stations": work_stations,
+         "routings": routings, "skills": skills}
     )
 
 
@@ -269,6 +342,8 @@ def routings_create_page(
     op_code: list[str] = Form(default=[]),
     op_name: list[str] = Form(default=[]),
     op_ws: list[str] = Form(default=[]),
+    op_skill: list[str] = Form(default=[]),
+    op_level: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     if current_user_or_none(request, db) is None:
@@ -276,12 +351,16 @@ def routings_create_page(
     svc = MasterDataService(db)
     try:
         operations = []
-        for seq, c, n, ws in zip(op_seq, op_code, op_name, op_ws):
+        for seq, c, n, ws, sk_id, lvl in zip_longest(
+            op_seq, op_code, op_name, op_ws, op_skill, op_level, fillvalue=""
+        ):
             if not c.strip() or not ws.strip():
                 continue  # 空工序行忽略
             operations.append(OperationCreate(
                 seq=int(seq), code=c.strip(), name=n.strip(),
-                default_work_station_id=int(ws)))
+                default_work_station_id=int(ws),
+                required_skill_id=int(sk_id) if sk_id.strip() else None,
+                required_level=int(lvl) if lvl.strip() else None))
         routing = svc.create_routing(RoutingCreate(
             code=code, name=name, product_id=product_id, operations=operations))
     except ValueError as e:
