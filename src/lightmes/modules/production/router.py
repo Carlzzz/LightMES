@@ -266,7 +266,8 @@ def station_pass(
     except DomainError as e:
         db.rollback()
         return templates.TemplateResponse(
-            request, "production/partials/station_pass_result.html", {"error": e.detail}
+            request, "production/partials/station_pass_result.html",
+            {"error": e.detail, "work_station_id": work_station_id},
         )
     return templates.TemplateResponse(
         request, "production/partials/station_pass_result.html",
