@@ -33,6 +33,9 @@ P2e 重构 SN 生命周期为：
 | 7 | 首站工单上下文 | **先选工单**锁定投产对象，再连续扫载体码；每扫一个从该工单取下一 pending SN。 |
 | 8 | 数量校验 | 工单 pending SN 用完 → 提示"已全部投产，请选择新工单"；下达要求 qty>0 且工单已配置 SN 规则。 |
 | 9 | 架构 | 方案 A：下达时批量预建 SerialUnit（唯一身份载体）；carrier_code 存 SerialUnit 字段（直读）+ 独立 carrier_binding 历史表（追溯）。 |
+| 10 | 解绑权限 | 本期**不做角色限制**（任何登录用户可解绑），但代码预留角色校验接口点（解绑服务方法接收 operator，后续角色管理模块接入时在此加校验），不硬编码放行逻辑。 |
+| 11 | pending 追溯过滤 | pending 单元（预生成未投产）**默认从追溯/WIP 展示中过滤**，避免列表被未投产 SN 淹没；仅投产后（in_process 及以后）出现在追溯/WIP。 |
+| 12 | 首站工单校验 | 工单状态取值 `created/released/in_process/completed`；首站选工单**仅允许 released 或 in_process、且属本产线**的工单可选（created 未下达无 pending SN；completed 已完；异产线不符防跳站）。 |
 
 ---
 
@@ -72,7 +75,11 @@ P2e 重构 SN 生命周期为：
   2. 检查 carrier_code 是否已被活跃 SerialUnit 绑定（`carrier_code=:c AND status NOT IN ('finished','scrapped')`）；有 → `BusinessRuleError("载体码已绑定其他产品，请先解绑")`。
   3. 写 `su.carrier_code = carrier_code`；insert `carrier_binding(serial_unit_id, carrier_code, operator_id)`。
   4. 调用 `pass_operation(OperationPassInput(work_station_id, sn=su.sn, operator_id, components, params))` 完成首工序（pass_operation 内 status pending→in_process 需在 §4 pass 侧支持，见下）。
-- `unbind(scan, operator_id) -> SerialUnit`：按 SN 或 carrier_code 找活跃 SerialUnit；无 → `NotFoundError`。清 `su.carrier_code=None`；把该 SN 最新未解绑的 carrier_binding 行 `unbound_at=now`。返回 su。
+- `unbind(scan, operator_id) -> SerialUnit`：按 SN 或 carrier_code 找活跃 SerialUnit；无 → `NotFoundError`。清 `su.carrier_code=None`；把该 SN 最新未解绑的 carrier_binding 行 `unbound_at=now`。返回 su。**角色预留**：方法接收 operator（用于历史记录 + 未来角色校验挂点），本期不做角色判断（任何登录用户可解绑），但保留一处显式的"权限校验钩子"注释/占位（形如 P2c 技能钩子的位置），后续角色管理模块在此接入，不硬编码放行分支。
+
+**新增查询辅助**（服务/仓储层，供追溯与首站用）：
+- `WorkOrderRepository.selectable_for_station(line_id) -> list[WorkOrder]`：仅 `status IN ('released','in_process')` 且 `line_id=:line_id`。
+- 追溯/WIP 查询统一**排除 pending**：SerialUnit 列表/WIP 看板/追溯查询默认加 `status != 'pending'` 过滤（pending 是预生成未投产，不进现场视图）。
 
 **`pass_operation` 定位逻辑扩展**（`operation_pass_service.py`）：
 - 现状：`data.sn` 优先，否则 `work_order_code` 首件生成 SN。
@@ -87,7 +94,7 @@ P2e 重构 SN 生命周期为：
 ## 5. 交互 / 路由
 
 **工位作业首站流（`/production/station`）**：
-1. 就绪页新增"**先选工单**"输入（扫/输入工单号 → POST /station/select-wo 只读校验，返回工单信息 + 剩余 pending 数量）。
+1. 就绪页新增"**先选工单**"输入（扫/输入工单号 → POST /station/select-wo 只读校验，返回工单信息 + 剩余 pending 数量）。**校验**：工单须存在、`status IN ('released','in_process')`、且工单 line_id = 当前作业站所属产线（不符 → 红片段，如"工单未下达/已完工"或"工单不属于本产线"）。可选：就绪页也可直接列出本产线可选工单（selectable_for_station）供点选。
 2. 选定后锁定当前投产工单，扫码框语义变为**扫载体码**；显示"剩余待投产 N 件"。
 3. 每扫一个载体码 → `POST /production/station/bind-and-pass`（CarrierService.bind_and_pass_first，operator_id=current_user）→ 成功刷新剩余数量 + 富界面（可继续绑物料/参数/过首工序）。
 4. **用完**（无 pending）→ 绿色提示"✓ 工单 WO-XXX 已全部投产（N 件），请选择新工单" → 重置工单选择态。
@@ -114,10 +121,10 @@ P2e 重构 SN 生命周期为：
 ## 7. 子任务切分（约 5 个，顺序，各自 TDD + 复审）
 
 1. 数据模型：SerialUnit.carrier_code + uq_active_carrier 部分唯一索引 + carrier_binding 表 + 迁移。
-2. release_work_order 批量预生成 SerialUnit（status=pending）+ qty/sn_rule 校验 + 测试（含幂等）。
-3. pass_operation 载体码定位 + pending→in_process 状态转移 + 测试（SN 命中 / 载体码命中 / pending 过首工序）。
-4. CarrierService（bind_and_pass_first 顺序取号+绑定+过首工序+用完拦截；unbind 解绑+历史）+ 测试（顺序赋值/用完/重复绑/解绑复用）。
-5. 工位作业首站流（选工单+扫载体码 bind-and-pass+剩余数量+用完提示）+ 解绑页 + 首页移除 scan 入口 + 端到端测试。
+2. release_work_order 批量预生成 SerialUnit（status=pending）+ qty/sn_rule 校验 + WIP/追溯 pending 过滤 + 测试（含幂等、pending 不入 WIP）。
+3. pass_operation 载体码定位 + pending→in_process 状态转移 + work_order_code 首件改取 pending（不超 qty）+ 测试（SN 命中 / 载体码命中 / pending 过首工序 / 工单号首件取 pending）。
+4. CarrierService（bind_and_pass_first 顺序取号+绑定+过首工序+用完拦截；unbind 解绑+历史+角色校验钩子占位）+ WorkOrderRepository.selectable_for_station + 测试（顺序赋值/用完/重复绑/解绑复用/可选工单过滤）。
+5. 工位作业首站流（选工单校验 released|in_process+本产线+扫载体码 bind-and-pass+剩余数量+用完提示）+ 解绑页（require_login）+ 首页移除 scan 入口 + 端到端测试。
 
 ---
 
@@ -134,6 +141,9 @@ P2e 重构 SN 生命周期为：
   - 首站流页面：选工单显示剩余数量；扫载体码投产刷新；用完提示新工单；require_login；operator_id 防伪造。
   - 后续站扫载体码/SN 自动识别（回归 P2d load/pass）。
   - 极简 /production/scan 路由仍可用（未删），但首页无入口。
+  - pending 过滤：预生成后未投产的 pending 单元不出现在 WIP 看板 / 追溯列表；投产后（in_process）出现。
+  - 首站选工单校验：created 工单 → 拒绝（未下达）；completed → 拒绝；异产线工单 → 拒绝；released/in_process 且本产线 → 通过并显示剩余 pending 数。
+  - 解绑角色钩子：本期任何登录用户可解绑（校验钩子为放行占位）；测试验证登录即可解绑、未登录 401。
 
 ---
 
