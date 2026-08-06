@@ -16,6 +16,9 @@ from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.station_service import StationService
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
+from lightmes.modules.production.carrier_service import CarrierService
+from lightmes.modules.production.repository import SerialUnitRepository
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.shared.errors import DomainError, NotFoundError
 
 router = APIRouter()
@@ -273,3 +276,73 @@ def station_pass(
         request, "production/partials/station_pass_result.html",
         {"result": result, "work_station_id": work_station_id},
     )
+
+
+@router.post("/production/station/select-wo", response_class=HTMLResponse)
+def station_select_wo(
+    request: Request,
+    work_station_id: int = Form(...),
+    scan: str = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    ws = MasterDataQueryService(db).get_work_station(work_station_id)
+    if ws is None:
+        return templates.TemplateResponse(
+            request, "production/partials/station_bind_result.html",
+            {"error": f"作业站不存在: {work_station_id}", "work_station_id": work_station_id})
+    wo = ProductionService(db).work_orders.get_by_code(scan)
+    if wo is None or wo.status not in ("released", "in_process") or wo.line_id != ws.line_id:
+        return templates.TemplateResponse(
+            request, "production/partials/station_bind_result.html",
+            {"error": "工单不可投产（需已下达且属本产线）", "work_station_id": work_station_id})
+    remaining = SerialUnitRepository(db).count_pending_by_work_order(wo.id)
+    return templates.TemplateResponse(
+        request, "production/partials/station_wo_selected.html",
+        {"wo": wo, "remaining": remaining, "work_station_id": work_station_id})
+
+
+@router.post("/production/station/bind-and-pass", response_class=HTMLResponse)
+def station_bind_and_pass(
+    request: Request,
+    work_station_id: int = Form(...),
+    work_order_id: int = Form(...),
+    carrier_code: str = Form(...),
+    component_product_id: list[int] = Form(default=[]),
+    component_batch: list[str] = Form(default=[]),
+    param_key: list[str] = Form(default=[]),
+    param_value: list[str] = Form(default=[]),
+    param_unit: list[str] = Form(default=[]),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    components = [
+        ComponentInput(component_product_id=pid, component_batch_no=b.strip())
+        for pid, b in zip(component_product_id, component_batch) if b.strip()]
+    params = []
+    for i, key in enumerate(param_key):
+        if not key.strip():
+            continue
+        val = param_value[i] if i < len(param_value) else ""
+        if not val.strip():
+            continue
+        unit = param_unit[i].strip() if i < len(param_unit) and param_unit[i].strip() else None
+        params.append(ParamInput(param_key=key.strip(), param_value=val.strip(), unit=unit))
+    try:
+        result = CarrierService(db).bind_and_pass_first(
+            work_order_id, carrier_code.strip(), work_station_id, user.id,
+            components=components, params=params)
+    except DomainError as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "production/partials/station_bind_result.html",
+            {"error": e.detail, "work_station_id": work_station_id})
+    remaining = SerialUnitRepository(db).count_pending_by_work_order(work_order_id)
+    return templates.TemplateResponse(
+        request, "production/partials/station_bind_result.html",
+        {"result": result, "remaining": remaining, "work_order_id": work_order_id,
+         "work_station_id": work_station_id})
