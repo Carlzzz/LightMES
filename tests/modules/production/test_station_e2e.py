@@ -66,7 +66,8 @@ def test_e2e_off_station_blocked(client, db_session):
     client.post("/production/station/pass", data={"work_station_id": str(ws1.id), "scan": "WO"})
     # 首件已在 ws1 过了工序10，SN=SN00001；用 ws1 再过 → 应到工序20@ws2，防跳站拦
     r = client.post("/production/station/pass", data={"work_station_id": str(ws1.id), "scan": "SN00001"})
-    assert r.status_code == 200 and "✗" in r.text
+    # 断言防跳站消息本身，避免 SN 格式漂移时退化成 NotFoundError 也渲染 ✗ 的假通过
+    assert r.status_code == 200 and "✗" in r.text and "作业站不符" in r.text
 
 
 def test_e2e_skill_insufficient_blocked(client, db_session):
