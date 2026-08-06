@@ -49,3 +49,6 @@ class MasterDataQueryService:
 
     def get_work_station(self, work_station_id: int) -> WorkStation | None:
         return self._work_stations.get(work_station_id)
+
+    def list_work_stations(self) -> list[WorkStation]:
+        return self._work_stations.list_all()
