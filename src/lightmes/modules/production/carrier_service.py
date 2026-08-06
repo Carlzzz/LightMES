@@ -6,8 +6,6 @@ from lightmes.modules.production.models import CarrierBinding, SerialUnit
 from lightmes.modules.production.repository import (
     SerialUnitRepository, CarrierBindingRepository,
 )
-from lightmes.modules.production.schemas import OperationPassInput, OperationPassResult
-from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.shared.errors import BusinessRuleError, NotFoundError
 
 
@@ -17,10 +15,14 @@ class CarrierService:
         self.serial_units = SerialUnitRepository(db)
         self.bindings = CarrierBindingRepository(db)
 
-    def bind_and_pass_first(
-        self, work_order_id: int, carrier_code: str, work_station_id: int,
-        operator_id: int | None, components=None, params=None,
-    ) -> OperationPassResult:
+    def bind_first_carrier(
+        self, work_order_id: int, carrier_code: str, operator_id: int | None,
+    ) -> SerialUnit:
+        """首站扫载体码：按顺序取下一个 pending SN 与载体码绑定。
+
+        只绑、不过站：不调 pass_operation、不写 OperationRecord。
+        操作员在富主界面手动按 PASS 才过首工序。
+        """
         su = self.serial_units.first_pending_by_work_order(work_order_id)
         if su is None:
             raise BusinessRuleError("工单 SN 已全部投产，请选择新工单")
@@ -29,10 +31,8 @@ class CarrierService:
         su.carrier_code = carrier_code
         self.bindings.add(CarrierBinding(
             serial_unit_id=su.id, carrier_code=carrier_code, operator_id=operator_id))
-        # 过首工序（pass_operation 内 pending→in_process）
-        return OperationPassService(self.db).pass_operation(OperationPassInput(
-            work_station_id=work_station_id, sn=su.sn, operator_id=operator_id,
-            components=components or [], params=params or []))
+        self.db.flush()
+        return su
 
     def unbind(self, scan: str, operator_id: int | None) -> SerialUnit:
         # 权限校验钩子（P2e 预留；后续角色管理模块在此接入）：

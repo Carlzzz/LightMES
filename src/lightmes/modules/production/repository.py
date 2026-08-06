@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import (
     OperationParam,
@@ -94,10 +94,21 @@ class SerialUnitRepository:
         ).scalar_one_or_none()
 
     def first_pending_by_work_order(self, work_order_id: int) -> SerialUnit | None:
+        """取下一个可绑定的 pending SN：从未被载体码绑定过。
+
+        首站绑载体码只允许绑定"未被绑定过的" pending 单元——
+        已绑（含解绑后）的 pending 单元须走手动 PASS 过站，不能重复绑定。
+        """
         return self.db.execute(
-            select(SerialUnit).where(
+            select(SerialUnit)
+            .where(
                 SerialUnit.work_order_id == work_order_id,
-                SerialUnit.status == "pending")
+                SerialUnit.status == "pending",
+                ~exists(
+                    select(1).where(
+                        CarrierBinding.serial_unit_id == SerialUnit.id)
+                ),
+            )
             .order_by(SerialUnit.id).limit(1)
         ).scalar_one_or_none()
 
