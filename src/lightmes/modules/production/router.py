@@ -280,9 +280,11 @@ def station_pass(
             request, "production/partials/station_pass_result.html",
             {"error": e.detail, "work_station_id": work_station_id},
         )
+    su = SerialUnitRepository(db).get_by_sn(result.sn)
+    wo_id = su.work_order_id if su is not None else None
     return templates.TemplateResponse(
         request, "production/partials/station_pass_result.html",
-        {"result": result, "work_station_id": work_station_id},
+        {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id},
     )
 
 

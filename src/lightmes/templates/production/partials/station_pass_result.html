@@ -11,12 +11,13 @@
 </div>
 <div class="card">
   <div class="card__title">继续作业</div>
-  <form class="form-row" hx-post="/production/station/load" hx-target="#station-root" hx-swap="innerHTML"
+  <form class="form-row" hx-post="/production/station/enter" hx-target="#station-root" hx-swap="innerHTML"
         hx-on::after-request="if(event.detail.successful) this.querySelector('[name=scan]').value=''">
     <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
+    <input type="hidden" name="work_order_id" value="{{ work_order_id }}">
     <div class="field" style="flex:1"><label>扫下一单元</label>
-      <input name="scan" placeholder="工单号 / SN" autofocus></div>
-    <button type="submit">加载</button>
+      <input name="scan" placeholder="首件扫载体码，后续扫 SN/载体码" autofocus></div>
+    <button type="submit">进入</button>
   </form>
 </div>
 {% endif %}
