@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, Index, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -40,6 +40,12 @@ class WorkOrder(Base, TimestampMixin):
 
 class SerialUnit(Base, TimestampMixin):
     __tablename__ = "serial_units"
+    __table_args__ = (
+        Index(
+            "uq_active_carrier", "carrier_code",
+            unique=True, postgresql_where=text("carrier_code IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sn: Mapped[str] = mapped_column(unique=True, index=True)
@@ -50,6 +56,7 @@ class SerialUnit(Base, TimestampMixin):
     version: Mapped[int] = mapped_column(default=0)
     # 是否已计入工单完工数；返工再完工不重复计数（一个物理 SN 只计一次）
     is_counted: Mapped[bool] = mapped_column(default=False, server_default="false")
+    carrier_code: Mapped[str | None] = mapped_column(default=None)
 
 
 class OperationRecord(Base, TimestampMixin):
@@ -88,3 +95,18 @@ class OperationParam(Base, TimestampMixin):
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class CarrierBinding(Base, TimestampMixin):
+    __tablename__ = "carrier_binding"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    serial_unit_id: Mapped[int] = mapped_column(ForeignKey("serial_units.id"))
+    carrier_code: Mapped[str] = mapped_column()
+    bound_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    unbound_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None)
+    unbound_reason: Mapped[str | None] = mapped_column(default=None)
+    operator_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), default=None)

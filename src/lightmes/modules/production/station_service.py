@@ -25,8 +25,10 @@ class StationService:
 
     def load(self, scan: str, work_station_id: int,
              operator_id: int | None) -> StationView:
-        # 定位：先按 SN，再按工单号（首件 su=None）
+        # 定位：SN → 载体码（活跃单元） → 工单号（首件 su=None）
         su = self.serial_units.get_by_sn(scan)
+        if su is None:
+            su = self.serial_units.get_active_by_carrier(scan)
         if su is not None:
             wo = self.work_orders.get(su.work_order_id)
         else:

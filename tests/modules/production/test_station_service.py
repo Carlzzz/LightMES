@@ -6,8 +6,12 @@ from lightmes.modules.masterdata.schemas import (
     BomCreate, BomItemCreate, SkillCreate,
 )
 from lightmes.modules.production.service import ProductionService
-from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
+from lightmes.modules.production.schemas import (
+    SnRuleCreate, WorkOrderCreate, OperationPassInput,
+)
 from lightmes.modules.production.station_service import StationService
+from lightmes.modules.production.operation_pass_service import OperationPassService
+from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.auth.models import User
 from lightmes.shared.errors import NotFoundError
 
@@ -99,3 +103,16 @@ def test_load_unknown_scan_raises_not_found(db_session):
     db, ws1, ws2, user, comp = _setup(db_session)
     with pytest.raises(NotFoundError):
         StationService(db).load("NOPE", ws1.id, user.id)
+
+
+def test_load_by_active_carrier_code(db_session):
+    # FIX 2：扫“载体码”加载 → 命中该 SN 单元的 StationView
+    db, ws1, ws2, user, comp = _setup(db_session)
+    r = OperationPassService(db).pass_operation(OperationPassInput(
+        work_station_id=ws1.id, work_order_code="WO"))
+    su = SerialUnitRepository(db).get_by_sn(r.sn)
+    su.carrier_code = "CARRIER-1"
+    db.flush()
+    view = StationService(db).load("CARRIER-1", ws1.id, user.id)
+    assert view.sn == r.sn
+    assert view.work_order_code == "WO"

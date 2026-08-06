@@ -1,0 +1,22 @@
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+<div class="card"><div class="nav-card__desc">请重新 <a href="/production/station?work_station_id={{ work_station_id }}">选择工单</a>。</div></div>
+{% else %}
+<div class="alert alert--ok">✓ 已投产 <strong>{{ result.sn }}</strong> — 过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
+  {% if result.next_op %} → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}{% endif %}</div>
+{% if remaining and remaining > 0 %}
+<div class="card">
+  <div class="card__title">继续投产 <span class="badge">剩余 {{ remaining }}</span></div>
+  <form class="form-row" hx-post="/production/station/bind-and-pass" hx-target="#station-root" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) this.querySelector('[name=carrier_code]').value=''">
+    <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
+    <input type="hidden" name="work_order_id" value="{{ work_order_id }}">
+    <div class="field" style="flex:1"><label>扫下一载体码</label>
+      <input name="carrier_code" placeholder="扫载体码" autofocus></div>
+    <button type="submit">投产过站</button>
+  </form>
+</div>
+{% else %}
+<div class="alert alert--ok">✓ 工单已全部投产，请 <a href="/production/station?work_station_id={{ work_station_id }}">选择新工单</a>。</div>
+{% endif %}
+{% endif %}

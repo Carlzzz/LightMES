@@ -9,6 +9,7 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import require_login, current_user_or_none
 from lightmes.modules.auth.models import User
 from lightmes.modules.production.repository import SerialUnitRepository
+from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.trace.schemas import GenealogyView, ParentRef
 from lightmes.modules.trace.trace_service import TraceService
 from lightmes.modules.trace.rework_service import ReworkService
@@ -130,3 +131,24 @@ def rework_submit(
     return HTMLResponse(
         f'<div style="color:green">✓ {escape(su.sn)} '
         f'已返工至工序 {su.current_operation_seq}</div>')
+
+
+@router.get("/trace/carrier-unbind", response_class=HTMLResponse)
+def carrier_unbind_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "trace/carrier_unbind.html")
+
+
+@router.post("/trace/carrier-unbind", response_class=HTMLResponse)
+def carrier_unbind_submit(
+    request: Request, scan: str = Form(...), db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    try:
+        su = CarrierService(db).unbind(scan, user.id)
+    except DomainError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(e.detail)}</div>')
+    return HTMLResponse(
+        f'<div style="color:green">✓ {escape(su.sn)} 已解绑载体码</div>')

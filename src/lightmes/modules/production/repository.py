@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import (
     OperationParam,
@@ -6,6 +6,7 @@ from lightmes.modules.production.models import (
     SerialUnit,
     SnRule,
     WorkOrder,
+    CarrierBinding,
 )
 
 
@@ -47,6 +48,14 @@ class WorkOrderRepository:
             select(WorkOrder).where(WorkOrder.code == code)
         ).scalar_one_or_none()
 
+    def selectable_for_station(self, line_id: int) -> list[WorkOrder]:
+        return list(self.db.execute(
+            select(WorkOrder).where(
+                WorkOrder.line_id == line_id,
+                WorkOrder.status.in_(("released", "in_process")))
+            .order_by(WorkOrder.id)
+        ).scalars().all())
+
 
 class SerialUnitRepository:
     def __init__(self, db: Session) -> None:
@@ -69,6 +78,28 @@ class SerialUnitRepository:
         return list(self.db.execute(
             select(SerialUnit).where(SerialUnit.work_order_id == work_order_id)
         ).scalars().all())
+
+    def count_pending_by_work_order(self, work_order_id: int) -> int:
+        return self.db.execute(
+            select(func.count()).select_from(SerialUnit).where(
+                SerialUnit.work_order_id == work_order_id,
+                SerialUnit.status == "pending")
+        ).scalar_one()
+
+    def get_active_by_carrier(self, carrier_code: str) -> SerialUnit | None:
+        return self.db.execute(
+            select(SerialUnit).where(
+                SerialUnit.carrier_code == carrier_code,
+                SerialUnit.status.notin_(("finished", "scrapped")))
+        ).scalar_one_or_none()
+
+    def first_pending_by_work_order(self, work_order_id: int) -> SerialUnit | None:
+        return self.db.execute(
+            select(SerialUnit).where(
+                SerialUnit.work_order_id == work_order_id,
+                SerialUnit.status == "pending")
+            .order_by(SerialUnit.id).limit(1)
+        ).scalar_one_or_none()
 
 
 class OperationRecordRepository:
@@ -111,3 +142,19 @@ class OperationParamRepository:
             .where(OperationRecord.serial_unit_id == serial_unit_id)
             .order_by(OperationParam.recorded_at)
         ).scalars().all())
+
+
+class CarrierBindingRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, b: "CarrierBinding") -> "CarrierBinding":
+        self.db.add(b); self.db.flush(); return b
+
+    def active_by_serial_unit(self, serial_unit_id: int) -> "CarrierBinding | None":
+        return self.db.execute(
+            select(CarrierBinding).where(
+                CarrierBinding.serial_unit_id == serial_unit_id,
+                CarrierBinding.unbound_at.is_(None))
+            .order_by(CarrierBinding.id.desc()).limit(1)
+        ).scalar_one_or_none()

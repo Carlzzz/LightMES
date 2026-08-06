@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import Line, Product, Routing
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
-from lightmes.modules.production.models import SnRule, WorkOrder
+from lightmes.modules.production.models import SnRule, WorkOrder, SerialUnit
 from lightmes.modules.production.repository import (
-    SnRuleRepository, WorkOrderRepository,
+    SnRuleRepository, WorkOrderRepository, SerialUnitRepository,
 )
 from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
-from lightmes.modules.production.sn_generator import validate_pattern
+from lightmes.modules.production.sn_generator import validate_pattern, SnGenerator
 
 
 class ProductionService:
@@ -14,6 +14,8 @@ class ProductionService:
         self.db = db
         self.sn_rules = SnRuleRepository(db)
         self.work_orders = WorkOrderRepository(db)
+        self.serial_units = SerialUnitRepository(db)
+        self.sn_gen = SnGenerator(db)
 
     def create_sn_rule(self, data: SnRuleCreate) -> SnRule:
         validate_pattern(data.pattern)  # 非法 pattern 抛 ValueError
@@ -61,6 +63,19 @@ class ProductionService:
             raise ValueError(f"工单不存在: {work_order_id}")
         if wo.status != "created":
             raise ValueError(f"仅 created 状态可下达, 当前: {wo.status}")
+        if wo.qty <= 0:
+            raise ValueError(f"工单数量须大于 0: {wo.qty}")
+        if wo.sn_rule_id is None:
+            raise ValueError("工单未配置 SN 规则，无法预生成 SN")
+        rule = self.sn_rules.get(wo.sn_rule_id)
+        if rule is None:
+            raise ValueError("SN 规则不存在")
         wo.status = "released"
+        # 批量预生成 SerialUnit（pending）
+        for _ in range(wo.qty):
+            new_sn = self.sn_gen.next_sn(rule)
+            self.serial_units.add(SerialUnit(
+                sn=new_sn, work_order_id=wo.id, product_id=wo.product_id,
+                status="pending", current_operation_seq=0))
         self.db.flush()
         return wo

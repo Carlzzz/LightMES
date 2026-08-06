@@ -120,3 +120,15 @@ class StationView(BaseModel):
     current_op: StationOpView | None
     components: list[StationComponentView]
     sop_placeholder: bool = True
+
+
+class CarrierBindInput(BaseModel):
+    work_order_id: int
+    carrier_code: str
+    work_station_id: int
+    components: list[ComponentInput] = []
+    params: list[ParamInput] = []
+
+
+class CarrierUnbindInput(BaseModel):
+    scan: str
