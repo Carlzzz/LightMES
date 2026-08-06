@@ -1,0 +1,22 @@
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+<div class="card"><div class="nav-card__desc">修正后请重新扫码。返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div></div>
+{% else %}
+<div class="alert alert--ok">
+  ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
+  {% if result.is_finished %}<span class="badge">完工</span>
+  {% else %} → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}{% endif %}
+  {% if result.bound_count %}<span class="badge">绑定 {{ result.bound_count }} 组件</span>{% endif %}
+  {% if result.param_count %}<span class="badge">录 {{ result.param_count }} 参数</span>{% endif %}
+</div>
+<div class="card">
+  <div class="card__title">继续作业</div>
+  <form class="form-row" hx-post="/production/station/load" hx-target="#station-root" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) this.querySelector('[name=scan]').value=''">
+    <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
+    <div class="field" style="flex:1"><label>扫下一单元</label>
+      <input name="scan" placeholder="工单号 / SN" autofocus></div>
+    <button type="submit">加载</button>
+  </form>
+</div>
+{% endif %}

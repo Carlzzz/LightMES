@@ -88,3 +88,35 @@ class WipItem(BaseModel):
     sn: str
     status: str
     current_operation_seq: int
+
+
+class StationOpView(BaseModel):
+    seq: int
+    name: str
+    code: str
+    work_station_id: int
+    status: str  # "done" | "current" | "future"
+
+
+class StationComponentView(BaseModel):
+    component_product_id: int
+    component_code: str
+    component_name: str
+    qty: float
+
+
+class StationView(BaseModel):
+    sn: str
+    work_order_code: str
+    product_code: str
+    product_name: str
+    operator_name: str
+    operator_skill_level: int | None
+    required_level: int | None
+    skill_ok: bool
+    is_off_station: bool
+    is_finished: bool
+    operations: list[StationOpView]
+    current_op: StationOpView | None
+    components: list[StationComponentView]
+    sop_placeholder: bool = True
