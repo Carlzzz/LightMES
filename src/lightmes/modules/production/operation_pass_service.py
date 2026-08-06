@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
@@ -8,12 +10,11 @@ from lightmes.modules.production.models import (
 )
 from lightmes.modules.production.repository import (
     SerialUnitRepository, OperationRecordRepository, OperationParamRepository,
-    SnRuleRepository, WorkOrderRepository,
+    CarrierBindingRepository, WorkOrderRepository,
 )
 from lightmes.modules.production.schemas import (
     OperationPassInput, OperationPassResult, OpInfo,
 )
-from lightmes.modules.production.sn_generator import SnGenerator
 from lightmes.modules.production.events import OperationPassed, SerialUnitFinished
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.schemas import ComponentBind
@@ -29,8 +30,6 @@ class OperationPassService:
         self.records = OperationRecordRepository(db)
         self.params = OperationParamRepository(db)
         self.work_orders = WorkOrderRepository(db)
-        self.sn_rules = SnRuleRepository(db)
-        self.sn_gen = SnGenerator(db)
 
     def pass_operation(self, data: OperationPassInput) -> OperationPassResult:
         # 1+3. 定位单元：SN → 载体码 → 工单号(取第一个 pending)
@@ -140,6 +139,15 @@ class OperationPassService:
         is_last = expected.seq == operations[-1].seq
         if is_last:
             su.status = "finished"
+            # 完工自动解绑：清载体码 + 写 binding.unbound_at/unbound_reason=finish，
+            # 让托盘立即复用并留审计（否则 finished 单元仍占 carrier_code，
+            # 部分唯一索引会拒绝复用并抛 500）
+            if su.carrier_code is not None:
+                binding = CarrierBindingRepository(self.db).active_by_serial_unit(su.id)
+                if binding is not None:
+                    binding.unbound_at = datetime.now()
+                    binding.unbound_reason = "finish"
+                su.carrier_code = None
             if not su.is_counted:
                 su.is_counted = True
                 event_bus.publish(SerialUnitFinished(

@@ -49,6 +49,13 @@ def test_select_wo_shows_remaining(client, db_session):
     assert resp.status_code == 200 and ("剩余" in resp.text or "2" in resp.text)
 
 
+def test_select_wo_requires_login(client, db_session):
+    ws, wo = _released_wo(db_session, qty=2)
+    resp = client.post("/production/station/select-wo",
+                       data={"work_station_id": str(ws.id), "scan": "WO"})
+    assert resp.status_code == 401
+
+
 def test_select_wo_created_rejected(client, db_session):
     ws, wo = _released_wo(db_session, qty=2, status_release=False)  # created 未下达
     _login(client, db_session)

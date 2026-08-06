@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from lightmes.modules.production.models import CarrierBinding, SerialUnit
 from lightmes.modules.production.repository import (
-    SerialUnitRepository, WorkOrderRepository, CarrierBindingRepository,
+    SerialUnitRepository, CarrierBindingRepository,
 )
 from lightmes.modules.production.schemas import OperationPassInput, OperationPassResult
 from lightmes.modules.production.operation_pass_service import OperationPassService
@@ -13,7 +15,6 @@ class CarrierService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.serial_units = SerialUnitRepository(db)
-        self.work_orders = WorkOrderRepository(db)
         self.bindings = CarrierBindingRepository(db)
 
     def bind_and_pass_first(
@@ -43,8 +44,8 @@ class CarrierService:
             raise NotFoundError(f"未找到 SN 或载体码: {scan}")
         binding = self.bindings.active_by_serial_unit(su.id)
         if binding is not None:
-            from datetime import datetime
             binding.unbound_at = datetime.now()
+            binding.unbound_reason = "manual"
         su.carrier_code = None
         self.db.flush()
         return su
