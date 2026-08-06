@@ -27,8 +27,10 @@ def test_create_sn_rule_validates_pattern(db_session):
 def test_create_and_release_work_order(db_session):
     p, r, line = _line(db_session)
     svc = ProductionService(db_session)
+    rule = svc.create_sn_rule(SnRuleCreate(code="WOR", name="r", pattern="WO{SEQ:4}"))
     wo = svc.create_work_order(WorkOrderCreate(
-        code="WO-1", product_id=p.id, routing_id=r.id, line_id=line.id, qty=10))
+        code="WO-1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
     assert wo.status == "created"
     released = svc.release_work_order(wo.id)
     assert released.status == "released"
@@ -37,8 +39,10 @@ def test_create_and_release_work_order(db_session):
 def test_release_non_created_rejected(db_session):
     p, r, line = _line(db_session)
     svc = ProductionService(db_session)
+    rule = svc.create_sn_rule(SnRuleCreate(code="WOR2", name="r", pattern="WO{SEQ:4}"))
     wo = svc.create_work_order(WorkOrderCreate(
-        code="WO-2", product_id=p.id, routing_id=r.id, line_id=line.id, qty=5))
+        code="WO-2", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
     svc.release_work_order(wo.id)
     with pytest.raises(ValueError):
         svc.release_work_order(wo.id)  # already released

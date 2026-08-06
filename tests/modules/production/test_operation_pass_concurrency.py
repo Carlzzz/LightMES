@@ -144,7 +144,8 @@ def test_double_scan_same_sn_raises_conflict():
             cleanup.execute(
                 delete(OperationRecord).where(OperationRecord.id.in_(rec_ids))
             )
-        cleanup.execute(delete(SerialUnit).where(SerialUnit.id == su_id))
+        # release 已批量预生成 pending SerialUnit，按工单整组删除再删工单
+        cleanup.execute(delete(SerialUnit).where(SerialUnit.work_order_id == wo_id))
         cleanup.execute(delete(WorkOrder).where(WorkOrder.id == wo_id))
         cleanup.execute(delete(SnRule).where(SnRule.id == rule_id))
         cleanup.execute(

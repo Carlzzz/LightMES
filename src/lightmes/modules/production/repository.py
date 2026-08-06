@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import (
     OperationParam,
@@ -69,6 +69,13 @@ class SerialUnitRepository:
         return list(self.db.execute(
             select(SerialUnit).where(SerialUnit.work_order_id == work_order_id)
         ).scalars().all())
+
+    def count_pending_by_work_order(self, work_order_id: int) -> int:
+        return self.db.execute(
+            select(func.count()).select_from(SerialUnit).where(
+                SerialUnit.work_order_id == work_order_id,
+                SerialUnit.status == "pending")
+        ).scalar_one()
 
 
 class OperationRecordRepository:
