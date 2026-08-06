@@ -10,9 +10,10 @@ from lightmes.modules.auth.dependencies import current_user_or_none, require_log
 from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
-    WorkOrderRead,
+    WorkOrderRead, ComponentInput, ParamInput,
 )
 from lightmes.modules.production.service import ProductionService
+from lightmes.modules.production.station_service import StationService
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
 from lightmes.shared.errors import DomainError, NotFoundError
@@ -181,4 +182,92 @@ def wip_page(
     return templates.TemplateResponse(
         request, "production/wip.html",
         {"work_order_id": work_order_id, "items": items},
+    )
+
+
+@router.get("/production/station", response_class=HTMLResponse)
+def station_page(
+    request: Request, work_station_id: int = 0, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "production/station.html", {"work_station_id": work_station_id}
+    )
+
+
+@router.post("/production/station/load", response_class=HTMLResponse)
+def station_load(
+    request: Request,
+    work_station_id: int = Form(...),
+    scan: str = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    try:
+        view = StationService(db).load(scan, work_station_id, user.id)
+    except DomainError as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "production/partials/station_pass_result.html", {"error": e.detail}
+        )
+    return templates.TemplateResponse(
+        request, "production/station_view.html",
+        {"view": view, "work_station_id": work_station_id},
+    )
+
+
+@router.post("/production/station/pass", response_class=HTMLResponse)
+def station_pass(
+    request: Request,
+    work_station_id: int = Form(...),
+    scan: str = Form(...),
+    component_product_id: list[int] = Form(default=[]),
+    component_batch: list[str] = Form(default=[]),
+    param_key: list[str] = Form(default=[]),
+    param_value: list[str] = Form(default=[]),
+    param_unit: list[str] = Form(default=[]),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    # 组件：仅收已扫批次的行
+    components = [
+        ComponentInput(component_product_id=pid, component_batch_no=batch.strip())
+        for pid, batch in zip(component_product_id, component_batch)
+        if batch.strip()
+    ]
+    # 参数：仅收 key+value 都非空的行
+    params = []
+    for i, key in enumerate(param_key):
+        if not key.strip():
+            continue
+        val = param_value[i] if i < len(param_value) else ""
+        if not val.strip():
+            continue
+        unit = param_unit[i].strip() if i < len(param_unit) and param_unit[i].strip() else None
+        params.append(ParamInput(param_key=key.strip(), param_value=val.strip(), unit=unit))
+
+    svc = OperationPassService(db)
+    data = OperationPassInput(
+        work_station_id=work_station_id, operator_id=user.id,
+        components=components, params=params)
+    # 先按 SN 试，NotFound 再当工单号（首件）
+    try:
+        data.sn = scan
+        try:
+            result = svc.pass_operation(data)
+        except NotFoundError:
+            data.sn = None
+            data.work_order_code = scan
+            result = svc.pass_operation(data)
+    except DomainError as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "production/partials/station_pass_result.html", {"error": e.detail}
+        )
+    return templates.TemplateResponse(
+        request, "production/partials/station_pass_result.html",
+        {"result": result, "work_station_id": work_station_id},
     )

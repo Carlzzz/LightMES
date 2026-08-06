@@ -1,0 +1,6 @@
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+{% else %}
+<div class="alert alert--ok">✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
+{% if result.is_finished %}<span class="badge">完工</span>{% else %} → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}{% endif %}</div>
+{% endif %}
