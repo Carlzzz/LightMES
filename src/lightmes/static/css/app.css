@@ -298,3 +298,34 @@ input::placeholder { color: #9bb0a9; }
 
 /* HTMX 请求中光标 */
 .htmx-request button { opacity: .7; cursor: progress; }
+
+/* ---- P2d 工位作业主界面 ---- */
+.btn-secondary { background: #e7f2ea; color: #2f7d4f; border: 1px solid #b9d8c4;
+  padding: 8px 14px; border-radius: 8px; display: inline-block; text-decoration: none; cursor: pointer; }
+.btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+.station__topbar { display: flex; justify-content: space-between; align-items: center;
+  background: #16321f; color: #eafff2; padding: 12px 18px; border-radius: 10px; margin-bottom: 12px; }
+.station__ident { display: flex; gap: 28px; }
+.station__label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #7fcf9f; }
+.station__sn { font-size: 20px; font-weight: 700; color: #6ee7a8; }
+.station__operator { border: 1px solid #2f7d4f; border-radius: 8px; padding: 6px 12px; }
+.station__operator.is-bad { border-color: #d9534f; }
+.station__opname { font-weight: 700; }
+.station__path { display: flex; gap: 8px; overflow-x: auto; padding: 12px 4px; }
+.station__step { min-width: 120px; text-align: center; opacity: .5; }
+.station__step--done, .station__step--current { opacity: 1; }
+.station__step-node { width: 44px; height: 44px; margin: 0 auto; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-weight: 700;
+  background: #fff; border: 2px solid #cbd5c0; }
+.station__step--done .station__step-node { background: #34c77b; color: #fff; border-color: #34c77b; }
+.station__step--current .station__step-node { background: #2f7d4f; color: #fff; border-color: #2f7d4f;
+  box-shadow: 0 0 0 4px rgba(47,125,79,.25); }
+.station__step-name { font-size: 12px; margin-top: 6px; }
+.station__grid { display: grid; grid-template-columns: 7fr 5fr; gap: 12px; }
+.station__main, .station__aside { display: flex; flex-direction: column; gap: 12px; }
+.station__sop { min-height: 120px; display: flex; align-items: center; justify-content: center; color: #6b8a76; }
+.station__footer { display: flex; align-items: center; gap: 14px; justify-content: flex-end;
+  padding: 14px 4px; border-top: 1px solid #d7e6da; margin-top: 12px; }
+.station__status { margin-right: auto; font-weight: 600; color: #2f7d4f; }
+.station__pass { font-size: 18px; font-weight: 800; padding: 12px 40px; }
+@media (max-width: 900px) { .station__grid { grid-template-columns: 1fr; } }

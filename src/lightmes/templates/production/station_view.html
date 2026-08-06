@@ -1,1 +1,111 @@
-<div>{% for o in view.operations %}<span>{{ o.seq }} {{ o.name }} [{{ o.status }}]</span>{% endfor %}</div>
+<div class="station">
+  <!-- 顶部状态栏 -->
+  <div class="station__topbar">
+    <div class="station__ident">
+      <div><span class="station__label">当前 SN</span>
+        <span class="station__sn">{{ view.sn or "（首件待生成）" }}</span></div>
+      <div><span class="station__label">成品 / 工单</span>
+        <span>{{ view.product_code }} {{ view.product_name }} / {{ view.work_order_code }}</span></div>
+    </div>
+    <div class="station__operator {% if view.skill_ok %}is-ok{% else %}is-bad{% endif %}">
+      <span class="station__label">操作员</span>
+      <span class="station__opname">{{ view.operator_name }}
+        {% if view.required_level %}(L{{ view.operator_skill_level or '无' }}/需L{{ view.required_level }}){% endif %}</span>
+    </div>
+  </div>
+
+  {% if view.is_off_station %}
+  <div class="alert alert--danger">⚠ 当前工序不属于本作业站，过站将被防跳站拦截。</div>
+  {% endif %}
+  {% if not view.skill_ok %}
+  <div class="alert alert--danger">⚠ 操作员技能不足，过站将被拦截。</div>
+  {% endif %}
+
+  <!-- 工艺路径全景 -->
+  <div class="card">
+    <div class="card__title">工艺路径全景</div>
+    <div class="station__path" id="station-path">
+      {% for o in view.operations %}
+      <div class="station__step station__step--{{ o.status }}" {% if o.status == 'current' %}id="station-current"{% endif %}>
+        <div class="station__step-node">{% if o.status == 'done' %}✓{% else %}{{ o.seq }}{% endif %}</div>
+        <div class="station__step-name">{{ o.name }}</div>
+        {% if o.status == 'current' %}<div class="badge">当前</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if view.is_finished %}
+  <div class="alert alert--ok">该单元已完工，无待执行工序。</div>
+  {% else %}
+  <!-- PASS 表单：物料 + 参数一起提交 -->
+  <form hx-post="/production/station/pass" hx-target="#station-root" hx-swap="innerHTML">
+    <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
+    <input type="hidden" name="scan" value="{{ view.sn or view.work_order_code }}">
+
+    <div class="station__grid">
+      <div class="station__main">
+        <div class="card">
+          <div class="card__title">当前工序物料追溯 <span class="badge">BOM 匹配</span></div>
+          {% if view.components %}
+          <table class="data-table">
+            <thead><tr><th>物料</th><th>需求量</th><th>批次/条码（扫码）</th></tr></thead>
+            <tbody>
+              {% for c in view.components %}
+              <tr>
+                <td>{{ c.component_code }} {{ c.component_name }}</td>
+                <td>{{ c.qty }}</td>
+                <td><input type="hidden" name="component_product_id" value="{{ c.component_product_id }}">
+                  <input name="component_batch" placeholder="扫描该物料批次..."></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}<div class="nav-card__desc">当前工序无 BOM 绑定项。</div>{% endif %}
+        </div>
+
+        <div class="card">
+          <div class="card__title">工艺参数采集 <span class="badge">手录</span></div>
+          <table class="data-table">
+            <thead><tr><th>参数名</th><th>数值</th><th>单位</th></tr></thead>
+            <tbody>
+              {% for i in range(3) %}
+              <tr>
+                <td><input name="param_key" placeholder="参数名"></td>
+                <td><input name="param_value" placeholder="数值"></td>
+                <td><input name="param_unit" placeholder="单位"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="nav-card__desc">PLC 自动采集：暂未开放（留白）。</div>
+        </div>
+      </div>
+
+      <div class="station__aside">
+        <div class="card">
+          <div class="card__title">SOP 作业指导书</div>
+          <div class="station__sop">SOP 内容待建设（本期留白）。</div>
+        </div>
+        <div class="card">
+          <div class="card__title">异常干预</div>
+          <a class="btn-secondary" href="/trace/rework">申请返工</a>
+          <button type="button" class="btn-secondary" disabled title="暂未开放">申请跳站</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="station__footer">
+      <span class="station__status">{% if view.skill_ok and not view.is_off_station %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
+      <button type="button" class="btn-secondary" disabled title="暂未开放">异常呼叫 (ANDON)</button>
+      <button type="submit" class="station__pass">确认过站 (PASS)</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+<script>
+  (function () {
+    var cur = document.getElementById('station-current');
+    if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
+  })();
+</script>

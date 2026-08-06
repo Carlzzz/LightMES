@@ -54,6 +54,8 @@ def test_load_renders_rich_view(client, db_session):
                        data={"work_station_id": str(ws.id), "scan": "WO"})
     assert resp.status_code == 200
     assert "工序10" in resp.text  # 路径全景含工序名
+    assert "工人" in resp.text or "操作员" in resp.text  # 顶部操作员区
+    assert "确认过站" in resp.text                        # PASS 按钮
 
 
 def test_load_unknown_scan_shows_error(client, db_session):
