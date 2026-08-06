@@ -77,6 +77,21 @@ class SerialUnitRepository:
                 SerialUnit.status == "pending")
         ).scalar_one()
 
+    def get_active_by_carrier(self, carrier_code: str) -> SerialUnit | None:
+        return self.db.execute(
+            select(SerialUnit).where(
+                SerialUnit.carrier_code == carrier_code,
+                SerialUnit.status.notin_(("finished", "scrapped")))
+        ).scalar_one_or_none()
+
+    def first_pending_by_work_order(self, work_order_id: int) -> SerialUnit | None:
+        return self.db.execute(
+            select(SerialUnit).where(
+                SerialUnit.work_order_id == work_order_id,
+                SerialUnit.status == "pending")
+            .order_by(SerialUnit.id).limit(1)
+        ).scalar_one_or_none()
+
 
 class OperationRecordRepository:
     def __init__(self, db: Session) -> None:

@@ -51,10 +51,9 @@ def _blocked_pass_wo_counts(db, wo_code="SKWO"):
     OperationRecord 是真正的完工记录（在 5b 校验之后的 step6 才写入），
     硬拦截保证它必须为 0 —— 这是本文件要固化的核心安全保证。
 
-    SerialUnit 在 step3 生成 SN 时已 flush（见 operation_pass_service
-    SerialUnitRepository.add → db.flush()），早于 5b 校验；测试会话没有
-    get_db 的请求级 rollback，所以该 pending 单位仍可见（count == 1）。
-    生产环境由 get_db 的 except → rollback 丢弃，不落库。
+    SerialUnit 由 release 预生成（qty=5, status=pending）；被拒过站发生在
+    5b 校验，早于任何状态变更与记录写入，因此不消费任何 pending，计数保持
+    预生成数量 5，无多余孤儿。
     """
     wo = WorkOrderRepository(db).get_by_code(wo_code)
     serial_unit_count = len(SerialUnitRepository(db).list_by_work_order(wo.id))
@@ -86,9 +85,10 @@ def test_pass_insufficient_skill_blocked(db_session):
             work_station_id=ws.id, work_order_code="SKWO", operator_id=user.id))
     _, su_count, rec_count = _blocked_pass_wo_counts(db)
     assert rec_count == 0  # 硬拦截：未写入任何工序记录
-    # step3 生成 SN 时已 flush，测试会话无 get_db 回滚 → pending 单位仍可见(count=1)；
-    # 生产由请求级 rollback 丢弃。真正的硬拦截保证是上一条：无任何工序记录。
-    assert su_count == 1
+    # release 已预生成 qty=5 个 pending 单位；被拒过站不消费任何 pending（无状态变更、
+    # 无工序记录），su_count 保持预生成数量 5，无多余孤儿。真正的硬拦截保证是上一条：
+    # 无任何工序记录。
+    assert su_count == 5
 
 
 def test_pass_no_operator_skill_record_blocked(db_session):
@@ -98,9 +98,10 @@ def test_pass_no_operator_skill_record_blocked(db_session):
             work_station_id=ws.id, work_order_code="SKWO", operator_id=user.id))
     _, su_count, rec_count = _blocked_pass_wo_counts(db)
     assert rec_count == 0  # 硬拦截：未写入任何工序记录
-    # step3 生成 SN 时已 flush，测试会话无 get_db 回滚 → pending 单位仍可见(count=1)；
-    # 生产由请求级 rollback 丢弃。真正的硬拦截保证是上一条：无任何工序记录。
-    assert su_count == 1
+    # release 已预生成 qty=5 个 pending 单位；被拒过站不消费任何 pending（无状态变更、
+    # 无工序记录），su_count 保持预生成数量 5，无多余孤儿。真正的硬拦截保证是上一条：
+    # 无任何工序记录。
+    assert su_count == 5
 
 
 def test_pass_no_operator_id_with_requirement_blocked(db_session):
@@ -110,6 +111,7 @@ def test_pass_no_operator_id_with_requirement_blocked(db_session):
             work_station_id=ws.id, work_order_code="SKWO", operator_id=None))
     _, su_count, rec_count = _blocked_pass_wo_counts(db)
     assert rec_count == 0  # 硬拦截：未写入任何工序记录
-    # step3 生成 SN 时已 flush，测试会话无 get_db 回滚 → pending 单位仍可见(count=1)；
-    # 生产由请求级 rollback 丢弃。真正的硬拦截保证是上一条：无任何工序记录。
-    assert su_count == 1
+    # release 已预生成 qty=5 个 pending 单位；被拒过站不消费任何 pending（无状态变更、
+    # 无工序记录），su_count 保持预生成数量 5，无多余孤儿。真正的硬拦截保证是上一条：
+    # 无任何工序记录。
+    assert su_count == 5

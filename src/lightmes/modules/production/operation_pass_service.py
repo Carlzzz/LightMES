@@ -33,13 +33,16 @@ class OperationPassService:
         self.sn_gen = SnGenerator(db)
 
     def pass_operation(self, data: OperationPassInput) -> OperationPassResult:
-        # 1+3. 定位工单与 SN
+        # 1+3. 定位单元：SN → 载体码 → 工单号(取第一个 pending)
+        su = None
         if data.sn is not None:
             su = self.serial_units.get_by_sn(data.sn)
             if su is None:
-                raise NotFoundError(f"SN 不存在: {data.sn}")
+                su = self.serial_units.get_active_by_carrier(data.sn)
+            if su is None:
+                raise NotFoundError(f"未找到 SN 或载体码: {data.sn}")
             if su.status in ("finished", "scrapped"):
-                raise BusinessRuleError(f"SN 已{su.status}，不可过站: {data.sn}")
+                raise BusinessRuleError(f"SN 已{su.status}，不可过站: {su.sn}")
             wo = self.work_orders.get(su.work_order_id)
         else:
             if data.work_order_code is None:
@@ -47,7 +50,9 @@ class OperationPassService:
             wo = self.work_orders.get_by_code(data.work_order_code)
             if wo is None:
                 raise NotFoundError(f"工单不存在: {data.work_order_code}")
-            su = None
+            su = self.serial_units.first_pending_by_work_order(wo.id)
+            if su is None:
+                raise BusinessRuleError("工单 SN 已全部投产")
 
         # 2. 工单状态
         if wo is None:
@@ -58,19 +63,6 @@ class OperationPassService:
         operations = self.query.get_operations(wo.routing_id)
         if not operations:
             raise BusinessRuleError("工艺路径无工序")
-
-        # 3(续). 首件生成 SN
-        if su is None:
-            if wo.sn_rule_id is None:
-                raise BusinessRuleError("工单未配置 SN 规则")
-            rule = self.sn_rules.get(wo.sn_rule_id)
-            if rule is None:
-                raise BusinessRuleError("SN 规则不存在")
-            new_sn = self.sn_gen.next_sn(rule)
-            su = self.serial_units.add(SerialUnit(
-                sn=new_sn, work_order_id=wo.id, product_id=wo.product_id,
-                status="in_process", current_operation_seq=0,
-            ))
 
         # 4. 期望下一工序（前向唯一→天然防重复）
         next_ops = [o for o in operations if o.seq > su.current_operation_seq]
@@ -165,7 +157,7 @@ class OperationPassService:
         # 10. 工单/返工件状态复位
         if wo.status == "released":
             wo.status = "in_process"
-        if su.status == "reworking":
+        if su.status in ("reworking", "pending"):
             su.status = "in_process"
         self.db.flush()
 
