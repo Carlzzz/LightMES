@@ -19,7 +19,7 @@ from lightmes.modules.production.wip_service import WipService
 from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
-from lightmes.shared.errors import DomainError, NotFoundError
+from lightmes.shared.errors import DomainError, NotFoundError, BusinessRuleError
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -324,7 +324,15 @@ def station_enter(
     su_repo = SerialUnitRepository(db)
     load_svc = StationService(db)
     try:
+        # I-1: 服务端校验工单与作业站产线一致（防篡改/下拉 bug 跨产线绑 SN）
+        ws = MasterDataQueryService(db).get_work_station(work_station_id)
+        wo = ProductionService(db).work_orders.get(work_order_id)
+        if (ws is None or wo is None
+                or wo.line_id != ws.line_id
+                or wo.status not in ("released", "in_process")):
+            raise BusinessRuleError("工单不可投产（需已下达且属本产线）")
         # 三路判定：SN → 活跃载体码（已过首工序的单元） → 首站新载体码（绑 SN）
+        scan = scan.strip()
         su = su_repo.get_by_sn(scan)
         if su is None:
             bound = su_repo.get_active_by_carrier(scan)
@@ -334,9 +342,8 @@ def station_enter(
         if su is None:
             # 首站新载体码：绑 SN（不过站）。bind_first_carrier 内部校验
             # （重复扫已绑 pending 载体码 → "已绑定其他产品，请先解绑" 拦截）
-            su = CarrierService(db).bind_first_carrier(work_order_id, scan.strip(), user.id)
-        view = load_svc.load(scan.strip() if su.carrier_code == scan.strip() else su.sn,
-                             work_station_id, user.id)
+            su = CarrierService(db).bind_first_carrier(work_order_id, scan, user.id)
+        view = load_svc.load(su.sn, work_station_id, user.id)
     except DomainError as e:
         db.rollback()
         return templates.TemplateResponse(

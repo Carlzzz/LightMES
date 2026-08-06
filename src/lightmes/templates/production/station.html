@@ -19,7 +19,7 @@
     <div class="field"><label>工单</label>
       <select id="station-wo-select" name="work_order_id" required
               hx-get="/production/station/work-orders"
-              hx-trigger="reset-wo from:body, change"
+              hx-trigger="reset-wo from:body"
               hx-target="this"
               hx-swap="innerHTML"
               hx-include="#station-ws-select"

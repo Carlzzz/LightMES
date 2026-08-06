@@ -143,3 +143,20 @@ def test_enter_requires_login(client, db_session):
                        data={"work_station_id": str(ws[0].id),
                              "work_order_id": str(wo.id), "scan": "X"})
     assert resp.status_code == 401
+
+
+def test_enter_cross_line_work_order_rejected(client, db_session):
+    ws, wo, line = _setup(db_session)
+    md = MasterDataService(db_session)
+    other_line = md.create_line(LineCreate(code="OTH", name="别线"))
+    other_ws = md.create_work_station(WorkStationCreate(code="OW", name="别站", line_id=other_line.id, seq=1))
+    db_session.flush()
+    _login(client, db_session)
+    # 用 other_ws 但传本线 wo → 拒绝
+    resp = client.post("/production/station/enter",
+                       data={"work_station_id": str(other_ws.id),
+                             "work_order_id": str(wo.id), "scan": "CROSS-PAL"})
+    assert resp.status_code == 200 and ("✗" in resp.text or "产线" in resp.text)
+    # 关键：未发生绑定（其他产线工单的 SN 未消费）
+    from lightmes.modules.production.repository import SerialUnitRepository as SURepo
+    assert SURepo(db_session).get_active_by_carrier("CROSS-PAL") is None

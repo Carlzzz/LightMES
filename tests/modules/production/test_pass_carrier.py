@@ -1,4 +1,5 @@
 import pytest
+from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
     ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
@@ -7,8 +8,10 @@ from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, OperationPassInput,
 )
+from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.production.operation_pass_service import OperationPassService
-from lightmes.modules.production.repository import SerialUnitRepository
+from lightmes.modules.production.repository import SerialUnitRepository, CarrierBindingRepository
+from lightmes.modules.production.models import CarrierBinding
 from lightmes.shared.errors import BusinessRuleError
 
 
@@ -68,3 +71,55 @@ def test_sn_scan_still_works(db_session):
     r = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id, work_order_code="WO"))
     r2 = svc.pass_operation(OperationPassInput(work_station_id=ws[1].id, sn=r.sn))
     assert r2.is_finished is True
+
+
+def test_finish_auto_unbinds_carrier_with_reason(db_session):
+    # 单工序路线：bind_first_carrier → 手动 PASS → 完工自动解绑 + unbound_reason="finish"
+    md = MasterDataService(db_session)
+    user = User(username="fin", password_hash="x", display_name="Fin")
+    db_session.add(user); db_session.flush()
+    p = md.create_product(ProductCreate(code="P", name="件", type="finished"))
+    line = md.create_line(LineCreate(code="L", name="线"))
+    ws = md.create_work_station(WorkStationCreate(code="W", name="站", line_id=line.id, seq=1))
+    r = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id, operations=[
+        OperationCreate(seq=10, code="OP10", name="工序", default_work_station_id=ws.id)]))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="SR", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))
+    wo = prod.create_work_order(WorkOrderCreate(code="WO", product_id=p.id, routing_id=r.id, line_id=line.id, qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    svc = CarrierService(db_session)
+    su = svc.bind_first_carrier(wo.id, "PAL-FIN", user.id)
+    OperationPassService(db_session).pass_operation(OperationPassInput(
+        work_station_id=ws.id, sn=su.sn, operator_id=user.id))
+    db_session.refresh(su)
+    assert su.status == "finished" and su.carrier_code is None
+    binding = CarrierBindingRepository(db_session).active_by_serial_unit(su.id)
+    assert binding is None  # 完工解绑后无活跃绑定
+    # 取最近一条 binding 行（含已解绑）检查原因
+    from sqlalchemy import select
+    last = db_session.execute(select(CarrierBinding).where(
+        CarrierBinding.serial_unit_id == su.id).order_by(CarrierBinding.id.desc()).limit(1)).scalar_one()
+    assert last.unbound_reason == "finish"
+
+
+def test_manual_unbind_records_reason(db_session):
+    # bind → 手动 unbind → unbound_reason="manual"
+    md = MasterDataService(db_session)
+    user = User(username="man", password_hash="x", display_name="Man")
+    db_session.add(user); db_session.flush()
+    p = md.create_product(ProductCreate(code="PM", name="件", type="finished"))
+    line = md.create_line(LineCreate(code="LM", name="线"))
+    ws = md.create_work_station(WorkStationCreate(code="WM", name="站", line_id=line.id, seq=1))
+    r = md.create_routing(RoutingCreate(code="RM", name="路线", product_id=p.id, operations=[
+        OperationCreate(seq=10, code="OM", name="工序", default_work_station_id=ws.id)]))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="SM", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))
+    wo = prod.create_work_order(WorkOrderCreate(code="WOM", product_id=p.id, routing_id=r.id, line_id=line.id, qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    svc = CarrierService(db_session)
+    su = svc.bind_first_carrier(wo.id, "PAL-MAN", user.id)
+    svc.unbind("PAL-MAN", user.id)
+    from sqlalchemy import select
+    last = db_session.execute(select(CarrierBinding).where(
+        CarrierBinding.serial_unit_id == su.id).order_by(CarrierBinding.id.desc()).limit(1)).scalar_one()
+    assert last.unbound_reason == "manual"
