@@ -62,3 +62,18 @@ class MasterDataQueryService:
             return []
         return [self._work_stations.get(i) for i in ws_ids
                 if self._work_stations.get(i) is not None]
+
+    def batch_allowed_work_stations(self, operation_ids: list[int]) -> dict[int, list[WorkStation]]:
+        """批量查询多个工序的 allowed work stations，一次 DB 查询替代 N 次。"""
+        op_to_ws_ids = self._op_ws.list_by_operation_ids(operation_ids)
+        # 收集所有需要的 ws_id，一次性查
+        all_ws_ids = set()
+        for ids in op_to_ws_ids.values():
+            all_ws_ids.update(ids)
+        ws_map: dict[int, WorkStation] = {}
+        for ws_id in all_ws_ids:
+            ws = self._work_stations.get(ws_id)
+            if ws is not None:
+                ws_map[ws_id] = ws
+        return {op_id: [ws_map[ws_id] for ws_id in ws_ids if ws_id in ws_map]
+                for op_id, ws_ids in op_to_ws_ids.items()}

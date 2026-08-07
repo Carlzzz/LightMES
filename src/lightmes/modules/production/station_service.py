@@ -44,6 +44,10 @@ class StationService:
         current_seq = su.current_operation_seq if su is not None else 0
         expected = next((o for o in operations if o.seq > current_seq), None)
 
+        # 批量查询所有工序的 allowed work stations（1 次查询替代 N 次）
+        all_op_ids = [o.id for o in operations]
+        op_ws_map = self.query.batch_allowed_work_stations(all_op_ids)
+
         op_views: list[StationOpView] = []
         for o in operations:
             if o.seq <= current_seq:
@@ -52,13 +56,15 @@ class StationService:
                 st = "current"
             else:
                 st = "future"
-            op_allowed = self.query.get_allowed_work_stations(o.id)
+            op_allowed = op_ws_map.get(o.id, [])
+            allowed_names = [w.name for w in op_allowed]
+            if not allowed_names:
+                ws = self.query.get_work_station(o.default_work_station_id)
+                allowed_names = [ws.name if ws else f"#{o.default_work_station_id}"]
             op_views.append(StationOpView(
                 seq=o.seq, name=o.name, code=o.code,
                 work_station_id=o.default_work_station_id, status=st,
-                allowed_work_stations=[w.name for w in op_allowed]
-                                       or [self.query.get_work_station(o.default_work_station_id).name
-                                           if self.query.get_work_station(o.default_work_station_id) else f"#{o.default_work_station_id}"],
+                allowed_work_stations=allowed_names,
             ))
 
         current_op = next((v for v in op_views if v.status == "current"), None)
@@ -70,7 +76,7 @@ class StationService:
         is_off_station = False
         components: list[StationComponentView] = []
         if expected is not None:
-            allowed = self.query.get_allowed_work_stations(expected.id)
+            allowed = op_ws_map.get(expected.id, [])
             allowed_ids = [w.id for w in allowed]
             if not allowed_ids:
                 allowed_ids = [expected.default_work_station_id]

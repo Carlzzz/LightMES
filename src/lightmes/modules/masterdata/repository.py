@@ -227,3 +227,17 @@ class OperationWorkStationRepository:
             .where(OperationWorkStation.operation_id == op_id)
         )
         self.db.flush()
+
+    def list_by_operation_ids(self, op_ids: list[int]) -> dict[int, list[int]]:
+        """批量查询多个工序的 allowed work_station ids，返回 {op_id: [ws_id, ...]}。"""
+        if not op_ids:
+            return {}
+        rows = self.db.execute(
+            select(OperationWorkStation)
+            .where(OperationWorkStation.operation_id.in_(op_ids))
+            .order_by(OperationWorkStation.operation_id, OperationWorkStation.id)
+        ).scalars().all()
+        result: dict[int, list[int]] = {}
+        for r in rows:
+            result.setdefault(r.operation_id, []).append(r.work_station_id)
+        return result
