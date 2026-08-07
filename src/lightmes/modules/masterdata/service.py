@@ -67,6 +67,9 @@ class MasterDataService:
             # 多对多校验：allowed 非空 + default ∈ allowed + 每个 ws 存在
             if not op.allowed_work_station_ids:
                 raise ValueError(f"工序 {op.seq} 必须至少指定一个允许作业站")
+            # dedup check: 重复 ws_id 会撞 DB unique 约束 → 抛 clean ValueError（API→400）
+            if len(set(op.allowed_work_station_ids)) != len(op.allowed_work_station_ids):
+                raise ValueError(f"工序 {op.seq} 允许作业站列表存在重复")
             if op.default_work_station_id not in op.allowed_work_station_ids:
                 raise ValueError(
                     f"工序 {op.seq} 默认作业站必须在允许作业站列表内")

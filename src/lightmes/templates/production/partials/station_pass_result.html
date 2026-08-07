@@ -4,7 +4,7 @@
 {% elif switch_station %}
 <div class="alert alert--ok">
   ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
-  → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}（建议作业站：{{ result.next_op.work_station_id }}）
+  → 下一工序：工序{{ result.next_op.seq }} {{ result.next_op.name }}（本作业站不可做，请切换）
 </div>
 <div class="card">
   <div class="card__title">请切换作业站</div>

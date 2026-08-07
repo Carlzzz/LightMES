@@ -48,6 +48,15 @@ def test_allowed_cannot_be_empty(db_session):
                             allowed_work_station_ids=[])]))
 
 
+def test_create_routing_rejects_duplicate_allowed(db_session):
+    md, p, wss = _setup(db_session, allowed_ids=[0, 1])
+    with pytest.raises(ValueError, match="重复"):
+        md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id, operations=[
+            OperationCreate(seq=10, code="OP10", name="工序",
+                            default_work_station_id=wss[0].id,
+                            allowed_work_station_ids=[wss[0].id, wss[0].id])]))  # 重复 wss[0]
+
+
 def test_allowed_ws_must_exist(db_session):
     md, p, wss = _setup(db_session, allowed_ids=[0])
     with pytest.raises(ValueError, match="作业站不存在"):
