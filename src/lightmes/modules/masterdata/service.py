@@ -182,7 +182,6 @@ class MasterDataService:
     def update_operation(self, operation_id: int, *, seq, code, name,
                          default_work_station_id, allowed_work_station_ids,
                          required_skill_id, required_level, is_mandatory=True) -> Operation:
-        from lightmes.modules.masterdata.models import Operation
         op = self.db.get(Operation, operation_id)
         if op is None:
             raise ValueError(f"工序不存在: {operation_id}")
@@ -206,7 +205,6 @@ class MasterDataService:
     def add_operation(self, routing_id: int, *, seq, code, name,
                       default_work_station_id, allowed_work_station_ids,
                       required_skill_id, required_level, is_mandatory=True) -> Operation:
-        from lightmes.modules.masterdata.models import Operation
         routing = self.routings.get(routing_id)
         if routing is None:
             raise ValueError(f"路线不存在: {routing_id}")
@@ -227,7 +225,6 @@ class MasterDataService:
         return op
 
     def delete_operation(self, operation_id: int) -> None:
-        from lightmes.modules.masterdata.models import Operation
         op = self.db.get(Operation, operation_id)
         if op is None:
             raise ValueError(f"工序不存在: {operation_id}")

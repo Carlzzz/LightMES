@@ -400,31 +400,48 @@ def boms_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     )
 
 
-@router.get("/masterdata/routings/{routing_id}", response_class=HTMLResponse)
-def routing_detail_page(
-    request: Request, routing_id: int, db: Session = Depends(get_db),
+def _render_routing_detail(
+    request: Request, db: Session, routing_id: int,
+    error: str | None = None,
 ) -> HTMLResponse:
-    if current_user_or_none(request, db) is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    """Render routing detail page; optionally with an error banner. Returns 404 if routing missing."""
     svc = MasterDataService(db)
     query = MasterDataQueryService(db)
     routing = svc.routings.get(routing_id)
     if routing is None:
         return HTMLResponse("路线不存在", status_code=404)
     operations = svc.routings.operations_of(routing_id)
-    op_views = []
-    for op in operations:
-        allowed_ws = query.get_allowed_work_stations(op.id)
-        op_views.append({
-            "op": op,
-            "allowed_ws_ids": [w.id for w in allowed_ws],
-        })
+    op_views = [{"op": op, "allowed_ws_ids": [w.id for w in query.get_allowed_work_stations(op.id)]} for op in operations]
     product = svc.products.get(routing.product_id)
     return templates.TemplateResponse(
         request, "masterdata/routing_detail.html",
         {"routing": routing, "product": product, "op_views": op_views,
          "work_stations": svc.work_stations.list_all(),
-         "skills": SkillService(db).list_skills()})
+         "skills": SkillService(db).list_skills(),
+         "error": error})
+
+
+@router.get("/masterdata/routings/{routing_id}", response_class=HTMLResponse)
+def routing_detail_page(
+    request: Request, routing_id: int, db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    return _render_routing_detail(request, db, routing_id)
+
+
+def _render_head_card_fragment(
+    request: Request, db: Session, routing_id: int,
+) -> HTMLResponse:
+    """Render just the head card as a fragment for HTMX outerHTML swap."""
+    svc = MasterDataService(db)
+    routing = svc.routings.get(routing_id)
+    if routing is None:
+        return HTMLResponse("路线不存在", status_code=404)
+    product = svc.products.get(routing.product_id)
+    return templates.TemplateResponse(
+        request, "masterdata/partials/routing_head_card.html",
+        {"routing": routing, "product": product})
 
 
 def _parse_allowed(allowed_str: str, default_ws: int) -> list[int]:
@@ -447,8 +464,10 @@ def routing_update_head(
         MasterDataService(db).update_routing_head(routing_id, name)
     except ValueError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
-    return HTMLResponse(f'<div style="color:green">✓ 已保存路线头</div>')
+        return HTMLResponse(
+            f'<div style="color:red">✗ {escape(str(e))}</div>',
+            headers={"HX-Retarget": "#head-result", "HX-Reswap": "innerHTML"})
+    return _render_head_card_fragment(request, db, routing_id)
 
 
 @router.post("/masterdata/routings/{routing_id}/status", response_class=HTMLResponse)
@@ -462,8 +481,10 @@ def routing_set_status(
         MasterDataService(db).set_routing_status(routing_id, status)
     except ValueError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
-    return HTMLResponse(f'<div style="color:green">✓ 状态已更新为 {escape(status)}</div>')
+        return HTMLResponse(
+            f'<div style="color:red">✗ {escape(str(e))}</div>',
+            headers={"HX-Retarget": "#head-result", "HX-Reswap": "innerHTML"})
+    return _render_head_card_fragment(request, db, routing_id)
 
 
 @router.post("/masterdata/routings/{routing_id}/operations", response_class=HTMLResponse)
@@ -486,7 +507,7 @@ def routing_add_operation(
             is_mandatory=True)
     except ValueError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+        return _render_routing_detail(request, db, routing_id, error=str(e))
     # 成功后重新渲染详情页（含新工序）
     return routing_detail_page(request, routing_id, db)
 
@@ -511,7 +532,7 @@ def routing_update_operation(
             is_mandatory=True)
     except ValueError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+        return _render_routing_detail(request, db, routing_id, error=str(e))
     return routing_detail_page(request, routing_id, db)
 
 
@@ -526,7 +547,7 @@ def routing_delete_operation(
         MasterDataService(db).delete_operation(operation_id)
     except ValueError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+        return _render_routing_detail(request, db, routing_id, error=str(e))
     return routing_detail_page(request, routing_id, db)
 
 
@@ -540,7 +561,7 @@ def routing_delete(
         MasterDataService(db).delete_routing(routing_id)
     except ValueError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>', status_code=200)
+        return _render_routing_detail(request, db, routing_id, error=str(e))
     return Response(status_code=303, headers={"Location": "/masterdata/routings"})
 
 
