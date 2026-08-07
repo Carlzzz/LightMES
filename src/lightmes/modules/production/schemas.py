@@ -81,6 +81,7 @@ class OperationPassResult(BaseModel):
     work_order_status: str
     bound_count: int = 0
     param_count: int = 0
+    next_op_can_continue_here: bool = False
 
 
 class WipItem(BaseModel):
@@ -96,6 +97,7 @@ class StationOpView(BaseModel):
     code: str
     work_station_id: int
     status: str  # "done" | "current" | "future"
+    allowed_work_stations: list[str] = []
 
 
 class StationComponentView(BaseModel):

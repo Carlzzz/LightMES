@@ -24,13 +24,24 @@ from lightmes.modules.masterdata.schemas import (
     SkillCreate,
     WorkStationCreate,
 )
+from lightmes.modules.masterdata.models import Operation
 from lightmes.modules.masterdata.service import MasterDataService
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.masterdata.skill_service import SkillService
 
 router = APIRouter()
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
 )
+
+
+def _operation_read(db: Session, op: Operation) -> OperationRead:
+    """序列化 Operation，并填充 allowed_work_station_ids（多对多关联表）。"""
+    read = OperationRead.model_validate(op)
+    read.allowed_work_station_ids = [
+        ws.id for ws in MasterDataQueryService(db).get_allowed_work_stations(op.id)
+    ]
+    return read
 
 
 @router.post(
@@ -77,7 +88,7 @@ def create_routing(
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
         source=routing.source, erp_ref=routing.erp_ref, synced_at=routing.synced_at,
-        operations=[OperationRead.model_validate(o) for o in operations],
+        operations=[_operation_read(db, o) for o in operations],
     )
 
 
@@ -91,7 +102,7 @@ def list_routings(db: Session = Depends(get_db)) -> list[RoutingRead]:
             product_id=r.product_id, version=r.version,
             status=r.status,
             source=r.source, erp_ref=r.erp_ref, synced_at=r.synced_at,
-            operations=[OperationRead.model_validate(o) for o in svc.routings.operations_of(r.id)],
+            operations=[_operation_read(db, o) for o in svc.routings.operations_of(r.id)],
         )
         for r in routings
     ]
@@ -109,7 +120,7 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
         product_id=routing.product_id, version=routing.version,
         status=routing.status,
         source=routing.source, erp_ref=routing.erp_ref, synced_at=routing.synced_at,
-        operations=[OperationRead.model_validate(o) for o in operations],
+        operations=[_operation_read(db, o) for o in operations],
     )
 
 
@@ -342,6 +353,7 @@ def routings_create_page(
     op_code: list[str] = Form(default=[]),
     op_name: list[str] = Form(default=[]),
     op_ws: list[str] = Form(default=[]),
+    op_allowed: list[str] = Form(default=[]),  # 新增：逗号分隔 ws_id 串
     op_skill: list[str] = Form(default=[]),
     op_level: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
@@ -351,14 +363,21 @@ def routings_create_page(
     svc = MasterDataService(db)
     try:
         operations = []
-        for seq, c, n, ws, sk_id, lvl in zip_longest(
-            op_seq, op_code, op_name, op_ws, op_skill, op_level, fillvalue=""
+        for seq, c, n, ws, allowed_str, sk_id, lvl in zip_longest(
+            op_seq, op_code, op_name, op_ws, op_allowed, op_skill, op_level, fillvalue=""
         ):
             if not c.strip() or not ws.strip():
                 continue  # 空工序行忽略
+            if allowed_str.strip():
+                allowed_ids = [int(x) for x in allowed_str.split(",")
+                               if x.strip().isdigit()]
+            else:
+                allowed_ids = [int(ws)]  # 未填 allowed 时默认默认站，等价旧行为
+            allowed_ids = list(dict.fromkeys(allowed_ids))  # 去重，保序
             operations.append(OperationCreate(
                 seq=int(seq), code=c.strip(), name=n.strip(),
                 default_work_station_id=int(ws),
+                allowed_work_station_ids=allowed_ids,
                 required_skill_id=int(sk_id) if sk_id.strip() else None,
                 required_level=int(lvl) if lvl.strip() else None))
         routing = svc.create_routing(RoutingCreate(

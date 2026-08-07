@@ -12,6 +12,7 @@ from lightmes.modules.masterdata.models import (
 from lightmes.modules.masterdata.repository import (
     BomRepository,
     LineRepository,
+    OperationWorkStationRepository,
     ProductRepository,
     RoutingRepository,
     SkillRepository,
@@ -37,6 +38,7 @@ class MasterDataService:
         self.lines = LineRepository(db)
         self.work_stations = WorkStationRepository(db)
         self.skills = SkillRepository(db)
+        self.op_work_stations = OperationWorkStationRepository(db)
 
     def create_product(self, data: ProductCreate) -> Product:
         if self.products.get_by_code(data.code) is not None:
@@ -62,6 +64,18 @@ class MasterDataService:
         for op in data.operations:
             if self.work_stations.get(op.default_work_station_id) is None:
                 raise ValueError(f"作业站不存在: {op.default_work_station_id}")
+            # 多对多校验：allowed 非空 + default ∈ allowed + 每个 ws 存在
+            if not op.allowed_work_station_ids:
+                raise ValueError(f"工序 {op.seq} 必须至少指定一个允许作业站")
+            # dedup check: 重复 ws_id 会撞 DB unique 约束 → 抛 clean ValueError（API→400）
+            if len(set(op.allowed_work_station_ids)) != len(op.allowed_work_station_ids):
+                raise ValueError(f"工序 {op.seq} 允许作业站列表存在重复")
+            if op.default_work_station_id not in op.allowed_work_station_ids:
+                raise ValueError(
+                    f"工序 {op.seq} 默认作业站必须在允许作业站列表内")
+            for ws_id in op.allowed_work_station_ids:
+                if self.work_stations.get(ws_id) is None:
+                    raise ValueError(f"作业站不存在: {ws_id}")
             if op.required_skill_id is not None:
                 skill = self.skills.get(op.required_skill_id)
                 if skill is None:
@@ -81,7 +95,7 @@ class MasterDataService:
         )
         self.routings.add(routing)
         for op in data.operations:
-            self.db.add(Operation(
+            operation = Operation(
                 routing_id=routing.id,
                 seq=op.seq,
                 code=op.code,
@@ -90,7 +104,10 @@ class MasterDataService:
                 is_mandatory=op.is_mandatory,
                 required_skill_id=op.required_skill_id,
                 required_level=op.required_level,
-            ))
+            )
+            self.db.add(operation); self.db.flush()  # 拿到 operation.id
+            for ws_id in op.allowed_work_station_ids:
+                self.op_work_stations.add(operation.id, ws_id)
         self.db.flush()
         return routing
 

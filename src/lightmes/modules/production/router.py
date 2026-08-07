@@ -282,9 +282,32 @@ def station_pass(
         )
     su = SerialUnitRepository(db).get_by_sn(result.sn)
     wo_id = su.work_order_id if su is not None else None
+    # 成功分流：finished → 完工片段；next_op 可在本站继续 → 刷富界面到下一工序；否则切站提示
+    if result.is_finished:
+        return templates.TemplateResponse(
+            request, "production/partials/station_pass_result.html",
+            {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id},
+        )
+    if result.next_op_can_continue_here and su is not None:
+        # 调 load 组装下一工序富界面（scan=SN，因 SN 一定能 get_by_sn 命中）
+        try:
+            view = StationService(db).load(su.sn, work_station_id, user.id)
+        except DomainError as e:
+            db.rollback()
+            return templates.TemplateResponse(
+                request, "production/partials/station_pass_result.html",
+                {"error": e.detail, "work_station_id": work_station_id},
+            )
+        return templates.TemplateResponse(
+            request, "production/station_view.html",
+            {"view": view, "work_station_id": work_station_id,
+             "just_passed": result.passed_op},
+        )
+    # 下一工序不在本站 → 切站提示
     return templates.TemplateResponse(
         request, "production/partials/station_pass_result.html",
-        {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id},
+        {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id,
+         "switch_station": True},
     )
 
 

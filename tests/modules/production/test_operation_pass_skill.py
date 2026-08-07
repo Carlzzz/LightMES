@@ -26,7 +26,7 @@ def _setup(db_session, required_skill=False, op_level=None, operator_level=None)
     ws = md.create_work_station(WorkStationCreate(code="SKW1", name="站1", line_id=line.id, seq=1))
     p = md.create_product(ProductCreate(code="SKP", name="件", type="finished"))
     skill = sk.create_skill(SkillCreate(code="ASSY", name="装配", max_level=3))
-    ops = [OperationCreate(seq=1, code="OP1", name="工序1", default_work_station_id=ws.id)]
+    ops = [OperationCreate(seq=1, code="OP1", name="工序1", default_work_station_id=ws.id, allowed_work_station_ids=[ws.id])]
     routing = md.create_routing(RoutingCreate(code="SKRT", name="路线", product_id=p.id, operations=ops))
     if required_skill:
         op = md.routings.operations_of(routing.id)[0]

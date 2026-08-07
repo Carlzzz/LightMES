@@ -17,8 +17,8 @@ def _line(db_session):
         code="QPW2", name="作业站2", line_id=line.id, seq=2))
     r = md.create_routing(RoutingCreate(code="QR", name="路线", product_id=p.id,
         operations=[
-            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
-            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id, allowed_work_station_ids=[w2.id]),
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id]),
         ]))
     return p, r
 

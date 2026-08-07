@@ -5,6 +5,7 @@ from lightmes.modules.masterdata.models import (
     BomItem,
     Line,
     Operation,
+    OperationWorkStation,
     OperatorSkill,
     Product,
     Routing,
@@ -198,3 +199,19 @@ class OperatorSkillRepository:
 
     def list_all(self) -> list[OperatorSkill]:
         return list(self.db.execute(select(OperatorSkill)).scalars().all())
+
+
+class OperationWorkStationRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, op_id: int, ws_id: int) -> OperationWorkStation:
+        row = OperationWorkStation(operation_id=op_id, work_station_id=ws_id)
+        self.db.add(row); self.db.flush(); return row
+
+    def list_by_operation(self, op_id: int) -> list[OperationWorkStation]:
+        return list(self.db.execute(
+            select(OperationWorkStation)
+            .where(OperationWorkStation.operation_id == op_id)
+            .order_by(OperationWorkStation.id)
+        ).scalars().all())

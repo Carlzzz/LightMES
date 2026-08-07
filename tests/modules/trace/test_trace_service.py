@@ -27,7 +27,7 @@ def _pass_with_components_and_params(db_session):
     w = md.create_work_station(WorkStationCreate(
         code="TSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="TR", name="路线", product_id=fin.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id, allowed_work_station_ids=[w.id])]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="TRL", name="r", pattern="T{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

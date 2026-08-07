@@ -19,7 +19,7 @@ def _single_step_line(db_session, qty=5):
     w = md.create_work_station(WorkStationCreate(
         code="RRFSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="RRFR", name="路线", product_id=p.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id, allowed_work_station_ids=[w.id])]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="RRFL", name="r", pattern="RR{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(

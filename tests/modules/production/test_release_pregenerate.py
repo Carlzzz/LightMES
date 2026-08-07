@@ -14,7 +14,7 @@ def _wo(db_session, qty=3, with_rule=True):
     ws = md.create_work_station(WorkStationCreate(code="W1", name="站", line_id=line.id, seq=1))
     p = md.create_product(ProductCreate(code="P", name="件", type="finished"))
     routing = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id,
-        operations=[OperationCreate(seq=10, code="OP10", name="工序", default_work_station_id=ws.id)]))
+        operations=[OperationCreate(seq=10, code="OP10", name="工序", default_work_station_id=ws.id, allowed_work_station_ids=[ws.id])]))
     prod = ProductionService(db_session)
     rule_id = None
     if with_rule:

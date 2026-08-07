@@ -18,7 +18,7 @@ def _fixture(db_session):
     line = md.create_line(LineCreate(code="ORL", name="线"))
     w1 = md.create_work_station(WorkStationCreate(code="ORW1", name="站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="ORR", name="路线", product_id=p.id, operations=[
-        OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id)]))
+        OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     op = md.routings.operations_of(r.id)[0]
     wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
         code="OR-WO", product_id=p.id, routing_id=r.id, line_id=line.id, qty=5))

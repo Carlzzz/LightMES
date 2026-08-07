@@ -30,7 +30,7 @@ def _prod(db_session):
     line = md.create_line(LineCreate(code="L", name="线"))
     ws = md.create_work_station(WorkStationCreate(code="W1", name="站1", line_id=line.id, seq=1))
     p = md.create_product(ProductCreate(code="P", name="成品", type="finished"))
-    ops = [OperationCreate(seq=10, code="OP10", name="工序10", default_work_station_id=ws.id)]
+    ops = [OperationCreate(seq=10, code="OP10", name="工序10", default_work_station_id=ws.id, allowed_work_station_ids=[ws.id])]
     routing = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id, operations=ops))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="SR", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))

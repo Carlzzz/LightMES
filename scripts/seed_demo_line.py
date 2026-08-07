@@ -65,11 +65,14 @@ def main() -> None:
                 code="RT-SHELL-A", name="外壳A主路线", product_id=shell.id,
                 operations=[
                     OperationCreate(seq=1, code="OP-上料", name="上料",
-                                    default_work_station_id=ws1.id),
+                                    default_work_station_id=ws1.id,
+                                    allowed_work_station_ids=[ws1.id]),
                     OperationCreate(seq=2, code="OP-装配", name="装配",
-                                    default_work_station_id=ws2.id),
+                                    default_work_station_id=ws2.id,
+                                    allowed_work_station_ids=[ws2.id]),
                     OperationCreate(seq=3, code="OP-检测", name="检测",
-                                    default_work_station_id=ws3.id),
+                                    default_work_station_id=ws3.id,
+                                    allowed_work_station_ids=[ws3.id]),
                 ]))
 
         # 4) BOM（主板 x1 唯一件 + 螺丝 x4 批次件）—— 若已有 active BOM 则跳过

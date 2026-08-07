@@ -34,8 +34,8 @@ def _two_station(db_session, required_skill=False, op_level=None):
     p = md.create_product(ProductCreate(code="P", name="成品", type="finished"))
     skill = sk.create_skill(SkillCreate(code="ASSY", name="装配", max_level=3))
     ops = [
-        OperationCreate(seq=10, code="OP10", name="工序10", default_work_station_id=ws1.id),
-        OperationCreate(seq=20, code="OP20", name="工序20", default_work_station_id=ws2.id),
+        OperationCreate(seq=10, code="OP10", name="工序10", default_work_station_id=ws1.id, allowed_work_station_ids=[ws1.id]),
+        OperationCreate(seq=20, code="OP20", name="工序20", default_work_station_id=ws2.id, allowed_work_station_ids=[ws2.id]),
     ]
     routing = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id, operations=ops))
     if required_skill:
@@ -49,15 +49,15 @@ def _two_station(db_session, required_skill=False, op_level=None):
     return ws1, ws2, skill
 
 
-def test_e2e_scan_load_pass_reset(client, db_session):
+def test_e2e_scan_load_pass_switch_prompt(client, db_session):
     ws1, ws2, skill = _two_station(db_session)
     _login(client, db_session)
     # 首件加载
     r1 = client.post("/production/station/load", data={"work_station_id": str(ws1.id), "scan": "WO"})
     assert r1.status_code == 200 and "工序10" in r1.text
-    # 过首站 → 成功 + 出现"扫下一单元"
+    # 过首站 → 成功 + 下一工序(OP20@ws2)不在本站 → 切站提示
     r2 = client.post("/production/station/pass", data={"work_station_id": str(ws1.id), "scan": "WO"})
-    assert r2.status_code == 200 and "已过" in r2.text and "下一单元" in r2.text
+    assert r2.status_code == 200 and "已过" in r2.text and "切换作业站" in r2.text
 
 
 def test_e2e_off_station_blocked(client, db_session):

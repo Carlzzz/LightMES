@@ -335,6 +335,7 @@ body { background: #f3f7f4; }
 .station__step--current .station__step-node { background: #2f7d4f; color: #fff; border-color: #2f7d4f;
   box-shadow: 0 0 0 3px rgba(47,125,79,.25); }
 .station__step-name { font-size: 11px; margin-top: 3px; }
+.station__step-allowed { font-size: 10px; color: #6b8a76; margin-top: 2px; }
 
 /* 主网格：左右两列，列内独立滚动 */
 .station__grid { flex: 1 1 auto; display: grid; grid-template-columns: 7fr 5fr; gap: 6px; min-height: 0; }

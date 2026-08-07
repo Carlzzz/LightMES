@@ -41,7 +41,7 @@ def _passed_sn(db_session):
     w = md.create_work_station(WorkStationCreate(
         code="PSW", name="装配站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="PR", name="路线", product_id=fin.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="装配", default_work_station_id=w.id, allowed_work_station_ids=[w.id])]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

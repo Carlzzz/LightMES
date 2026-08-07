@@ -52,7 +52,7 @@ def test_double_scan_same_sn_raises_conflict():
         r = md.create_routing(RoutingCreate(
             code=f"CONC-R-{tag}", name="路线", product_id=p.id,
             operations=[OperationCreate(
-                seq=1, code="OP1", name="过站", default_work_station_id=w1.id,
+                seq=1, code="OP1", name="过站", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id],
             )],
         ))
         prod = ProductionService(setup)

@@ -25,7 +25,7 @@ def _setup(db_session, qty=3, n_ops=2):
         code=f"W{i}", name=f"站{i}", line_id=line.id, seq=i+1)) for i in range(n_ops)]
     r = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id, operations=[
         OperationCreate(seq=i+1, code=f"OP{i+1}", name=f"工序{i+1}",
-                        default_work_station_id=ws[i].id) for i in range(n_ops)]))
+                        default_work_station_id=ws[i].id, allowed_work_station_ids=[ws[i].id]) for i in range(n_ops)]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="SR", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))
     wo = prod.create_work_order(WorkOrderCreate(code="WO", product_id=p.id, routing_id=r.id, line_id=line.id, qty=qty, sn_rule_id=rule.id))

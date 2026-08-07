@@ -40,6 +40,7 @@ class OperationCreate(BaseModel):
     code: str
     name: str
     default_work_station_id: int
+    allowed_work_station_ids: list[int]  # 新增：至少 1 个；必须含 default_work_station_id
     is_mandatory: bool = True
     required_skill_id: int | None = None
     required_level: int | None = None
@@ -53,6 +54,7 @@ class OperationRead(BaseModel):
     code: str
     name: str
     default_work_station_id: int
+    allowed_work_station_ids: list[int] = []
     is_mandatory: bool
 
 
