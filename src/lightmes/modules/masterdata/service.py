@@ -27,6 +27,7 @@ from lightmes.modules.masterdata.schemas import (
     RoutingCreate,
     WorkStationCreate,
 )
+from lightmes.modules.production.repository import WorkOrderRepository
 
 
 class MasterDataService:
@@ -39,6 +40,7 @@ class MasterDataService:
         self.work_stations = WorkStationRepository(db)
         self.skills = SkillRepository(db)
         self.op_work_stations = OperationWorkStationRepository(db)
+        self.wo_repo = WorkOrderRepository(db)  # 工单引用校验用
 
     def create_product(self, data: ProductCreate) -> Product:
         if self.products.get_by_code(data.code) is not None:
@@ -110,6 +112,140 @@ class MasterDataService:
                 self.op_work_stations.add(operation.id, ws_id)
         self.db.flush()
         return routing
+
+    def _check_no_work_order(self, routing_id: int) -> None:
+        n = self.wo_repo.count_by_routing(routing_id)
+        if n > 0:
+            raise ValueError(f"该路线已被 {n} 个工单引用，请先处理工单")
+
+    def update_routing_head(self, routing_id: int, name: str) -> Routing:
+        routing = self.routings.get(routing_id)
+        if routing is None:
+            raise ValueError(f"路线不存在: {routing_id}")
+        if not name.strip():
+            raise ValueError("路线名称不能为空")
+        self._check_no_work_order(routing_id)
+        routing.name = name.strip()
+        self.db.flush()
+        return routing
+
+    def set_routing_status(self, routing_id: int, status: str) -> Routing:
+        if status not in ("active", "inactive"):
+            raise ValueError(f"无效状态: {status}")
+        routing = self.routings.get(routing_id)
+        if routing is None:
+            raise ValueError(f"路线不存在: {routing_id}")
+        self._check_no_work_order(routing_id)
+        if status == "active":
+            other = self.routings.get_active_by_product(routing.product_id)
+            if other is not None and other.id != routing_id:
+                raise ValueError(
+                    f"该产品已有 active 路线 #{other.id}（{other.code}），请先设为 inactive")
+        routing.status = status
+        self.db.flush()
+        return routing
+
+    def _validate_op_fields(self, routing_id, seq, code, name,
+                            default_work_station_id, allowed_work_station_ids,
+                            required_skill_id, required_level, exclude_op_id=None):
+        # default 存在 + allowed 非空 + default ∈ allowed + 每个 ws 存在 + 无重复
+        if self.work_stations.get(default_work_station_id) is None:
+            raise ValueError(f"作业站不存在: {default_work_station_id}")
+        if not allowed_work_station_ids:
+            raise ValueError(f"工序 {seq} 必须至少指定一个允许作业站")
+        if len(set(allowed_work_station_ids)) != len(allowed_work_station_ids):
+            raise ValueError(f"工序 {seq} 允许作业站列表存在重复")
+        if default_work_station_id not in allowed_work_station_ids:
+            raise ValueError(f"工序 {seq} 默认作业站必须在允许作业站列表内")
+        for ws_id in allowed_work_station_ids:
+            if self.work_stations.get(ws_id) is None:
+                raise ValueError(f"作业站不存在: {ws_id}")
+        # seq 唯一（同 routing 内）
+        existing = self.routings.operations_of(routing_id)
+        for o in existing:
+            if o.id != exclude_op_id and o.seq == seq:
+                raise ValueError(f"工序 seq={seq} 与已有工序冲突")
+        # 技能等级校验（沿用 P2c）
+        if required_skill_id is not None:
+            skill = self.skills.get(required_skill_id)
+            if skill is None:
+                raise ValueError(f"技能不存在: {required_skill_id}")
+            if required_level is None or required_level < 1:
+                raise ValueError(f"工序 {seq} 设置了技能要求，必须填写要求等级(>=1)")
+            if required_level > skill.max_level:
+                raise ValueError(f"工序 {seq} 要求等级超过技能最高等级")
+        # code 唯一（同 routing 内，uq_operation_routing_code）
+        for o in existing:
+            if o.id != exclude_op_id and o.code == code:
+                raise ValueError(f"工序码 {code} 与已有工序冲突")
+
+    def update_operation(self, operation_id: int, *, seq, code, name,
+                         default_work_station_id, allowed_work_station_ids,
+                         required_skill_id, required_level, is_mandatory=True) -> Operation:
+        from lightmes.modules.masterdata.models import Operation
+        op = self.db.get(Operation, operation_id)
+        if op is None:
+            raise ValueError(f"工序不存在: {operation_id}")
+        self._check_no_work_order(op.routing_id)
+        code = code.strip(); name = name.strip()
+        self._validate_op_fields(op.routing_id, seq, code, name,
+                                 default_work_station_id, allowed_work_station_ids,
+                                 required_skill_id, required_level, exclude_op_id=operation_id)
+        op.seq = seq; op.code = code; op.name = name
+        op.default_work_station_id = default_work_station_id
+        op.is_mandatory = is_mandatory
+        op.required_skill_id = required_skill_id
+        op.required_level = required_level
+        # 重写关联表
+        self.op_work_stations.delete_by_operation(operation_id)
+        for ws_id in allowed_work_station_ids:
+            self.op_work_stations.add(operation_id, ws_id)
+        self.db.flush()
+        return op
+
+    def add_operation(self, routing_id: int, *, seq, code, name,
+                      default_work_station_id, allowed_work_station_ids,
+                      required_skill_id, required_level, is_mandatory=True) -> Operation:
+        from lightmes.modules.masterdata.models import Operation
+        routing = self.routings.get(routing_id)
+        if routing is None:
+            raise ValueError(f"路线不存在: {routing_id}")
+        self._check_no_work_order(routing_id)
+        code = code.strip(); name = name.strip()
+        self._validate_op_fields(routing_id, seq, code, name,
+                                 default_work_station_id, allowed_work_station_ids,
+                                 required_skill_id, required_level)
+        op = Operation(routing_id=routing_id, seq=seq, code=code, name=name,
+                       default_work_station_id=default_work_station_id,
+                       is_mandatory=is_mandatory,
+                       required_skill_id=required_skill_id,
+                       required_level=required_level)
+        self.db.add(op); self.db.flush()
+        for ws_id in allowed_work_station_ids:
+            self.op_work_stations.add(op.id, ws_id)
+        self.db.flush()
+        return op
+
+    def delete_operation(self, operation_id: int) -> None:
+        from lightmes.modules.masterdata.models import Operation
+        op = self.db.get(Operation, operation_id)
+        if op is None:
+            raise ValueError(f"工序不存在: {operation_id}")
+        self._check_no_work_order(op.routing_id)
+        self.op_work_stations.delete_by_operation(operation_id)
+        self.db.delete(op); self.db.flush()
+
+    def delete_routing(self, routing_id: int) -> None:
+        routing = self.routings.get(routing_id)
+        if routing is None:
+            raise ValueError(f"路线不存在: {routing_id}")
+        self._check_no_work_order(routing_id)
+        # 先删 operations（关联表跟随 CASCADE），再删 routing
+        for op in self.routings.operations_of(routing_id):
+            self.op_work_stations.delete_by_operation(op.id)
+            self.db.delete(op)
+        self.db.flush()
+        self.routings.delete(routing_id)
 
     def create_bom(self, data: BomCreate) -> Bom:
         if self.products.get(data.product_id) is None:

@@ -56,6 +56,13 @@ class WorkOrderRepository:
             .order_by(WorkOrder.id)
         ).scalars().all())
 
+    def count_by_routing(self, routing_id: int) -> int:
+        from sqlalchemy import func
+        return self.db.execute(
+            select(func.count()).select_from(WorkOrder)
+            .where(WorkOrder.routing_id == routing_id)
+        ).scalar_one()
+
 
 class SerialUnitRepository:
     def __init__(self, db: Session) -> None:

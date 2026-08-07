@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete as sqlalchemy_delete, select
 from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
@@ -75,6 +75,11 @@ class RoutingRepository:
                 .order_by(Operation.seq)
             ).scalars().all()
         )
+
+    def delete(self, routing_id: int) -> None:
+        r = self.get(routing_id)
+        if r is not None:
+            self.db.delete(r); self.db.flush()
 
 
 class BomRepository:
@@ -215,3 +220,10 @@ class OperationWorkStationRepository:
             .where(OperationWorkStation.operation_id == op_id)
             .order_by(OperationWorkStation.id)
         ).scalars().all())
+
+    def delete_by_operation(self, op_id: int) -> None:
+        self.db.execute(
+            sqlalchemy_delete(OperationWorkStation)
+            .where(OperationWorkStation.operation_id == op_id)
+        )
+        self.db.flush()
