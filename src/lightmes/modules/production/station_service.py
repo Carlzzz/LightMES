@@ -66,6 +66,15 @@ class StationService:
         components: list[StationComponentView] = []
         if expected is not None:
             is_off_station = expected.default_work_station_id != work_station_id
+            if is_off_station:
+                # 不在当站直接拦截：不进入富界面，弹错误片段
+                # 找出该 SN 当前工序应到的作业站名供操作员参考
+                target_ws = self.query.get_work_station(expected.default_work_station_id)
+                target_name = (target_ws.name if target_ws is not None
+                               else f"作业站 #{expected.default_work_station_id}")
+                raise BusinessRuleError(
+                    f"该 SN 当前工序 {expected.seq} {expected.name} "
+                    f"应在【{target_name}】过站，当前作业站不符")
             if expected.required_skill_id is not None:
                 required_level = expected.required_level
                 operator_skill_level = (

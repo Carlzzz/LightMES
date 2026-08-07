@@ -22,7 +22,11 @@ def _login(client, db_session):
     assert r.headers.get("HX-Redirect") == "/"
 
 
-def test_home_page(client):
+def test_home_page(client, db_session):
+    # 首页要求登录（未登录跳 /login；TestClient 默认跟随重定向到 /login）
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == 302 and resp.headers["location"] == "/login"
+    _login(client, db_session)
     resp = client.get("/")
     assert resp.status_code == 200
     assert "LightMES" in resp.text

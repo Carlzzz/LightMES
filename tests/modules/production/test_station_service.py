@@ -84,11 +84,13 @@ def test_load_skill_sufficient_ok(db_session):
     assert view.skill_ok is True  # 3 >= 2
 
 
-def test_load_off_station_flagged(db_session):
-    # 当前工序在 ws1，但用 ws2 加载 → is_off_station True
+def test_load_off_station_raises(db_session):
+    # 当前工序在 ws1，但用 ws2 加载 → 直接抛 BusinessRuleError（不进入富界面）
+    import pytest as _pytest
+    from lightmes.shared.errors import BusinessRuleError
     db, ws1, ws2, user, comp = _setup(db_session)
-    view = StationService(db).load("WO", ws2.id, user.id)
-    assert view.is_off_station is True
+    with _pytest.raises(BusinessRuleError):
+        StationService(db).load("WO", ws2.id, user.id)
 
 
 def test_load_components_from_active_bom(db_session):
@@ -106,13 +108,14 @@ def test_load_unknown_scan_raises_not_found(db_session):
 
 
 def test_load_by_active_carrier_code(db_session):
-    # FIX 2：扫“载体码”加载 → 命中该 SN 单元的 StationView
+    # 扫"载体码"加载 → 命中该 SN 单元的 StationView
+    # 注意：首站在 ws1 过 OP10 后，单元当前工序变 OP20(ws2)，载体码加载须在 ws2
     db, ws1, ws2, user, comp = _setup(db_session)
     r = OperationPassService(db).pass_operation(OperationPassInput(
         work_station_id=ws1.id, work_order_code="WO"))
     su = SerialUnitRepository(db).get_by_sn(r.sn)
     su.carrier_code = "CARRIER-1"
     db.flush()
-    view = StationService(db).load("CARRIER-1", ws1.id, user.id)
+    view = StationService(db).load("CARRIER-1", ws2.id, user.id)
     assert view.sn == r.sn
     assert view.work_order_code == "WO"
