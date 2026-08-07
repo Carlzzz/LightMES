@@ -50,8 +50,7 @@
       <div style="width:140px">操作</div>
     </div>
     {% for ov in op_views %}
-    <form class="ops-row" hx-post="/masterdata/routings/{{ routing.id }}/operations/{{ ov.op.id }}"
-          hx-target="#ops-result" hx-swap="innerHTML"
+    <form class="ops-row" method="post" action="/masterdata/routings/{{ routing.id }}/operations/{{ ov.op.id }}"
           onsubmit="return confirm('确认保存对该工序的修改？')">
       <div><input name="seq" type="number" value="{{ ov.op.seq }}" style="width:100%"></div>
       <div><input name="code" value="{{ ov.op.code }}" style="width:100%"></div>
@@ -79,13 +78,23 @@
       <div style="white-space:nowrap">
         <button type="submit">保存</button>
         <button type="button" class="op-delete-btn"
-                onclick="if(confirm('确认删除工序 {{ ov.op.code }}？')){fetch('/masterdata/routings/{{ routing.id }}/operations/{{ ov.op.id }}/delete',{method:'POST'}).then(()=>location.reload())}">删除</button>
+                data-op-code="{{ ov.op.code }}"
+                data-delete-url="/masterdata/routings/{{ routing.id }}/operations/{{ ov.op.id }}/delete"
+                onclick="var b=this; if(!confirm('确认删除工序 '+b.dataset.opCode+'？'))return;
+                         fetch(b.dataset.deleteUrl,{method:'POST'})
+                           .then(r=>r.text())
+                           .then(html=>{
+                             if(html.indexOf('color:red')>=0){
+                               var m=html.match(/✗\s*([^<]+)/);
+                               alert('删除失败：'+(m?m[1].trim():'未知错误'));
+                             } else { location.reload(); }
+                           });">删除</button>
       </div>
     </form>
     {% endfor %}
   </div>
   <div id="ops-result" class="result-slot"></div>
-  <p class="nav-card__desc" style="margin-top:8px">保存/删除工序后整页刷新（HTMX 替换工序列表）。</p>
+  <p class="nav-card__desc" style="margin-top:8px">保存工序提交后整页刷新；删除工序失败会提示错误，成功则整页刷新。</p>
 </div>
 
 <div class="card">
@@ -101,8 +110,7 @@
       <div style="width:80px">要求等级</div>
       <div style="width:80px">操作</div>
     </div>
-    <form class="ops-row" hx-post="/masterdata/routings/{{ routing.id }}/operations"
-          hx-target="#ops-result" hx-swap="innerHTML">
+    <form class="ops-row" method="post" action="/masterdata/routings/{{ routing.id }}/operations">
       <div><input name="seq" type="number" placeholder="30" style="width:100%"></div>
       <div><input name="code" placeholder="OP30" style="width:100%"></div>
       <div><input name="name" placeholder="工序名" style="width:100%"></div>
