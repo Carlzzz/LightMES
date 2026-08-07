@@ -26,6 +26,9 @@
       <div class="station__step station__step--{{ o.status }}" {% if o.status == 'current' %}id="station-current"{% endif %}>
         <div class="station__step-node">{% if o.status == 'done' %}✓{% else %}{{ o.seq }}{% endif %}</div>
         <div class="station__step-name">{{ o.name }}</div>
+        {% if o.allowed_work_stations %}
+        <div class="station__step-allowed">可在：{{ o.allowed_work_stations|join('、') }}</div>
+        {% endif %}
         {% if o.status == 'current' %}<div class="badge">当前</div>{% endif %}
       </div>
       {% endfor %}

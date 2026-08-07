@@ -69,15 +69,21 @@ class OperationPassService:
             raise BusinessRuleError("已完工，无后续工序")
         expected = next_ops[0]
 
-        # 5. 三层防跳站：作业站须 = 期望工序默认作业站，且该作业站属工单产线
+        # 5. 三层防跳站：作业站须属工单产线；该工序的允许作业站须含当前作业站
         ws = self.query.get_work_station(data.work_station_id)
         if ws is None:
             raise NotFoundError(f"作业站不存在: {data.work_station_id}")
         if ws.line_id != wo.line_id:
             raise BusinessRuleError("当前作业站不属于本工单产线")
-        if data.work_station_id != expected.default_work_station_id:
+        allowed = self.query.get_allowed_work_stations(expected.id)
+        allowed_ids = [w.id for w in allowed]
+        if not allowed_ids:
+            allowed_ids = [expected.default_work_station_id]  # 兜底（关联表空时退化为旧行为）
+        if data.work_station_id not in allowed_ids:
+            names = "、".join(w.name for w in allowed) or f"作业站 #{expected.default_work_station_id}"
             raise BusinessRuleError(
-                f"应到工序 {expected.seq} {expected.name} 对应作业站，当前作业站不符")
+                f"该 SN 当前工序 {expected.seq} {expected.name} "
+                f"应在【{names}】之一作业站做，当前作业站不符")
 
         # 5b. 技能校验（硬拦截）：工序有技能要求时，操作员该技能等级须 >= 要求
         if expected.required_skill_id is not None:
@@ -176,9 +182,15 @@ class OperationPassService:
             line_id=wo.line_id))
 
         remaining = [o for o in operations if o.seq > expected.seq]
-        next_info = (OpInfo(seq=remaining[0].seq, name=remaining[0].name,
-                            work_station_id=remaining[0].default_work_station_id)
-                     if remaining else None)
+        next_info = None
+        next_op_can_continue_here = False
+        if remaining:
+            next_op_obj = remaining[0]
+            next_info = OpInfo(seq=next_op_obj.seq, name=next_op_obj.name,
+                               work_station_id=next_op_obj.default_work_station_id)
+            next_allowed = self.query.get_allowed_work_stations(next_op_obj.id)
+            next_allowed_ids = [w.id for w in next_allowed] or [next_op_obj.default_work_station_id]
+            next_op_can_continue_here = data.work_station_id in next_allowed_ids
         return OperationPassResult(
             sn=su.sn,
             passed_op=OpInfo(seq=expected.seq, name=expected.name,
@@ -186,4 +198,5 @@ class OperationPassService:
             next_op=next_info, is_finished=su.status == "finished",
             work_order_status=wo.status, bound_count=bound_count,
             param_count=param_count,
+            next_op_can_continue_here=next_op_can_continue_here,
         )

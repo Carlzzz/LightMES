@@ -52,9 +52,14 @@ class StationService:
                 st = "current"
             else:
                 st = "future"
+            op_allowed = self.query.get_allowed_work_stations(o.id)
             op_views.append(StationOpView(
                 seq=o.seq, name=o.name, code=o.code,
-                work_station_id=o.default_work_station_id, status=st))
+                work_station_id=o.default_work_station_id, status=st,
+                allowed_work_stations=[w.name for w in op_allowed]
+                                       or [self.query.get_work_station(o.default_work_station_id).name
+                                           if self.query.get_work_station(o.default_work_station_id) else f"#{o.default_work_station_id}"],
+            ))
 
         current_op = next((v for v in op_views if v.status == "current"), None)
 
@@ -65,16 +70,18 @@ class StationService:
         is_off_station = False
         components: list[StationComponentView] = []
         if expected is not None:
-            is_off_station = expected.default_work_station_id != work_station_id
+            allowed = self.query.get_allowed_work_stations(expected.id)
+            allowed_ids = [w.id for w in allowed]
+            if not allowed_ids:
+                allowed_ids = [expected.default_work_station_id]
+            is_off_station = work_station_id not in allowed_ids
             if is_off_station:
                 # 不在当站直接拦截：不进入富界面，弹错误片段
-                # 找出该 SN 当前工序应到的作业站名供操作员参考
-                target_ws = self.query.get_work_station(expected.default_work_station_id)
-                target_name = (target_ws.name if target_ws is not None
-                               else f"作业站 #{expected.default_work_station_id}")
+                # 列出该 SN 当前工序允许的作业站名供操作员参考
+                names = "、".join(w.name for w in allowed) or f"作业站 #{expected.default_work_station_id}"
                 raise BusinessRuleError(
                     f"该 SN 当前工序 {expected.seq} {expected.name} "
-                    f"应在【{target_name}】过站，当前作业站不符")
+                    f"应在【{names}】之一作业站做，当前作业站不符")
             if expected.required_skill_id is not None:
                 required_level = expected.required_level
                 operator_skill_level = (
