@@ -211,27 +211,29 @@ def test_e2e_work_order_blocks_all_writes(client, db_session):
     assert "工单" in r.text
     # 删路线 → 拒（200 全页重渲染含错误，不是 303）。注意：路由内 db.rollback() 会回滚
     # 未提交事务；routing 必须已 COMMIT 才能在重渲染时仍存在，否则返回 404。
+    # 整个子用例包在 try/finally：一旦断言失败，finally 仍会清理已提交的 fixture 行
+    # （PW/LW/WW1/RTW/SRW/WOW），避免污染共享开发库。cleanup 用独立 Session，
+    # 即使 db_session 处于 rollback 后的状态也能清理已提交数据。
+    from sqlalchemy import text as sqlalchemy_text
+    from lightmes.database import SessionLocal
     routing = _build()
     routing_id = routing.id
     db_session.commit()  # 提交 routing+工单，使详情页在 rollback 后仍能重渲染
-    _login(client, db_session)
-    r = client.post(f"/masterdata/routings/{routing_id}/delete", follow_redirects=False)
-    assert r.status_code == 200 and "工单" in r.text
-    assert MasterDataService(db_session).routings.get(routing_id) is not None  # 未被删除
-    # 清理已提交数据（独立 Session，按 FK 依赖顺序 DELETE）
-    from sqlalchemy import delete
-    from lightmes.database import SessionLocal
-    from lightmes.modules.masterdata.models import Line, Operation, Product, Routing, WorkStation
-    from lightmes.modules.production.models import SnRule, WorkOrder
     cleanup = SessionLocal()
     try:
-        cleanup.execute(delete(WorkOrder).where(WorkOrder.code == "WOW"))
-        cleanup.execute(delete(Operation).where(Operation.routing_id == routing_id))
-        cleanup.execute(delete(Routing).where(Routing.id == routing_id))
-        cleanup.execute(delete(SnRule).where(SnRule.code == "SRW"))
-        cleanup.execute(delete(WorkStation).where(WorkStation.code == "WW1"))
-        cleanup.execute(delete(Line).where(Line.code == "LW"))
-        cleanup.execute(delete(Product).where(Product.code == "PW"))
-        cleanup.commit()
+        _login(client, db_session)
+        r = client.post(f"/masterdata/routings/{routing_id}/delete", follow_redirects=False)
+        assert r.status_code == 200 and "工单" in r.text
+        assert MasterDataService(db_session).routings.get(routing_id) is not None  # 未被删除
     finally:
+        # 清理已提交数据（独立 Session，按 FK 依赖顺序 DELETE）
+        cleanup.execute(sqlalchemy_text("delete from work_orders where code='WOW'"))
+        cleanup.execute(sqlalchemy_text("delete from operations where routing_id in (select id from routings where code='RTW')"))
+        cleanup.execute(sqlalchemy_text("delete from operation_work_stations where operation_id in (select id from operations where routing_id in (select id from routings where code='RTW'))"))
+        cleanup.execute(sqlalchemy_text("delete from routings where code='RTW'"))
+        cleanup.execute(sqlalchemy_text("delete from sn_rules where code='SRW'"))
+        cleanup.execute(sqlalchemy_text("delete from work_stations where code='WW1'"))
+        cleanup.execute(sqlalchemy_text("delete from lines where code='LW'"))
+        cleanup.execute(sqlalchemy_text("delete from products where code='PW'"))
+        cleanup.commit()
         cleanup.close()

@@ -58,9 +58,10 @@
                          fetch(b.dataset.deleteUrl,{method:'POST'})
                            .then(r=>r.text())
                            .then(html=>{
-                             if(html.indexOf('color:red')>=0){
-                               var m=html.match(/✗\s*([^<]+)/);
-                               alert('删除失败：'+(m?m[1].trim():'未知错误'));
+                             // 错误响应含 <div class="alert alert--danger"...>✗ ...</div>；成功响应是详情页无此 banner
+                             var m=html.match(/alert--danger[^>]*>✗\s*([^<]+)/);
+                             if(m){
+                               alert('删除失败：'+m[1].trim());
                              } else { location.reload(); }
                            });">删除</button>
       </div>
