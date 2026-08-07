@@ -1,13 +1,29 @@
 {% if error %}
 <div class="alert alert--danger">✗ {{ error }}</div>
 <div class="card"><div class="nav-card__desc">修正后请重新扫码。返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div></div>
-{% else %}
+{% elif switch_station %}
 <div class="alert alert--ok">
   ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
-  {% if result.is_finished %}<span class="badge">完工</span>
-  {% else %} → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}{% endif %}
+  → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}（建议作业站：{{ result.next_op.work_station_id }}）
+</div>
+<div class="card">
+  <div class="card__title">请切换作业站</div>
+  <div class="nav-card__desc">该 SN 下一工序不在本作业站可做范围。请到对应作业站继续。
+    返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div>
+</div>
+{% elif result.is_finished %}
+<div class="alert alert--ok">
+  ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
+  <span class="badge">完工</span>
   {% if result.bound_count %}<span class="badge">绑定 {{ result.bound_count }} 组件</span>{% endif %}
   {% if result.param_count %}<span class="badge">录 {{ result.param_count }} 参数</span>{% endif %}
+</div>
+<div class="card"><div class="nav-card__desc">返回 <a href="/production/station?work_station_id={{ work_station_id }}&work_order_id={{ work_order_id }}">工位作业</a>。</div></div>
+{% else %}
+<!-- 兜底"扫下一单元"分支：finished 之外的非连续场景 -->
+<div class="alert alert--ok">
+  ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}
+  → 下一站：工序{{ result.next_op.seq }} {{ result.next_op.name }}
 </div>
 <div class="card">
   <div class="card__title">继续作业</div>

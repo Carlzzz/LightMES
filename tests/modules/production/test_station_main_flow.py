@@ -86,3 +86,75 @@ def test_pass_result_keeps_work_order_context(client, db_session):
     assert r.status_code == 200
     # 重置片段带工单上下文：仍有工单号 / work_order_id 供扫下一件
     assert str(wo.id) in r.text or wo.code in r.text
+
+
+def test_e2e_continue_same_station_after_pass(client, db_session):
+    """同站连续过站：OP10+OP20 都允许 ws[0] → 过 OP10 后富界面刷到 OP20"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
+    )
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
+    md = MasterDataService(db_session)
+    p = md.create_product(ProductCreate(code="PC", name="件", type="finished"))
+    line = md.create_line(LineCreate(code="LC", name="线"))
+    ws0 = md.create_work_station(WorkStationCreate(code="WC0", name="站0", line_id=line.id, seq=1))
+    ws1 = md.create_work_station(WorkStationCreate(code="WC1", name="站1", line_id=line.id, seq=2))
+    routing = md.create_routing(RoutingCreate(code="RTC", name="路线", product_id=p.id, operations=[
+        OperationCreate(seq=10, code="OP10", name="工序10",
+                        default_work_station_id=ws0.id, allowed_work_station_ids=[ws0.id]),
+        OperationCreate(seq=20, code="OP20", name="工序20",
+                        default_work_station_id=ws0.id, allowed_work_station_ids=[ws0.id, ws1.id]),
+    ]))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="SRC", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))
+    wo = prod.create_work_order(WorkOrderCreate(code="WOC", product_id=p.id, routing_id=routing.id,
+        line_id=line.id, qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    db_session.flush()
+    _login(client, db_session)
+    # 首件 enter：扫载体码绑 SN00001
+    client.post("/production/station/enter",
+                data={"work_station_id": str(ws0.id), "work_order_id": str(wo.id), "scan": "PAL-1"})
+    # PASS OP10 → 富界面应刷新到 OP20（含"工序20"字样，且不再有"扫下一单元"）
+    r = client.post("/production/station/pass",
+                    data={"work_station_id": str(ws0.id), "scan": "PAL-1"})
+    assert r.status_code == 200
+    assert "工序20" in r.text and "当前" in r.text  # 富界面 OP20 当前
+    assert "扫下一" not in r.text  # 没回扫码页
+
+
+def test_e2e_switch_station_prompt_after_pass(client, db_session):
+    """下一工序不在本站 → 切站提示"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
+    )
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
+    md = MasterDataService(db_session)
+    p = md.create_product(ProductCreate(code="PS", name="件", type="finished"))
+    line = md.create_line(LineCreate(code="LS", name="线"))
+    ws0 = md.create_work_station(WorkStationCreate(code="WS0", name="站0", line_id=line.id, seq=1))
+    ws1 = md.create_work_station(WorkStationCreate(code="WS1", name="站1", line_id=line.id, seq=2))
+    routing = md.create_routing(RoutingCreate(code="RTS", name="路线", product_id=p.id, operations=[
+        OperationCreate(seq=10, code="OP10", name="工序10",
+                        default_work_station_id=ws0.id, allowed_work_station_ids=[ws0.id]),
+        OperationCreate(seq=20, code="OP20", name="工序20",
+                        default_work_station_id=ws1.id, allowed_work_station_ids=[ws1.id]),
+    ]))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="SRS", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))
+    wo = prod.create_work_order(WorkOrderCreate(code="WOS", product_id=p.id, routing_id=routing.id,
+        line_id=line.id, qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    db_session.flush()
+    _login(client, db_session)
+    client.post("/production/station/enter",
+                data={"work_station_id": str(ws0.id), "work_order_id": str(wo.id), "scan": "PAL-1"})
+    r = client.post("/production/station/pass",
+                    data={"work_station_id": str(ws0.id), "scan": "PAL-1"})
+    assert r.status_code == 200
+    assert "切换作业站" in r.text or "下一站" in r.text  # 切站提示
+    assert "扫下一" not in r.text  # 不是连续扫码分支
