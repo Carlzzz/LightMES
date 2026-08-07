@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}LightMES 控制台{% endblock %}
+{% block container_class %}--wide{% endblock %}
 {% block content %}
 <h1 class="page-title">生产控制台 <small>笔记本外壳组装 MES</small></h1>
 
+<div class="home-grid">
 <div class="card">
   <div class="card__title">主数据</div>
   <div class="nav-grid">
@@ -83,5 +85,6 @@
       <div class="nav-card__desc">解除 SN 与载体码绑定</div>
     </a>
   </div>
+</div>
 </div>
 {% endblock %}
