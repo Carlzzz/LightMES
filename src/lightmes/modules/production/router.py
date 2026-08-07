@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -19,7 +19,7 @@ from lightmes.modules.production.wip_service import WipService
 from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
-from lightmes.shared.errors import DomainError, NotFoundError
+from lightmes.shared.errors import DomainError, NotFoundError, BusinessRuleError
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -192,8 +192,16 @@ def wip_page(
 def station_page(
     request: Request, work_station_id: int = 0, db: Session = Depends(get_db)
 ) -> HTMLResponse:
+    query = MasterDataQueryService(db)
+    stations = query.list_work_stations()
+    # 附产线名以便下拉显示
+    station_options = [
+        {"id": ws.id, "label": f"{ws.code} {ws.name}（{query.get_line(ws.line_id).name if query.get_line(ws.line_id) else ws.line_id}）"}
+        for ws in stations
+    ]
     return templates.TemplateResponse(
-        request, "production/station.html", {"work_station_id": work_station_id}
+        request, "production/station.html",
+        {"work_station_id": work_station_id, "station_options": station_options},
     )
 
 
@@ -272,77 +280,77 @@ def station_pass(
             request, "production/partials/station_pass_result.html",
             {"error": e.detail, "work_station_id": work_station_id},
         )
+    su = SerialUnitRepository(db).get_by_sn(result.sn)
+    wo_id = su.work_order_id if su is not None else None
     return templates.TemplateResponse(
         request, "production/partials/station_pass_result.html",
-        {"result": result, "work_station_id": work_station_id},
+        {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id},
     )
 
 
-@router.post("/production/station/select-wo", response_class=HTMLResponse)
-def station_select_wo(
-    request: Request,
-    work_station_id: int = Form(...),
-    scan: str = Form(...),
-    db: Session = Depends(get_db),
+@router.get("/production/station/work-orders", response_class=HTMLResponse)
+def station_work_orders(
+    request: Request, work_station_id: int = Query(...), db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
     ws = MasterDataQueryService(db).get_work_station(work_station_id)
     if ws is None:
-        return templates.TemplateResponse(
-            request, "production/partials/station_bind_result.html",
-            {"error": f"作业站不存在: {work_station_id}", "work_station_id": work_station_id})
-    wo = ProductionService(db).work_orders.get_by_code(scan)
-    if wo is None or wo.status not in ("released", "in_process") or wo.line_id != ws.line_id:
-        return templates.TemplateResponse(
-            request, "production/partials/station_bind_result.html",
-            {"error": "工单不可投产（需已下达且属本产线）", "work_station_id": work_station_id})
-    remaining = SerialUnitRepository(db).count_pending_by_work_order(wo.id)
+        return HTMLResponse("")  # 作业站不存在 → 空片段
+    wo_repo = ProductionService(db).work_orders
+    su_repo = SerialUnitRepository(db)
+    wo_list = [
+        {"id": w.id, "code": w.code, "remaining": su_repo.count_pending_by_work_order(w.id)}
+        for w in wo_repo.selectable_for_station(ws.line_id)
+    ]
     return templates.TemplateResponse(
-        request, "production/partials/station_wo_selected.html",
-        {"wo": wo, "remaining": remaining, "work_station_id": work_station_id})
+        request, "production/partials/station_wo_options.html",
+        {"wo_list": wo_list},
+    )
 
 
-@router.post("/production/station/bind-and-pass", response_class=HTMLResponse)
-def station_bind_and_pass(
+@router.post("/production/station/enter", response_class=HTMLResponse)
+def station_enter(
     request: Request,
     work_station_id: int = Form(...),
     work_order_id: int = Form(...),
-    carrier_code: str = Form(...),
-    component_product_id: list[int] = Form(default=[]),
-    component_batch: list[str] = Form(default=[]),
-    param_key: list[str] = Form(default=[]),
-    param_value: list[str] = Form(default=[]),
-    param_unit: list[str] = Form(default=[]),
+    scan: str = Form(...),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    components = [
-        ComponentInput(component_product_id=pid, component_batch_no=b.strip())
-        for pid, b in zip(component_product_id, component_batch) if b.strip()]
-    params = []
-    for i, key in enumerate(param_key):
-        if not key.strip():
-            continue
-        val = param_value[i] if i < len(param_value) else ""
-        if not val.strip():
-            continue
-        unit = param_unit[i].strip() if i < len(param_unit) and param_unit[i].strip() else None
-        params.append(ParamInput(param_key=key.strip(), param_value=val.strip(), unit=unit))
+    su_repo = SerialUnitRepository(db)
+    load_svc = StationService(db)
     try:
-        result = CarrierService(db).bind_and_pass_first(
-            work_order_id, carrier_code.strip(), work_station_id, user.id,
-            components=components, params=params)
+        # I-1: 服务端校验工单与作业站产线一致（防篡改/下拉 bug 跨产线绑 SN）
+        ws = MasterDataQueryService(db).get_work_station(work_station_id)
+        wo = ProductionService(db).work_orders.get(work_order_id)
+        if (ws is None or wo is None
+                or wo.line_id != ws.line_id
+                or wo.status not in ("released", "in_process")):
+            raise BusinessRuleError("工单不可投产（需已下达且属本产线）")
+        # 三路判定：SN → 活跃载体码（已过首工序的单元） → 首站新载体码（绑 SN）
+        scan = scan.strip()
+        su = su_repo.get_by_sn(scan)
+        if su is None:
+            bound = su_repo.get_active_by_carrier(scan)
+            if bound is not None and bound.status != "pending":
+                # 已过首工序的活跃载体码 → 加载跟踪（扫后续站载体码）
+                su = bound
+        if su is None:
+            # 首站新载体码：绑 SN（不过站）。bind_first_carrier 内部校验
+            # （重复扫已绑 pending 载体码 → "已绑定其他产品，请先解绑" 拦截）
+            su = CarrierService(db).bind_first_carrier(work_order_id, scan, user.id)
+        view = load_svc.load(su.sn, work_station_id, user.id)
     except DomainError as e:
         db.rollback()
         return templates.TemplateResponse(
-            request, "production/partials/station_bind_result.html",
-            {"error": e.detail, "work_station_id": work_station_id})
-    remaining = SerialUnitRepository(db).count_pending_by_work_order(work_order_id)
+            request, "production/partials/station_enter_error.html",
+            {"error": e.detail, "work_station_id": work_station_id},
+        )
     return templates.TemplateResponse(
-        request, "production/partials/station_bind_result.html",
-        {"result": result, "remaining": remaining, "work_order_id": work_order_id,
-         "work_station_id": work_station_id})
+        request, "production/station_view.html",
+        {"view": view, "work_station_id": work_station_id},
+    )

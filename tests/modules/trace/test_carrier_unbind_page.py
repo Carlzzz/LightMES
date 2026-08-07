@@ -50,7 +50,7 @@ def test_unbind_submit(client, db_session):
     db_session.flush()
     _login(client, db_session)
     uid = UserRepository(db_session).get_by_username("ub").id
-    CarrierService(db_session).bind_and_pass_first(wo.id, "PAL-U", ws1.id, uid)
+    CarrierService(db_session).bind_first_carrier(wo.id, "PAL-U", uid)
     db_session.flush()
     resp = client.post("/trace/carrier-unbind", data={"scan": "PAL-U"})
     assert resp.status_code == 200 and "✓" in resp.text
