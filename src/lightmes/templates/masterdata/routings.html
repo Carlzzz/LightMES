@@ -13,28 +13,54 @@
         <select name="product_id">{% for p in products %}<option value="{{ p.id }}">{{ p.code }} {{ p.name }}</option>{% endfor %}</select>
       </div>
     </div>
-    <p class="nav-card__desc" style="margin:12px 0 6px">工序（按 seq 顺序，作业站从下拉选；留空的行忽略）</p>
-    {% for i in range(1, 6) %}
-    <div class="form-row">
-      <div class="field"><label>seq</label><input name="op_seq" type="number" value="{{ i }}"></div>
-      <div class="field"><label>工序码</label><input name="op_code" placeholder="可留空"></div>
-      <div class="field"><label>工序名</label><input name="op_name" placeholder="可留空"></div>
-      <div class="field"><label>作业站</label>
-        <select name="op_ws"><option value="">--</option>{% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }}</option>{% endfor %}</select>
-      </div>
-      <div class="field"><label>允许作业站</label>
-        <input name="op_allowed" placeholder="允许作业站ID，逗号分隔">
-      </div>
-      <div class="field"><label>技能</label>
-        <select name="op_skill"><option value="">无</option>{% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
-      </div>
-      <div class="field"><label>要求等级</label><input name="op_level" type="number" min="1"></div>
-    </div>
-    {% endfor %}
-    <button type="submit">保存路线</button>
+
+    <p class="nav-card__desc" style="margin:12px 0 6px">工序（按 seq 顺序；留空"工序码"的行忽略；"默认作业站"自动包含在"允许作业站"内）</p>
+    <table class="data-table routing-ops">
+      <thead><tr>
+        <th style="width:60px">seq</th>
+        <th style="width:110px">工序码</th>
+        <th>工序名</th>
+        <th style="width:160px">默认作业站</th>
+        <th style="width:240px">允许作业站（多选）</th>
+        <th style="width:140px">技能</th>
+        <th style="width:80px">要求等级</th>
+      </tr></thead>
+      <tbody>
+        {% for i in range(1, 6) %}
+        <tr class="op-row">
+          <td><input name="op_seq" type="number" value="{{ i }}" style="width:100%"></td>
+          <td><input name="op_code" placeholder="OP10" style="width:100%"></td>
+          <td><input name="op_name" placeholder="工序名" style="width:100%"></td>
+          <td>
+            <select name="op_ws" class="op-default-ws" style="width:100%">
+              <option value="">--</option>
+              {% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }} {{ w.name }}</option>{% endfor %}
+            </select>
+          </td>
+          <td>
+            <select multiple size="3" class="op-allowed-ws" style="width:100%"
+                    onchange="sync_allowed(this)">
+              {% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }} {{ w.name }}</option>{% endfor %}
+            </select>
+            <input type="hidden" name="op_allowed" class="op-allowed-hidden">
+          </td>
+          <td>
+            <select name="op_skill" style="width:100%">
+              <option value="">无</option>
+              {% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+            </select>
+          </td>
+          <td><input name="op_level" type="number" min="1" style="width:100%"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <button type="submit" style="margin-top:12px">保存路线</button>
   </form>
   <div id="result" class="result-slot"></div>
 </div>
+
 <div class="card">
   <div class="card__title">路线列表</div>
   <table class="data-table">
@@ -47,4 +73,38 @@
     </tbody>
   </table>
 </div>
+
+<script>
+// 默认作业站变化时，自动把它加入允许作业站的选中集（默认必须在 allowed 里）
+function on_default_change(defaultSel) {
+  var row = defaultSel.closest('.op-row');
+  var allowedSel = row.querySelector('.op-allowed-ws');
+  var defaultId = defaultSel.value;
+  if (!defaultId) return;
+  // 确保默认站在 allowed 的选中里
+  Array.from(allowedSel.options).forEach(function(opt) {
+    if (opt.value === defaultId) opt.selected = true;
+  });
+  sync_allowed(allowedSel);
+}
+// 把多选 select 的选中值序列化进隐藏 input（逗号分隔），匹配路由 op_allowed: list[str]
+function sync_allowed(allowedSel) {
+  var row = allowedSel.closest('.op-row');
+  var hidden = row.querySelector('.op-allowed-hidden');
+  var chosen = Array.from(allowedSel.selectedOptions).map(function(o){return o.value;});
+  hidden.value = chosen.join(',');
+  // 若允许集非空但默认站不在选中里，自动补回（防误操作取消默认站）
+  var defaultSel = row.querySelector('.op-default-ws');
+  if (defaultSel.value && chosen.length && chosen.indexOf(defaultSel.value) === -1) {
+    Array.from(allowedSel.options).forEach(function(opt) {
+      if (opt.value === defaultSel.value) opt.selected = true;
+    });
+    hidden.value = chosen.concat([defaultSel.value]).join(',');
+  }
+}
+// 默认作业站 change 绑定
+document.querySelectorAll('.op-default-ws').forEach(function(sel) {
+  sel.addEventListener('change', function(){ on_default_change(this); });
+});
+</script>
 {% endblock %}
