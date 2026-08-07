@@ -49,7 +49,7 @@
           <div class="card__title">当前工序物料追溯 <span class="badge">BOM 匹配</span></div>
           {% if view.components %}
           <div class="data-table-wrap">
-          <table class="data-table">
+          <table class="data-table" id="component-table">
             <thead><tr><th>物料</th><th>需求量</th><th>批次/条码（扫码）</th></tr></thead>
             <tbody>
               {% for c in view.components %}
@@ -57,7 +57,7 @@
                 <td>{{ c.component_code }} {{ c.component_name }}</td>
                 <td>{{ c.qty }}</td>
                 <td><input type="hidden" name="component_product_id" value="{{ c.component_product_id }}">
-                  <input name="component_batch" placeholder="扫描该物料批次..."></td>
+                  <input name="component_batch" class="comp-scan" placeholder="扫描该物料批次..." autocomplete="off"></td>
               </tr>
               {% endfor %}
             </tbody>
@@ -68,19 +68,23 @@
 
         <div class="card">
           <div class="card__title">工艺参数采集 <span class="badge">手录</span></div>
-          <table class="data-table">
-            <thead><tr><th>参数名</th><th>数值</th><th>单位</th></tr></thead>
-            <tbody>
+          <table class="data-table" id="param-table">
+            <thead><tr><th>参数名</th><th>数值</th><th>单位</th><th></th></tr></thead>
+            <tbody id="param-rows">
               {% for i in range(3) %}
-              <tr>
+              <tr class="param-row">
                 <td><input name="param_key" placeholder="参数名"></td>
                 <td><input name="param_value" placeholder="数值"></td>
                 <td><input name="param_unit" placeholder="单位"></td>
+                <td><button type="button" class="param-del-btn" onclick="this.closest('.param-row').remove()" title="删除">×</button></td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
-          <div class="nav-card__desc">PLC 自动采集：暂未开放（留白）。</div>
+          <div class="param-toolbar">
+            <button type="button" class="btn-secondary btn-sm" id="param-add-btn">+ 添加参数行</button>
+            <span class="nav-card__desc">PLC 自动采集：暂未开放</span>
+          </div>
         </div>
       </div>
 
@@ -91,8 +95,10 @@
         </div>
         <div class="card">
           <div class="card__title">异常干预</div>
-          <a class="btn-secondary" href="/trace/rework">申请返工</a>
-          <button type="button" class="btn-secondary" disabled title="暂未开放">申请跳站</button>
+          <div class="station__aside-actions">
+            <a class="btn-secondary" href="/trace/rework">申请返工</a>
+            <button type="button" class="btn-secondary" disabled title="暂未开放">申请跳站</button>
+          </div>
         </div>
       </div>
     </div>
@@ -107,7 +113,66 @@
 </div>
 <script>
   (function () {
+    // 滚动当前工序到可视区
     var cur = document.getElementById('station-current');
     if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
+
+    // 组件扫码：扫完自动跳到下一行
+    var compInputs = document.querySelectorAll('.comp-scan');
+    compInputs.forEach(function(inp, i) {
+      inp.addEventListener('change', function() {
+        if (inp.value.trim() && i < compInputs.length - 1) {
+          compInputs[i + 1].focus();
+        }
+      });
+    });
+
+    // 参数行动态增减
+    var addBtn = document.getElementById('param-add-btn');
+    var tbody = document.getElementById('param-rows');
+    if (addBtn && tbody) {
+      addBtn.addEventListener('click', function() {
+        var tr = document.createElement('tr');
+        tr.className = 'param-row';
+        tr.innerHTML =
+          '<td><input name="param_key" placeholder="参数名"></td>' +
+          '<td><input name="param_value" placeholder="数值"></td>' +
+          '<td><input name="param_unit" placeholder="单位"></td>' +
+          '<td><button type="button" class="param-del-btn" onclick="this.closest(\'.param-row\').remove()" title="删除">×</button></td>';
+        tbody.appendChild(tr);
+        tr.querySelector('input').focus();
+      });
+    }
+
+    // 过站成功/失败音效反馈
+    document.addEventListener('htmx:afterRequest', function(e) {
+      var target = e.detail.target;
+      if (target && target.id === 'station-root' && e.detail.successful) {
+        var html = target.innerHTML || '';
+        var isPass = html.indexOf('station__pass') >= 0 || html.indexOf('alert--ok') >= 0;
+        var isError = html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0;
+        if (isPass && !isError) {
+          // 成功提示音
+          try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 880; gain.gain.value = 0.15;
+            osc.start(); osc.stop(ctx.currentTime + 0.15);
+          } catch(_) {}
+        } else if (isError) {
+          // 错误提示音
+          try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 220; gain.gain.value = 0.2;
+            osc.start(); osc.stop(ctx.currentTime + 0.3);
+          } catch(_) {}
+        }
+      }
+    });
   })();
 </script>
