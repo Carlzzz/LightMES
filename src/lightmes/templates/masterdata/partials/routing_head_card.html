@@ -1,0 +1,33 @@
+<div id="head-card">
+<div class="card">
+  <div class="card__title">路线头</div>
+  <form class="form-row" hx-post="/masterdata/routings/{{ routing.id }}" hx-target="#head-card" hx-swap="outerHTML">
+    <div class="field"><label>编码</label><input value="{{ routing.code }}" disabled></div>
+    <div class="field"><label>产品</label><input value="{{ product.code }} {{ product.name }}" disabled></div>
+    <div class="field" style="flex:1"><label>名称</label><input name="name" value="{{ routing.name }}" required></div>
+    <button type="submit">保存头</button>
+  </form>
+  <div class="form-row" style="margin-top:8px">
+    <div class="field"><label>状态</label><input value="{{ routing.status }}" disabled></div>
+    {% if routing.status == "active" %}
+    <form hx-post="/masterdata/routings/{{ routing.id }}/status" hx-target="#head-card" hx-swap="outerHTML"
+          style="align-self:flex-end">
+      <input type="hidden" name="status" value="inactive">
+      <button type="submit" class="btn-secondary">设为 inactive</button>
+    </form>
+    {% else %}
+    <form hx-post="/masterdata/routings/{{ routing.id }}/status" hx-target="#head-card" hx-swap="outerHTML"
+          style="align-self:flex-end">
+      <input type="hidden" name="status" value="active">
+      <button type="submit" class="btn-secondary">设为 active</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/masterdata/routings/{{ routing.id }}/delete"
+          style="align-self:flex-end; margin-left:auto"
+          onsubmit="return confirm('确认删除路线 {{ routing.code }}？该操作不可恢复。')">
+      <button type="submit" style="background:#d9534f;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer">删除路线</button>
+    </form>
+  </div>
+  <div id="head-result" class="result-slot"></div>
+</div>
+</div>

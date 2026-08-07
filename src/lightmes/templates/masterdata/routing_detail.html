@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}路线详情 · {{ routing.code }}{% endblock %}
+{% block container_class %}container--wide{% endblock %}
+{% block content %}
+<h1 class="page-title">路线详情 · <small>{{ routing.code }} {{ routing.name }}</small></h1>
+
+{% if error %}
+<div class="alert alert--danger" style="margin-bottom:16px">✗ {{ error }}</div>
+{% endif %}
+
+{% include "masterdata/partials/routing_head_card.html" %}
+
+<div class="card">
+  <div class="card__title">工序（每行单独保存）</div>
+  <div class="ops-grid">
+    <div class="ops-row ops-head">
+      <div style="width:60px">seq</div>
+      <div style="width:110px">工序码</div>
+      <div>工序名</div>
+      <div style="width:180px">默认作业站</div>
+      <div style="min-width:240px">允许作业站（勾选）</div>
+      <div style="width:140px">技能</div>
+      <div style="width:80px">要求等级</div>
+      <div style="width:140px">操作</div>
+    </div>
+    {% for ov in op_views %}
+    <form class="ops-row" method="post" action="/masterdata/routings/{{ routing.id }}/operations/{{ ov.op.id }}"
+          onsubmit="return confirm('确认保存对该工序的修改？')">
+      <div><input name="seq" type="number" value="{{ ov.op.seq }}" style="width:100%"></div>
+      <div><input name="code" value="{{ ov.op.code }}" style="width:100%"></div>
+      <div><input name="name" value="{{ ov.op.name }}" style="width:100%"></div>
+      <div>
+        <select name="op_ws" class="op-default-ws" style="width:100%">
+          {% for w in work_stations %}<option value="{{ w.id }}" {% if w.id == ov.op.default_work_station_id %}selected{% endif %}>{{ w.code }} {{ w.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <div class="op-allowed-cbs">
+          {% for w in work_stations %}
+          <label class="cb"><input type="checkbox" class="op-allowed-cb" value="{{ w.id }}" {% if w.id in ov.allowed_ws_ids %}checked{% endif %}><span>{{ w.code }} {{ w.name }}</span></label>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="op_allowed" class="op-allowed-hidden" value="{{ ov.allowed_ws_ids|join(',') }}">
+      </div>
+      <div>
+        <select name="op_skill" style="width:100%">
+          <option value="">无</option>
+          {% for s in skills %}<option value="{{ s.id }}" {% if ov.op.required_skill_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><input name="op_level" type="number" min="1" value="{{ ov.op.required_level or '' }}" style="width:100%"></div>
+      <div style="white-space:nowrap">
+        <button type="submit">保存</button>
+        <button type="button" class="op-delete-btn"
+                data-op-code="{{ ov.op.code }}"
+                data-delete-url="/masterdata/routings/{{ routing.id }}/operations/{{ ov.op.id }}/delete"
+                onclick="var b=this; if(!confirm('确认删除工序 '+b.dataset.opCode+'？'))return;
+                         fetch(b.dataset.deleteUrl,{method:'POST'})
+                           .then(r=>r.text())
+                           .then(html=>{
+                             // 错误响应含 <div class="alert alert--danger"...>✗ ...</div>；成功响应是详情页无此 banner
+                             var m=html.match(/alert--danger[^>]*>✗\s*([^<]+)/);
+                             if(m){
+                               alert('删除失败：'+m[1].trim());
+                             } else { location.reload(); }
+                           });">删除</button>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
+  <p class="nav-card__desc" style="margin-top:8px">保存工序提交后整页刷新；删除工序失败会提示错误，成功则整页刷新。</p>
+</div>
+
+<div class="card">
+  <div class="card__title">新增工序</div>
+  <div class="ops-grid">
+    <div class="ops-row ops-head">
+      <div style="width:60px">seq</div>
+      <div style="width:110px">工序码</div>
+      <div>工序名</div>
+      <div style="width:180px">默认作业站</div>
+      <div style="min-width:240px">允许作业站（勾选）</div>
+      <div style="width:140px">技能</div>
+      <div style="width:80px">要求等级</div>
+      <div style="width:80px">操作</div>
+    </div>
+    <form class="ops-row" method="post" action="/masterdata/routings/{{ routing.id }}/operations">
+      <div><input name="seq" type="number" placeholder="30" style="width:100%"></div>
+      <div><input name="code" placeholder="OP30" style="width:100%"></div>
+      <div><input name="name" placeholder="工序名" style="width:100%"></div>
+      <div>
+        <select name="op_ws" class="op-default-ws" style="width:100%">
+          <option value="">--</option>
+          {% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }} {{ w.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <div class="op-allowed-cbs">
+          {% for w in work_stations %}
+          <label class="cb"><input type="checkbox" class="op-allowed-cb" value="{{ w.id }}"><span>{{ w.code }} {{ w.name }}</span></label>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="op_allowed" class="op-allowed-hidden" value="">
+      </div>
+      <div>
+        <select name="op_skill" style="width:100%">
+          <option value="">无</option>
+          {% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><input name="op_level" type="number" min="1" style="width:100%"></div>
+      <div><button type="submit">新增</button></div>
+    </form>
+  </div>
+</div>
+
+<style>
+.ops-grid { display: table; width: 100%; border-collapse: collapse; }
+.ops-row { display: table-row; }
+.ops-head { font-weight: 600; background: var(--mint-50, #f0f7f3); }
+.ops-row > div { display: table-cell; padding: 6px 4px; border-bottom: 1px solid #e7ece9; vertical-align: middle; }
+.ops-head > div { padding: 8px 4px; font-size: 12px; }
+.ops-grid .op-allowed-cbs {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 120px; overflow-y: auto; font-size: 12px;
+}
+.ops-grid .cb {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; padding: 2px 6px; border-radius: 4px;
+}
+.ops-grid .cb input[type="checkbox"] { margin: 0; }
+.ops-grid .cb:has(input:checked) {
+  background: var(--mint-200, #c5e5d4); font-weight: 600;
+}
+.ops-grid .ops-row input[type="text"],
+.ops-grid .ops-row input:not([type]),
+.ops-grid .ops-row input[type="number"],
+.ops-grid .ops-row select { padding: 4px 6px; font-size: 13px; box-sizing: border-box; }
+</style>
+
+<script>
+// 工序行：默认站 change → 自动勾选对应复选框 + 同步隐藏 input
+function sync_allowed(row) {
+  var cbs = row.querySelectorAll('.op-allowed-cb');
+  var chosen = Array.from(cbs).filter(function(cb){return cb.checked;}).map(function(cb){return cb.value;});
+  var defaultSel = row.querySelector('.op-default-ws');
+  if (defaultSel.value && chosen.indexOf(defaultSel.value) === -1) {
+    chosen.push(defaultSel.value);
+    var defCb = row.querySelector('.op-allowed-cb[value="'+defaultSel.value+'"]');
+    if (defCb) defCb.checked = true;
+  }
+  row.querySelector('.op-allowed-hidden').value = chosen.join(',');
+}
+document.querySelectorAll('.ops-grid .op-default-ws').forEach(function(sel) {
+  sel.addEventListener('change', function(){
+    var row = this.closest('.ops-row');
+    if (this.value) {
+      var defCb = row.querySelector('.op-allowed-cb[value="'+this.value+'"]');
+      if (defCb) defCb.checked = true;
+    }
+    sync_allowed(row);
+  });
+});
+document.querySelectorAll('.ops-grid .op-allowed-cb').forEach(function(cb) {
+  cb.addEventListener('change', function(){ sync_allowed(this.closest('.ops-row')); });
+});
+</script>
+{% endblock %}
