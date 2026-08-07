@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}路线详情{% endblock %}
+{% block content %}
+<h1 class="page-title">路线 {{ routing.code }}</h1>
+<div class="card">
+  <div class="card__title">路线头</div>
+  <div>code: {{ routing.code }} | name: {{ routing.name }} | status: {{ routing.status }}</div>
+</div>
+<div class="card">
+  <div class="card__title">工序</div>
+  <ul>
+    {% for ov in op_views %}
+    <li>{{ ov.op.seq }} {{ ov.op.code }} {{ ov.op.name }} (default={{ ov.op.default_work_station_id }}, allowed_ids={{ ov.allowed_ws_ids }})</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

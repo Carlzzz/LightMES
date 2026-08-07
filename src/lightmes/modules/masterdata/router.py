@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
@@ -397,5 +398,149 @@ def boms_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "masterdata/boms.html", {"boms": boms}
     )
+
+
+@router.get("/masterdata/routings/{routing_id}", response_class=HTMLResponse)
+def routing_detail_page(
+    request: Request, routing_id: int, db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    svc = MasterDataService(db)
+    query = MasterDataQueryService(db)
+    routing = svc.routings.get(routing_id)
+    if routing is None:
+        return HTMLResponse("路线不存在", status_code=404)
+    operations = svc.routings.operations_of(routing_id)
+    op_views = []
+    for op in operations:
+        allowed_ws = query.get_allowed_work_stations(op.id)
+        op_views.append({
+            "op": op,
+            "allowed_ws_ids": [w.id for w in allowed_ws],
+        })
+    product = svc.products.get(routing.product_id)
+    return templates.TemplateResponse(
+        request, "masterdata/routing_detail.html",
+        {"routing": routing, "product": product, "op_views": op_views,
+         "work_stations": svc.work_stations.list_all(),
+         "skills": SkillService(db).list_skills()})
+
+
+def _parse_allowed(allowed_str: str, default_ws: int) -> list[int]:
+    """逗号分隔 ws_id 串 → list[int]，去重保序；空则 [default_ws]。"""
+    if allowed_str.strip():
+        ids = [int(x) for x in allowed_str.split(",") if x.strip().isdigit()]
+    else:
+        ids = [default_ws]
+    return list(dict.fromkeys(ids))
+
+
+@router.post("/masterdata/routings/{routing_id}", response_class=HTMLResponse)
+def routing_update_head(
+    request: Request, routing_id: int, name: str = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    try:
+        MasterDataService(db).update_routing_head(routing_id, name)
+    except ValueError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+    return HTMLResponse(f'<div style="color:green">✓ 已保存路线头</div>')
+
+
+@router.post("/masterdata/routings/{routing_id}/status", response_class=HTMLResponse)
+def routing_set_status(
+    request: Request, routing_id: int, status: str = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    try:
+        MasterDataService(db).set_routing_status(routing_id, status)
+    except ValueError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+    return HTMLResponse(f'<div style="color:green">✓ 状态已更新为 {escape(status)}</div>')
+
+
+@router.post("/masterdata/routings/{routing_id}/operations", response_class=HTMLResponse)
+def routing_add_operation(
+    request: Request, routing_id: int,
+    seq: int = Form(...), code: str = Form(...), name: str = Form(...),
+    op_ws: int = Form(...), op_allowed: str = Form(""),
+    op_skill: str = Form(""), op_level: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    allowed_ids = _parse_allowed(op_allowed, op_ws)
+    try:
+        MasterDataService(db).add_operation(
+            routing_id, seq=seq, code=code, name=name,
+            default_work_station_id=op_ws, allowed_work_station_ids=allowed_ids,
+            required_skill_id=int(op_skill) if op_skill.strip() else None,
+            required_level=int(op_level) if op_level.strip() else None,
+            is_mandatory=True)
+    except ValueError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+    # 成功后重新渲染详情页（含新工序）
+    return routing_detail_page(request, routing_id, db)
+
+
+@router.post("/masterdata/routings/{routing_id}/operations/{operation_id}", response_class=HTMLResponse)
+def routing_update_operation(
+    request: Request, routing_id: int, operation_id: int,
+    seq: int = Form(...), code: str = Form(...), name: str = Form(...),
+    op_ws: int = Form(...), op_allowed: str = Form(""),
+    op_skill: str = Form(""), op_level: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    allowed_ids = _parse_allowed(op_allowed, op_ws)
+    try:
+        MasterDataService(db).update_operation(
+            operation_id, seq=seq, code=code, name=name,
+            default_work_station_id=op_ws, allowed_work_station_ids=allowed_ids,
+            required_skill_id=int(op_skill) if op_skill.strip() else None,
+            required_level=int(op_level) if op_level.strip() else None,
+            is_mandatory=True)
+    except ValueError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+    return routing_detail_page(request, routing_id, db)
+
+
+@router.post("/masterdata/routings/{routing_id}/operations/{operation_id}/delete", response_class=HTMLResponse)
+def routing_delete_operation(
+    request: Request, routing_id: int, operation_id: int,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    try:
+        MasterDataService(db).delete_operation(operation_id)
+    except ValueError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>')
+    return routing_detail_page(request, routing_id, db)
+
+
+@router.post("/masterdata/routings/{routing_id}/delete")
+def routing_delete(
+    request: Request, routing_id: int, db: Session = Depends(get_db),
+):
+    if current_user_or_none(request, db) is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    try:
+        MasterDataService(db).delete_routing(routing_id)
+    except ValueError as e:
+        db.rollback()
+        return HTMLResponse(f'<div style="color:red">✗ {escape(str(e))}</div>', status_code=200)
+    return Response(status_code=303, headers={"Location": "/masterdata/routings"})
 
 
