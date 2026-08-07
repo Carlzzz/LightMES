@@ -1,43 +1,41 @@
 {% extends "base.html" %}
 {% block title %}工位作业{% endblock %}
+{% block chrome %}{% endblock %}
 {% block content %}
-<h1 class="page-title">工位作业主界面</h1>
-
-<div class="card">
-  <div class="card__title">扫码进入</div>
-  <form class="form-row" id="enter-form" hx-post="/production/station/enter" hx-target="#station-root" hx-swap="innerHTML"
-        hx-on::after-request="if(event.detail.successful) document.getElementById('enter-scan').value=''">
-    <div class="field"><label>作业站</label>
-      <select id="station-ws-select" name="work_station_id" required
-              onchange="if(this.value){document.getElementById('station-wo-select').setAttribute('hx-vals', JSON.stringify({work_station_id:this.value})); htmx.trigger(document.getElementById('station-wo-select'),'reset-wo'); document.getElementById('station-root').innerHTML='';}">
-        <option value="" disabled selected>— 选择作业站 —</option>
-        {% for s in station_options %}
-        <option value="{{ s.id }}" {% if s.id == work_station_id %}selected{% endif %}>{{ s.label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field"><label>工单</label>
-      <select id="station-wo-select" name="work_order_id" required
-              hx-get="/production/station/work-orders"
-              hx-trigger="reset-wo from:body"
-              hx-target="this"
-              hx-swap="innerHTML"
-              hx-include="#station-ws-select"
-              onchange="document.getElementById('station-root').innerHTML='';">
-        <option value="" disabled selected>— 选择工单 —</option>
-      </select>
-    </div>
-    <div class="field" style="flex:1"><label>扫 SN / 载体码</label>
-      <input id="enter-scan" name="scan" placeholder="首件扫载体码，后续扫 SN/载体码" required autofocus></div>
-    <button type="submit">进入</button>
-  </form>
-  <div class="nav-card__desc">作业站选定后自动列出本产线可用工单；首件扫载体码即自动绑定 SN 进入主界面，再手动确认过站。</div>
+<div class="station-shell">
+  <div class="station-ready card">
+    <div class="card__title">扫码进入</div>
+    <form class="form-row" id="enter-form" hx-post="/production/station/enter" hx-target="#station-root" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) document.getElementById('enter-scan').value=''">
+      <div class="field"><label>作业站</label>
+        <select id="station-ws-select" name="work_station_id" required
+                onchange="if(this.value){htmx.trigger(document.getElementById('station-wo-select'),'reset-wo'); document.getElementById('station-root').innerHTML='';}">
+          <option value="" disabled selected>— 选择作业站 —</option>
+          {% for s in station_options %}
+          <option value="{{ s.id }}" {% if s.id == work_station_id %}selected{% endif %}>{{ s.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>工单</label>
+        <select id="station-wo-select" name="work_order_id" required
+                hx-get="/production/station/work-orders"
+                hx-trigger="reset-wo from:body"
+                hx-target="this"
+                hx-swap="innerHTML"
+                hx-include="#station-ws-select"
+                onchange="document.getElementById('station-root').innerHTML='';">
+          <option value="" disabled selected>— 选择工单 —</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1"><label>扫 SN / 载体码</label>
+        <input id="enter-scan" name="scan" placeholder="首件扫载体码，后续扫 SN/载体码" required autofocus></div>
+      <button type="submit">进入</button>
+    </form>
+    <div class="nav-card__desc">作业站选定后自动列出本产线可用工单；首件扫载体码即自动绑定 SN 进入主界面，再手动确认过站。</div>
+  </div>
+  <div id="station-root" class="station-root"></div>
 </div>
-
-<div id="station-root" class="station-root"></div>
-
 <script>
-  // 页面加载时，若已选作业站，触发工单下拉拉取
   (function () {
     var wsSel = document.getElementById('station-ws-select');
     if (wsSel && wsSel.value) {

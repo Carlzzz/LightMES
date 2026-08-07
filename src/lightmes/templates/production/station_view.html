@@ -14,15 +14,12 @@
     </div>
   </div>
 
-  {% if view.is_off_station %}
-  <div class="alert alert--danger">⚠ 当前工序不属于本作业站，过站将被防跳站拦截。</div>
-  {% endif %}
   {% if not view.skill_ok %}
   <div class="alert alert--danger">⚠ 操作员技能不足，过站将被拦截。</div>
   {% endif %}
 
   <!-- 工艺路径全景 -->
-  <div class="card">
+  <div class="station__path-wrap card">
     <div class="card__title">工艺路径全景</div>
     <div class="station__path" id="station-path">
       {% for o in view.operations %}
@@ -48,6 +45,7 @@
         <div class="card">
           <div class="card__title">当前工序物料追溯 <span class="badge">BOM 匹配</span></div>
           {% if view.components %}
+          <div class="data-table-wrap">
           <table class="data-table">
             <thead><tr><th>物料</th><th>需求量</th><th>批次/条码（扫码）</th></tr></thead>
             <tbody>
@@ -61,6 +59,7 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
           {% else %}<div class="nav-card__desc">当前工序无 BOM 绑定项。</div>{% endif %}
         </div>
 
@@ -96,7 +95,7 @@
     </div>
 
     <div class="station__footer">
-      <span class="station__status">{% if view.skill_ok and not view.is_off_station %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
+      <span class="station__status">{% if view.skill_ok %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
       <button type="button" class="btn-secondary" disabled title="暂未开放">异常呼叫 (ANDON)</button>
       <button type="submit" class="station__pass">确认过站 (PASS)</button>
     </div>
