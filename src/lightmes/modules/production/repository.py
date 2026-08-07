@@ -49,6 +49,7 @@ class WorkOrderRepository:
         ).scalar_one_or_none()
 
     def selectable_for_station(self, line_id: int) -> list[WorkOrder]:
+        """该产线下状态为 released/in_process 的工单。"""
         return list(self.db.execute(
             select(WorkOrder).where(
                 WorkOrder.line_id == line_id,
@@ -86,10 +87,11 @@ class SerialUnitRepository:
         ).scalars().all())
 
     def count_pending_by_work_order(self, work_order_id: int) -> int:
+        """剩余可操作 SN 数：pending + in_process（未完工未报废）。"""
         return self.db.execute(
             select(func.count()).select_from(SerialUnit).where(
                 SerialUnit.work_order_id == work_order_id,
-                SerialUnit.status == "pending")
+                SerialUnit.status.notin_(("finished", "scrapped")))
         ).scalar_one()
 
     def get_active_by_carrier(self, carrier_code: str) -> SerialUnit | None:

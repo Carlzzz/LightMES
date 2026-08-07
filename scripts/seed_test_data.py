@@ -42,26 +42,35 @@ def seed():
     op1 = Operation(routing_id=routing.id, seq=10, code="OP-10", name="上盖投料",
                     default_work_station_id=ws1.id, is_mandatory=True,
                     sop_text="1. 取上盖壳体\n2. 扫描壳体SN\n3. 确认无外观不良\n4. 放入载具")
-    op2 = Operation(routing_id=routing.id, seq=20, code="OP-20", name="铰链装配",
+    op2 = Operation(routing_id=routing.id, seq=20, code="OP-20", name="铰链预装",
                     default_work_station_id=ws2.id, is_mandatory=True,
                     sop_text="1. 取铰链组件\n2. 对位铰链孔位\n3. 预装到上盖\n4. 检查旋转顺畅度")
-    op3 = Operation(routing_id=routing.id, seq=30, code="OP-30", name="下盖合装",
+    op3 = Operation(routing_id=routing.id, seq=30, code="OP-30", name="铰链调试",
+                    default_work_station_id=ws2.id, is_mandatory=True,
+                    sop_text="1. 开合铰链3次\n2. 检查阻尼手感\n3. 扭力测试 1.2±0.2 N·m\n4. 标记合格位")
+    op4 = Operation(routing_id=routing.id, seq=40, code="OP-40", name="下盖合装",
                     default_work_station_id=ws3.id, is_mandatory=True,
                     sop_text="1. 取下盖壳体\n2. 与上盖对位\n3. 卡扣预锁\n4. 检查间隙均匀")
-    op4 = Operation(routing_id=routing.id, seq=40, code="OP-40", name="锁螺丝",
+    op5 = Operation(routing_id=routing.id, seq=50, code="OP-50", name="锁螺丝",
                     default_work_station_id=ws4.id, is_mandatory=True,
                     sop_text="1. 电动螺丝刀M3\n2. 扭矩 0.8±0.1 N·m\n3. 4颗对称锁付\n4. 检查无滑牙")
-    op5 = Operation(routing_id=routing.id, seq=50, code="OP-50", name="终检",
+    op6 = Operation(routing_id=routing.id, seq=60, code="OP-60", name="终检",
                     default_work_station_id=ws5.id, is_mandatory=True,
                     sop_text="1. 外观全检\n2. 开合测试3次\n3. 间隙检查<0.3mm\n4. 贴合格标签")
-    db.add_all([op1, op2, op3, op4, op5]); db.flush()
+    db.add_all([op1, op2, op3, op4, op5, op6]); db.flush()
 
-    # 工序↔作业站关联（每个工序允许的作业站）
+    # 工序↔作业站关联
+    # ws1: 上盖投料
     db.add(OperationWorkStation(operation_id=op1.id, work_station_id=ws1.id))
+    # ws2: 铰链预装 + 铰链调试（一个作业站做两道工序）
     db.add(OperationWorkStation(operation_id=op2.id, work_station_id=ws2.id))
-    db.add(OperationWorkStation(operation_id=op3.id, work_station_id=ws3.id))
-    db.add(OperationWorkStation(operation_id=op4.id, work_station_id=ws4.id))
-    db.add(OperationWorkStation(operation_id=op5.id, work_station_id=ws5.id))
+    db.add(OperationWorkStation(operation_id=op3.id, work_station_id=ws2.id))
+    # ws3: 下盖合装
+    db.add(OperationWorkStation(operation_id=op4.id, work_station_id=ws3.id))
+    # ws4: 锁螺丝
+    db.add(OperationWorkStation(operation_id=op5.id, work_station_id=ws4.id))
+    # ws5: 终检
+    db.add(OperationWorkStation(operation_id=op6.id, work_station_id=ws5.id))
 
     # ---- BOM ----
     bom = Bom(product_id=laptop_cover.id, version=1, status="active")
@@ -91,8 +100,8 @@ def seed():
     # ---- SN 规则 ----
     sn_rule = SnRule(
         code="SN-NB-A15", name="A15序列号规则",
-        pattern="{PREFIX}{YYYY}{SEQ:5}",
-        seq_reset="year",
+        pattern="NB2026{SEQ:5}",
+        seq_reset="monthly",
         product_id=laptop_cover.id,
     )
     db.add(sn_rule); db.flush()
@@ -104,10 +113,21 @@ def seed():
         routing_id=routing.id,
         line_id=line.id,
         qty=50,
-        status="released",
+        status="created",
         sn_rule_id=sn_rule.id,
     )
     db.add(wo); db.flush()
+
+    # 下达工单 -> 预生成 50 个 pending SerialUnit
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.sn_generator import SnGenerator
+    from lightmes.modules.production.repository import SerialUnitRepository, WorkOrderRepository, SnRuleRepository
+
+    sn_gen = SnGenerator(db)
+    svc = ProductionService(db)
+    svc.sn_gen = sn_gen
+    svc.release_work_order(wo.id)
+    db.flush()
 
     db.commit()
     db.close()
@@ -116,7 +136,7 @@ def seed():
     print(f"   产品: {laptop_cover.code} {laptop_cover.name}")
     print(f"   产线: {line.code} {line.name}")
     print(f"   作业站: {ws1.name}, {ws2.name}, {ws3.name}, {ws4.name}, {ws5.name}")
-    print(f"   工艺路线: {routing.code} ({op1.name}→{op2.name}→{op3.name}→{op4.name}→{op5.name})")
+    print(f"   工艺路线: {routing.code} (6道工序, WS-02做2道)")
     print(f"   BOM: 上盖×1 + 下盖×1 + 铰链×2 + M3螺丝×4")
     print(f"   SN规则: {sn_rule.pattern} (年重置)")
     print(f"   工单: {wo.code} (qty={wo.qty}, status=released)")

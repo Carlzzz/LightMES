@@ -278,10 +278,20 @@ def station_pass(
             result = svc.pass_operation(data)
     except DomainError as e:
         db.rollback()
-        return templates.TemplateResponse(
-            request, "production/partials/station_pass_result.html",
-            {"error": e.detail, "work_station_id": work_station_id},
-        )
+        # 物料绑定/参数等报错不销毁主界面：重新渲染工位视图 + 顶部错误提示
+        try:
+            view = StationService(db).load(scan, work_station_id, user.id)
+            return templates.TemplateResponse(
+                request, "production/station_view.html",
+                {"view": view, "work_station_id": work_station_id,
+                 "pass_error": e.detail},
+            )
+        except DomainError:
+            # scan 本身无效（如 SN 不存在），回退到简单错误页
+            return templates.TemplateResponse(
+                request, "production/partials/station_pass_result.html",
+                {"error": e.detail, "work_station_id": work_station_id},
+            )
     su = SerialUnitRepository(db).get_by_sn(result.sn)
     wo_id = su.work_order_id if su is not None else None
     # 成功分流：finished → 完工片段；next_op 可在本站继续 → 刷富界面到下一工序；否则切站提示
