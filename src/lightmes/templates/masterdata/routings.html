@@ -78,17 +78,15 @@
 </div>
 
 <style>
-/* 工序允许作业站复选框组：紧凑横排换行 */
+/* 工序允许作业站复选框组：单列对齐 */
 .routing-ops .op-allowed-cbs {
-  display: flex; flex-wrap: wrap; gap: 4px 10px;
-  max-height: 78px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 120px; overflow-y: auto;
   font-size: 12px;
 }
 .routing-ops .cb {
-  display: inline-flex; align-items: center; gap: 4px;
-  white-space: nowrap; cursor: pointer;
-  padding: 2px 6px; border-radius: 4px;
-  background: var(--mint-50, #f0f7f3);
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; padding: 2px 6px; border-radius: 4px;
 }
 .routing-ops .cb input[type="checkbox"] { margin: 0; }
 .routing-ops .cb:has(input:checked) {
