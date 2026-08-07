@@ -8,7 +8,7 @@ from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none, require_login
+from lightmes.modules.auth.dependencies import current_user_or_none, require_login, require_role
 from lightmes.modules.auth.models import User
 from lightmes.modules.auth.repository import UserRepository
 from lightmes.modules.masterdata.schemas import (
@@ -53,7 +53,7 @@ def _operation_read(db: Session, op: Operation) -> OperationRead:
 def create_product(
     data: ProductCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
+    current_user: User = Depends(require_role("admin")),
 ) -> ProductRead:
     try:
         product = MasterDataService(db).create_product(data)
@@ -76,7 +76,7 @@ def list_products(db: Session = Depends(get_db)) -> list[ProductRead]:
 def create_routing(
     data: RoutingCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
+    current_user: User = Depends(require_role("admin")),
 ) -> RoutingRead:
     svc = MasterDataService(db)
     try:
@@ -133,7 +133,7 @@ def get_routing(routing_id: int, db: Session = Depends(get_db)) -> RoutingRead:
 def create_bom(
     data: BomCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
+    current_user: User = Depends(require_role("admin")),
 ) -> BomRead:
     svc = MasterDataService(db)
     try:

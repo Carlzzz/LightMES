@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import require_login, current_user_or_none
+from lightmes.modules.auth.dependencies import require_login, require_role
 from lightmes.modules.auth.models import User
 from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.trace.schemas import GenealogyView, ParentRef
@@ -77,10 +77,8 @@ def rework_page(request: Request) -> HTMLResponse:
 def rework_submit(
     request: Request, sn: str = Form(...), target_seq: int = Form(...),
     reason: str = Form(""), db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
-    user = current_user_or_none(request, db)
-    if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
     try:
         su = ReworkService(db).rework(
             sn, target_seq=target_seq, reason=reason or None, operator_id=user.id)
@@ -100,10 +98,8 @@ def carrier_unbind_page(request: Request) -> HTMLResponse:
 @router.post("/trace/carrier-unbind", response_class=HTMLResponse)
 def carrier_unbind_submit(
     request: Request, scan: str = Form(...), db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor", "operator")),
 ) -> HTMLResponse:
-    user = current_user_or_none(request, db)
-    if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
     try:
         su = CarrierService(db).unbind(scan, user.id)
     except DomainError as e:
