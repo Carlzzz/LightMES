@@ -19,7 +19,7 @@
     <a class="app-bar__link" href="/logout">退出</a>
   </header>
   {% endblock %}
-  <main class="container">
+  <main class="container{% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 </body>

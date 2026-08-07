@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}工艺路径管理{% endblock %}
+{% block container_class %}container--wide{% endblock %}
 {% block content %}
 <h1 class="page-title">工艺路径管理</h1>
 <div class="card">
@@ -14,14 +15,14 @@
       </div>
     </div>
 
-    <p class="nav-card__desc" style="margin:12px 0 6px">工序（按 seq 顺序；留空"工序码"的行忽略；"默认作业站"自动包含在"允许作业站"内）</p>
+    <p class="nav-card__desc" style="margin:12px 0 6px">工序（按 seq 顺序；留空"工序码"的行忽略；选"默认作业站"会自动勾选对应允许复选框）</p>
     <table class="data-table routing-ops">
       <thead><tr>
         <th style="width:60px">seq</th>
         <th style="width:110px">工序码</th>
-        <th>工序名</th>
-        <th style="width:160px">默认作业站</th>
-        <th style="width:240px">允许作业站（多选）</th>
+        <th style="min-width:140px">工序名</th>
+        <th style="width:180px">默认作业站</th>
+        <th style="min-width:280px">允许作业站（勾选）</th>
         <th style="width:140px">技能</th>
         <th style="width:80px">要求等级</th>
       </tr></thead>
@@ -38,10 +39,12 @@
             </select>
           </td>
           <td>
-            <select multiple size="3" class="op-allowed-ws" style="width:100%"
-                    onchange="sync_allowed(this)">
-              {% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }} {{ w.name }}</option>{% endfor %}
-            </select>
+            <div class="op-allowed-cbs">
+              {% for w in work_stations %}
+              <label class="cb"><input type="checkbox" class="op-allowed-cb" value="{{ w.id }}">
+                 <span>{{ w.code }} {{ w.name }}</span></label>
+              {% endfor %}
+            </div>
             <input type="hidden" name="op_allowed" class="op-allowed-hidden">
           </td>
           <td>
@@ -74,37 +77,61 @@
   </table>
 </div>
 
+<style>
+/* 工序允许作业站复选框组：紧凑横排换行 */
+.routing-ops .op-allowed-cbs {
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+  max-height: 78px; overflow-y: auto;
+  font-size: 12px;
+}
+.routing-ops .cb {
+  display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap; cursor: pointer;
+  padding: 2px 6px; border-radius: 4px;
+  background: var(--mint-50, #f0f7f3);
+}
+.routing-ops .cb input[type="checkbox"] { margin: 0; }
+.routing-ops .cb:has(input:checked) {
+  background: var(--mint-200, #c5e5d4);
+  font-weight: 600;
+}
+.routing-ops td input[type="text"],
+.routing-ops td input:not([type]),
+.routing-ops td input[type="number"],
+.routing-ops td select { padding: 4px 6px; font-size: 13px; }
+.routing-ops .op-default-ws.is-default-set { background: #fff7e0; }
+</style>
+
 <script>
-// 默认作业站变化时，自动把它加入允许作业站的选中集（默认必须在 allowed 里）
+// 把当前行勾选的 ws_id 收集成逗号分隔串，写进隐藏 input（匹配路由 op_allowed: list[str]）
+function sync_allowed(row) {
+  var cbs = row.querySelectorAll('.op-allowed-cb');
+  var chosen = Array.from(cbs).filter(function(cb){return cb.checked;}).map(function(cb){return cb.value;});
+  // 防误操作：默认站必须始终在允许集里
+  var defaultSel = row.querySelector('.op-default-ws');
+  if (defaultSel.value && chosen.indexOf(defaultSel.value) === -1) {
+    chosen.push(defaultSel.value);
+    var defCb = row.querySelector('.op-allowed-cb[value="'+defaultSel.value+'"]');
+    if (defCb) defCb.checked = true;
+  }
+  row.querySelector('.op-allowed-hidden').value = chosen.join(',');
+}
+// 默认作业站变化 → 自动勾选对应复选框 + 同步
 function on_default_change(defaultSel) {
   var row = defaultSel.closest('.op-row');
-  var allowedSel = row.querySelector('.op-allowed-ws');
-  var defaultId = defaultSel.value;
-  if (!defaultId) return;
-  // 确保默认站在 allowed 的选中里
-  Array.from(allowedSel.options).forEach(function(opt) {
-    if (opt.value === defaultId) opt.selected = true;
-  });
-  sync_allowed(allowedSel);
-}
-// 把多选 select 的选中值序列化进隐藏 input（逗号分隔），匹配路由 op_allowed: list[str]
-function sync_allowed(allowedSel) {
-  var row = allowedSel.closest('.op-row');
-  var hidden = row.querySelector('.op-allowed-hidden');
-  var chosen = Array.from(allowedSel.selectedOptions).map(function(o){return o.value;});
-  hidden.value = chosen.join(',');
-  // 若允许集非空但默认站不在选中里，自动补回（防误操作取消默认站）
-  var defaultSel = row.querySelector('.op-default-ws');
-  if (defaultSel.value && chosen.length && chosen.indexOf(defaultSel.value) === -1) {
-    Array.from(allowedSel.options).forEach(function(opt) {
-      if (opt.value === defaultSel.value) opt.selected = true;
-    });
-    hidden.value = chosen.concat([defaultSel.value]).join(',');
+  if (defaultSel.value) {
+    var defCb = row.querySelector('.op-allowed-cb[value="'+defaultSel.value+'"]');
+    if (defCb) defCb.checked = true;
   }
+  defaultSel.classList.toggle('is-default-set', !!defaultSel.value);
+  sync_allowed(row);
 }
-// 默认作业站 change 绑定
-document.querySelectorAll('.op-default-ws').forEach(function(sel) {
+// 绑定
+document.querySelectorAll('.routing-ops .op-default-ws').forEach(function(sel) {
   sel.addEventListener('change', function(){ on_default_change(this); });
+});
+document.querySelectorAll('.routing-ops .op-allowed-cb').forEach(function(cb) {
+  cb.addEventListener('change', function(){ sync_allowed(this.closest('.op-row')); });
 });
 </script>
 {% endblock %}

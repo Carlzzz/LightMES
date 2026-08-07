@@ -88,6 +88,9 @@ html, body {
   margin: 0 auto;
   padding: 28px 24px 60px;
 }
+.container--wide {
+  max-width: 1480px;
+}
 .page-title {
   font-size: 22px;
   font-weight: 700;
