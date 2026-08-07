@@ -70,7 +70,7 @@
     <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>产品</th><th>状态</th><th>来源</th></tr></thead>
     <tbody>
       {% for r in routings %}
-      <tr><td>{{ r.id }}</td><td>{{ r.code }}</td><td>{{ r.name }}</td><td>{{ r.product_id }}</td>
+      <tr><td>{{ r.id }}</td><td><a href="/masterdata/routings/{{ r.id }}">{{ r.code }}</a></td><td>{{ r.name }}</td><td>{{ r.product_id }}</td>
       <td>{{ r.status }}</td><td>{% if r.source=="erp" %}ERP{% else %}本地{% endif %}</td></tr>
       {% endfor %}
     </tbody>

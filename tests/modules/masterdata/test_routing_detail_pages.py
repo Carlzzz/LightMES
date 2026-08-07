@@ -43,6 +43,9 @@ def test_detail_page_renders(client, db_session):
     resp = client.get(f"/masterdata/routings/{routing.id}")
     assert resp.status_code == 200
     assert "RT" in resp.text and "工序10" in resp.text
+    assert "路线头" in resp.text or "RT" in resp.text  # 路线头卡片渲染
+    assert "默认作业站" in resp.text  # 工序表格头
+    assert "删除路线" in resp.text  # 危险按钮
 
 
 def test_detail_requires_login(client, db_session):
