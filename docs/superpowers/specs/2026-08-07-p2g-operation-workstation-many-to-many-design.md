@@ -25,7 +25,8 @@ P2g 改为两层模型：
 | # | 主题 | 决策 |
 |---|---|---|
 | 1 | 关联建模 | 保留 `default_work_station_id`（默认/建议作业站）+ 新增 `operation_work_stations` 多对多关联表；default 必须在关联表允许集合里（service 层校验）。 |
-| 2 | 允许集合来源 | 主数据**手工维护**：工序编辑页多选作业站（`allowed_work_station_ids`）+ 选默认（从已选里挑）。 |
+| 2 | 允许集合来源 | 主数据**手工维护**：工序编辑页多选作业站（`allowed_work_station_ids`，options 列所有 active 站带产线名标签）+ 选默认（从已选里挑）。过站时第一层仍兜底拦异产线。 |
+| 2b | 全景显示 | 路径全景每个工序节点显示完整 allowed 站名列表（如"OP10 上线（可在：站A/站B）"），而非只显默认站名。`StationOpView` 加 `allowed_work_stations: list[str]`。 |
 | 3 | 连续过站交互 | PASS 成功：next 工序 allowed 含本站 → 刷富界面到下一工序（不回扫码页）；不含 → 提示"请切到【XX 站】"。 |
 | 4 | 混线 | 作业站不绑单一产品；扫码后按 SN 路线解析当前工序，再校验该工序是否允许在本站做。 |
 | 5 | 防跳站第一层 | 保持不变：作业站 line_id 须 = 工单 line_id（跨产线拒绝）。 |
@@ -119,20 +120,23 @@ if data.work_station_id not in allowed_ids:
 - **既有连续扫码分支**改为只在"无 next_op 或本站连续"之外不渲染（被新分流覆盖）。
 
 **主数据维护 UI**（`/masterdata/routings` 工序编辑）：
-- 工序表单加 `allowed_work_station_ids` 多选（`<select multiple name="allowed_work_station_ids">`，options = 所有作业站）。
+- 工序表单加 `allowed_work_station_ids` 多选（`<select multiple name="allowed_work_station_ids">`，options = **本工序所属路线的产品可生产的产线下的所有作业站**——UI 联动按产线过滤，避免选异产线作业站）。具体：路线已知 product_id；产品无"可生产产线"概念时，简化为**所有 is_active=true 的作业站** + 提交后由过站第一层（`ws.line_id != wo.line_id`）拦异产线。本期取简化：options 列所有 active 作业站（带产线名标签如"WS-01 上线（装配A线）"），操作员手动选本产线下的；过站时仍兜底校验。
 - `default_work_station_id` 下拉 options = 已选 allowed 集（JS 联动：allowed change → 刷新 default 下拉）。
 - 提交时 service 校验 default ∈ allowed（不在则红片段）。
 - `OperationCreate` schema 带 `allowed_work_station_ids: list[int]`（FastAPI Form 多值）。
 
-**`StationView.operations` 字段**（可选增强，本期**不做**）：每个 op 可带 allowed 列表用于全景展示——YAGNI，全景仍只显示默认作业站名（既有行为）。仅过站/扫码判定用到 allowed。
+**路径全景显示完整 allowed 列表**（`StationView.StationOpView` 扩展）：
+- 每个 op 的 `StationOpView` 新增 `allowed_work_stations: list[str]`（作业站名列表，如 `["上线工位", "备料工位"]`）。
+- 富主界面工艺路径全景的每个工序节点显示"工序名（可在：站A/站B）"，而非只显默认站名；当前工序节点同样显示其 allowed 集（含本站）。
+- 由 `StationService.load` 组装时填入 `get_allowed_work_stations(op.id)` 的 name 列表。
 
 ---
 
 ## 6. 子任务切分（4 个，顺序，各自 TDD + 复审）
 
 1. **数据模型 + 迁移**：`OperationWorkStation` 模型 + 关联表 + 唯一约束 + 数据迁移（每个现有 operation 插默认站）；`OperationCreate.allowed_work_station_ids` schema。`MasterDataService.create_routing` 校验 default ∈ allowed + 写关联表。测试：建工序带 allowed，关联表正确；default 不在 allowed 报错；现有 operation 迁移后关联表非空。
-2. **查询 + 主数据维护 UI**：`get_allowed_work_stations`；工序编辑页加多选 + 默认站联动 JS；`POST /masterdata/routings/{routing_id}/operations` 扩展接收 allowed。测试：建/改工序 allowed 多选；default 不在 allowed 拒绝；多选去重。
-3. **过站判定改写**：`pass_operation` 防跳站第二层 `work_station_id in allowed`；`StationService.load` off-station 同步；错误消息列 allowed 站名；`OperationPassResult.next_op_can_continue_here` 计算。回归：防跳站、off-station 抛错、技能硬校验、乐观锁、完工自动解绑。
+2. **查询 + 主数据维护 UI**：`get_allowed_work_stations`；工序编辑页加多选（带产线名标签）+ 默认站联动 JS；`POST /masterdata/routings/{routing_id}/operations` 扩展接收 allowed。测试：建/改工序 allowed 多选；default 不在 allowed 拒绝；多选去重。
+3. **过站判定改写 + 全景显示 allowed**：`pass_operation` 防跳站第二层 `work_station_id in allowed`；`StationService.load` off-station 同步；错误消息列 allowed 站名；`StationOpView.allowed_work_stations` 填入；全景模板每个工序节点显示完整 allowed 站名列表；`OperationPassResult.next_op_can_continue_here` 计算。回归：防跳站、off-station 抛错、技能硬校验、乐观锁、完工自动解绑。
 4. **连续过站 UX**：`station_pass` 成功三路分流（finished / continue-here-render-station_view / switch-station-prompt）；`station_pass_result.html` 切站分支。端到端：OP10+OP20 allowed 都含本站 → 富界面刷新到 OP20；下一站不在本站 → 切站提示。
 
 ---
@@ -147,6 +151,7 @@ if data.work_station_id not in allowed_ids:
   - `pass_operation` 防跳站第二层：ws_id 在 allowed → 通过；不在 → BusinessRuleError（消息含 allowed 站名）；第一层（跨产线）仍拦。
   - `StationService.load` off-station：ws_id 不在 allowed → BusinessRuleError。
   - `OperationPassResult.next_op_can_continue_here`：next_op allowed 含本站 → True；不含 → False；无 next_op → False。
+  - 路径全景显示 allowed 列表：每个工序节点 HTML 含完整 allowed 站名（如"可在：站A、站B"）。
   - 连续过站端到端：OP10+OP20 allowed 都含本站 → 过 OP10 后富界面刷新到 OP20；OP30 allowed 不含本站 → 过 OP20 后切站提示。
   - 既有回归：单站工序（allowed 只含 default）行为不变；技能硬校验；乐观锁；完工自动解绑；载体码定位。
 
@@ -156,8 +161,10 @@ if data.work_station_id not in allowed_ids:
 
 - 作业站分组/区域；作业站锁单一产品/工序（仍混线）。
 - 跨产线工序（仍由第一层 ws.line_id != wo.line_id 拦）。
-- 工序级物料校验、跳站功能（④⑤ 留后续 spec）。
-- 路径全景展示每个 op 的完整 allowed 列表（仍只显默认站名）。
+- **富界面工序级下钻可视化（双层全景：路线级 + 作业站级）**——留 P2h 单独 spec。
+- **工序级跳过功能**（之前禁用占位）——留 P2h 单独 spec。
+- **返工粒度复核/作业站选择 UI**（返工已是工序级 target_seq，但 UI/消息/作业站选择需复核）——留 P2h 单独 spec。
+- **工序级物料校验**（每工序绑特定组件，未全绑拒绝过站）——留 P2i 单独 spec。
 - 工序级 SOP/PLC（沿用 P2d 占位）。
 
 ---
