@@ -22,6 +22,9 @@
       <div class="field"><label>作业站</label>
         <select name="op_ws"><option value="">--</option>{% for w in work_stations %}<option value="{{ w.id }}">{{ w.code }}</option>{% endfor %}</select>
       </div>
+      <div class="field"><label>允许作业站</label>
+        <input name="op_allowed" placeholder="允许作业站ID，逗号分隔">
+      </div>
       <div class="field"><label>技能</label>
         <select name="op_skill"><option value="">无</option>{% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
       </div>

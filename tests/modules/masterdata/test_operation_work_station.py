@@ -6,6 +6,7 @@ from lightmes.modules.masterdata.schemas import (
 from lightmes.modules.masterdata.repository import (
     OperationWorkStationRepository, WorkStationRepository,
 )
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 
 
 def _setup(db_session, allowed_ids):
@@ -54,3 +55,16 @@ def test_allowed_ws_must_exist(db_session):
             OperationCreate(seq=10, code="OP10", name="工序",
                             default_work_station_id=wss[0].id,
                             allowed_work_station_ids=[wss[0].id, 999999])]))
+
+
+def test_get_allowed_work_stations(db_session):
+    md, p, wss = _setup(db_session, allowed_ids=[0, 1])
+    routing = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id, operations=[
+        OperationCreate(seq=10, code="OP10", name="工序",
+                        default_work_station_id=wss[0].id,
+                        allowed_work_station_ids=[wss[0].id, wss[1].id])]))
+    db_session.flush()
+    op = md.routings.operations_of(routing.id)[0]
+    allowed = MasterDataQueryService(db_session).get_allowed_work_stations(op.id)
+    assert {w.id for w in allowed} == {wss[0].id, wss[1].id}
+    assert all(w.code for w in allowed)  # 带 code/name

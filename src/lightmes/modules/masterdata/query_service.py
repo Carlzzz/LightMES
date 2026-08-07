@@ -11,6 +11,7 @@ from lightmes.modules.masterdata.models import (
 from lightmes.modules.masterdata.repository import (
     BomRepository,
     LineRepository,
+    OperationWorkStationRepository,
     RoutingRepository,
     WorkStationRepository,
 )
@@ -25,6 +26,7 @@ class MasterDataQueryService:
         self._boms = BomRepository(db)
         self._lines = LineRepository(db)
         self._work_stations = WorkStationRepository(db)
+        self._op_ws = OperationWorkStationRepository(db)
 
     def get_product(self, product_id: int) -> Product | None:
         return self.db.get(Product, product_id)
@@ -52,3 +54,11 @@ class MasterDataQueryService:
 
     def list_work_stations(self) -> list[WorkStation]:
         return self._work_stations.list_all()
+
+    def get_allowed_work_stations(self, operation_id: int) -> list[WorkStation]:
+        rows = self._op_ws.list_by_operation(operation_id)
+        ws_ids = [r.work_station_id for r in rows]
+        if not ws_ids:
+            return []
+        return [self._work_stations.get(i) for i in ws_ids
+                if self._work_stations.get(i) is not None]
