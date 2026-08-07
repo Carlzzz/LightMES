@@ -47,7 +47,7 @@ def test_routing_create_invalid_shows_error_fragment(client, db_session):
     w = md.create_work_station(WorkStationCreate(code="RWE", name="站", line_id=line.id, seq=1))
     md.create_routing(RoutingCreate(
         code="RTDUP", name="已有", product_id=p.id, operations=[
-            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w.id),
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w.id, allowed_work_station_ids=[w.id]),
         ]))
     db_session.flush()
     _login(client, db_session)

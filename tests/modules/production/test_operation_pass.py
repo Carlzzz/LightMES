@@ -22,7 +22,7 @@ def _line(db_session, n_ops=2):
         code=f"PWX{i}", name=f"站{i}", line_id=line.id, seq=i+1)) for i in range(n_ops)]
     r = md.create_routing(RoutingCreate(code="PRX", name="路线", product_id=p.id, operations=[
         OperationCreate(seq=i+1, code=f"OP{i+1}", name=f"工序{i+1}",
-                        default_work_station_id=ws[i].id) for i in range(n_ops)]))
+                        default_work_station_id=ws[i].id, allowed_work_station_ids=[ws[i].id]) for i in range(n_ops)]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRLX", name="r", pattern="X{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(

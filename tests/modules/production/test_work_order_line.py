@@ -14,7 +14,7 @@ def _setup(db_session):
     line = md.create_line(LineCreate(code="WLL", name="线"))
     w1 = md.create_work_station(WorkStationCreate(code="WLW1", name="站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="WLR", name="路线", product_id=p.id, operations=[
-        OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id)]))
+        OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     return p, line, r
 
 
@@ -41,7 +41,7 @@ def test_work_order_routing_product_mismatch_rejected(db_session):
     w1 = md.create_work_station(WorkStationCreate(
         code="WLW-AB1", name="站", line_id=line.id, seq=1))
     r_b = md.create_routing(RoutingCreate(code="WLR-B", name="路线B", product_id=p_b.id, operations=[
-        OperationCreate(seq=1, code="OPB1", name="上料", default_work_station_id=w1.id)]))
+        OperationCreate(seq=1, code="OPB1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     with pytest.raises(ValueError):
         ProductionService(db_session).create_work_order(WorkOrderCreate(
             code="WL-WO-M", product_id=p_a.id, routing_id=r_b.id, line_id=line.id, qty=10))
@@ -55,7 +55,7 @@ def test_work_order_operation_station_off_line_rejected(db_session):
     w2 = md.create_work_station(WorkStationCreate(
         code="WLW2", name="站2", line_id=l2.id, seq=1))
     r = md.create_routing(RoutingCreate(code="WLR-C", name="路线C", product_id=p.id, operations=[
-        OperationCreate(seq=1, code="OPC1", name="上料", default_work_station_id=w2.id)]))
+        OperationCreate(seq=1, code="OPC1", name="上料", default_work_station_id=w2.id, allowed_work_station_ids=[w2.id])]))
     with pytest.raises(ValueError):
         ProductionService(db_session).create_work_order(WorkOrderCreate(
             code="WL-WO-OFF", product_id=p.id, routing_id=r.id, line_id=l1.id, qty=10))
@@ -69,5 +69,5 @@ def test_routing_duplicate_operation_code_rejected(db_session):
         code="WLW-D1", name="站", line_id=line.id, seq=1))
     with pytest.raises(IntegrityError):
         md.create_routing(RoutingCreate(code="WLR-D", name="路线D", product_id=p.id, operations=[
-            OperationCreate(seq=1, code="OPD", name="上料", default_work_station_id=w1.id),
-            OperationCreate(seq=2, code="OPD", name="下料", default_work_station_id=w1.id)]))
+            OperationCreate(seq=1, code="OPD", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id]),
+            OperationCreate(seq=2, code="OPD", name="下料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))

@@ -40,8 +40,8 @@ def test_unbind_submit(client, db_session):
     p = md.create_product(ProductCreate(code="P", name="件", type="finished"))
     routing = md.create_routing(RoutingCreate(code="RT", name="路线", product_id=p.id,
         operations=[
-            OperationCreate(seq=10, code="OP10", name="工序1", default_work_station_id=ws1.id),
-            OperationCreate(seq=20, code="OP20", name="工序2", default_work_station_id=ws2.id),
+            OperationCreate(seq=10, code="OP10", name="工序1", default_work_station_id=ws1.id, allowed_work_station_ids=[ws1.id]),
+            OperationCreate(seq=20, code="OP20", name="工序2", default_work_station_id=ws2.id, allowed_work_station_ids=[ws2.id]),
         ]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="SR", name="r", pattern="SN{SEQ:5}", seq_reset="never", product_id=p.id))

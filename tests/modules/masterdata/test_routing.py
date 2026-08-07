@@ -21,8 +21,8 @@ def test_create_routing_with_operations(db_session):
     r = svc.create_routing(RoutingCreate(
         code="R1", name="主路线", product_id=p.id,
         operations=[
-            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
-            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id]),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id, allowed_work_station_ids=[w2.id]),
         ],
     ))
     assert r.id is not None
@@ -35,9 +35,9 @@ def test_second_routing_for_same_product_is_inactive(db_session):
     svc = MasterDataService(db_session)
     p, w1, w2 = _setup_product_and_work_stations(svc)
     svc.create_routing(RoutingCreate(code="R1", name="v1", product_id=p.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     r2 = svc.create_routing(RoutingCreate(code="R2", name="v2", product_id=p.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     assert r2.status == "inactive"
 
 
@@ -47,8 +47,8 @@ def test_duplicate_seq_rejected(db_session):
     with pytest.raises(ValueError):
         svc.create_routing(RoutingCreate(code="R9", name="x", product_id=p.id,
             operations=[
-                OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id),
-                OperationCreate(seq=1, code="OP2", name="b", default_work_station_id=w2.id),
+                OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id]),
+                OperationCreate(seq=1, code="OP2", name="b", default_work_station_id=w2.id, allowed_work_station_ids=[w2.id]),
             ]))
 
 
@@ -57,7 +57,7 @@ def test_unknown_work_station_rejected(db_session):
     p, w1, w2 = _setup_product_and_work_stations(svc)
     with pytest.raises(ValueError):
         svc.create_routing(RoutingCreate(code="R8", name="x", product_id=p.id,
-            operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=99999)]))
+            operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=99999, allowed_work_station_ids=[99999])]))
 
 
 def test_db_rejects_two_active_routings_for_product(db_session):
@@ -66,7 +66,7 @@ def test_db_rejects_two_active_routings_for_product(db_session):
     svc = MasterDataService(db_session)
     p, w1, w2 = _setup_product_and_work_stations(svc)
     svc.create_routing(RoutingCreate(code="RA", name="v1", product_id=p.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="a", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     # bypass the service rule: force a 2nd active routing directly
     db_session.add(Routing(code="RB", name="v2", product_id=p.id, version="2", status="active"))
     with pytest.raises(IntegrityError):

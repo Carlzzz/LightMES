@@ -135,6 +135,19 @@ class Operation(Base, TimestampMixin):
     panels: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 
+class OperationWorkStation(Base, TimestampMixin):
+    __tablename__ = "operation_work_stations"
+    __table_args__ = (
+        UniqueConstraint("operation_id", "work_station_id",
+                         name="uq_operation_work_station"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation_id: Mapped[int] = mapped_column(
+        ForeignKey("operations.id", ondelete="CASCADE"))
+    work_station_id: Mapped[int] = mapped_column(ForeignKey("work_stations.id"))
+
+
 class Skill(Base, TimestampMixin):
     __tablename__ = "skill"
 

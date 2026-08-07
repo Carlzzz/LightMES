@@ -359,6 +359,7 @@ def routings_create_page(
             operations.append(OperationCreate(
                 seq=int(seq), code=c.strip(), name=n.strip(),
                 default_work_station_id=int(ws),
+                allowed_work_station_ids=[int(ws)],  # Task 2: UI 支持多选 allowed
                 required_skill_id=int(sk_id) if sk_id.strip() else None,
                 required_level=int(lvl) if lvl.strip() else None))
         routing = svc.create_routing(RoutingCreate(

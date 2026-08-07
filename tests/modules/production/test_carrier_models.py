@@ -24,7 +24,7 @@ def _build_wo(db_session):
         code=f"W{tag}", name="作业站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code=f"R{tag}", name="路线", product_id=p.id,
         operations=[OperationCreate(seq=1, code=f"OP{tag}", name="装配",
-                                    default_work_station_id=w.id)]))
+                                    default_work_station_id=w.id, allowed_work_station_ids=[w.id])]))
     wo = ProductionService(db_session).create_work_order(
         WorkOrderCreate(code=f"WO{tag}", product_id=p.id, routing_id=r.id,
                         line_id=line.id, qty=5))

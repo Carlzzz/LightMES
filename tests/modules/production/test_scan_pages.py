@@ -37,8 +37,8 @@ def _line_2step(db_session):
         code="PG22W", name="装配站", line_id=line.id, seq=2))
     r = md.create_routing(RoutingCreate(code="PG2R", name="路线", product_id=p.id,
         operations=[
-            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id),
-            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id),
+            OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id]),
+            OperationCreate(seq=2, code="OP2", name="装配", default_work_station_id=w2.id, allowed_work_station_ids=[w2.id]),
         ]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PG2L", name="r", pattern="P{SEQ:3}"))
@@ -56,7 +56,7 @@ def _line(db_session):
     w1 = md.create_work_station(WorkStationCreate(
         code="PST1W", name="上料站", line_id=line.id, seq=1))
     r = md.create_routing(RoutingCreate(code="PRT", name="路线", product_id=p.id,
-        operations=[OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id)]))
+        operations=[OperationCreate(seq=1, code="OP1", name="上料", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id])]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="PRL", name="r", pattern="P{SEQ:3}"))
     wo = prod.create_work_order(WorkOrderCreate(

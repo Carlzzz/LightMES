@@ -20,7 +20,7 @@ def _line(db_session, steps_n=1):
         for i in range(steps_n)]
     r = md.create_routing(RoutingCreate(code="EVR", name="路线", product_id=p.id,
         operations=[OperationCreate(seq=i+1, code=f"OP{i+1}", name=f"工序{i+1}",
-                                    default_work_station_id=wss[i].id)
+                                    default_work_station_id=wss[i].id, allowed_work_station_ids=[wss[i].id])
                     for i in range(steps_n)]))
     prod = ProductionService(db_session)
     rule = prod.create_sn_rule(SnRuleCreate(code="EVRL", name="r", pattern="E{SEQ:3}"))

@@ -69,7 +69,8 @@ def test_api_routing_bom_responses_include_erp_fields(client, db_session):
     rr = client.post("/api/masterdata/routings", json={
         "code": "API-R", "name": "路线", "product_id": p.id,
         "operations": [{"seq": 1, "code": "OP1", "name": "装配",
-                        "default_work_station_id": ws.id, "is_mandatory": True}],
+                        "default_work_station_id": ws.id,
+                        "allowed_work_station_ids": [ws.id], "is_mandatory": True}],
     })
     assert rr.status_code == 201, rr.text
     rbody = rr.json()
