@@ -5,21 +5,41 @@
 
 <div class="card">
   <div class="card__title">查询条件</div>
-  <form class="form-row" hx-post="/trace/query" hx-target="#result" hx-swap="innerHTML">
+  <form class="form-row" hx-post="/trace/query" hx-target="#result" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) document.getElementById('query-value').value=''">
     <div class="field"><label>查询类型</label>
-      <select name="query_type">
+      <select id="query-type" name="query_type">
+        <option value="history">履历：成品 SN 全追溯</option>
         <option value="genealogy">正向：成品 SN → 组件</option>
         <option value="where_used_sn">反向：组件 SN → 成品</option>
         <option value="where_used_batch">反向：组件批次 → 成品</option>
-        <option value="history">履历：成品 SN</option>
         <option value="params">工艺参数：成品 SN</option>
       </select>
     </div>
-    <div class="field" style="flex:1"><label>SN / 批次号</label>
-      <input name="value" placeholder="输入 SN 或批次号" required>
+    <div class="field" style="flex:1;min-width:240px"><label>SN / 批次号</label>
+      <input id="query-value" name="value" placeholder="输入 SN 或批次号" required autofocus>
     </div>
     <button type="submit">查询</button>
   </form>
-  <div id="result" class="result-slot"></div>
 </div>
+
+<div id="result" class="result-slot"></div>
+
+<script>
+  // 支持 URL 参数预填查询 (?type=history&value=SN123)
+  (function() {
+    var params = new URLSearchParams(location.search);
+    var type = params.get('type');
+    var val = params.get('value');
+    if (type && val) {
+      var sel = document.getElementById('query-type');
+      var inp = document.getElementById('query-value');
+      if (sel) sel.value = type;
+      if (inp) inp.value = val;
+      // 自动提交
+      var form = inp ? inp.closest('form') : null;
+      if (form) htmx.trigger(form, 'submit');
+    }
+  })();
+</script>
 {% endblock %}

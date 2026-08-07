@@ -471,3 +471,62 @@ body { background: #f3f7f4; }
   text-align: right;
 }
 
+/* ---- 追溯时间线 ---- */
+.trace-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+.trace-timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--line);
+  border-radius: 1px;
+}
+.trace-timeline__item {
+  position: relative;
+  padding: 6px 0 6px 16px;
+}
+.trace-timeline__dot {
+  position: absolute;
+  left: -20px;
+  top: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--mint-500);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--mint-200);
+}
+.trace-timeline__item--fail .trace-timeline__dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 2px #f3c6cb;
+}
+.trace-timeline__content {
+  padding: 6px 12px;
+  background: var(--mint-50);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.trace-timeline__item--fail .trace-timeline__content {
+  background: var(--danger-bg);
+  border-color: #f3c6cb;
+}
+.trace-timeline__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.trace-timeline__op {
+  font-weight: 600;
+  font-size: 14px;
+}
+.trace-timeline__meta {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+

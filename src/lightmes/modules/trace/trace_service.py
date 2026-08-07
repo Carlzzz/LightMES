@@ -46,14 +46,16 @@ class TraceService:
             binds = self.binds.list_by_component_sn(component_sn)
         else:
             binds = self.binds.list_by_component_batch(component_batch_no)
-        return [
-            ParentRef(
+        result = []
+        for b in binds:
+            parent_su = self.serial_units.get(b.parent_sn_id)
+            result.append(ParentRef(
                 parent_sn_id=b.parent_sn_id,
+                parent_sn=parent_su.sn if parent_su else str(b.parent_sn_id),
                 component_ref=b.component_sn or b.component_batch_no or "",
                 status=b.status,
-            )
-            for b in binds
-        ]
+            ))
+        return result
 
     def history_of(self, sn: str) -> HistoryView:
         su = self.serial_units.get_by_sn(sn)
@@ -62,12 +64,31 @@ class TraceService:
         records = self.records.list_by_serial_unit(su.id)
         binds = self.binds.list_by_parent(su.id)
         params = self.params.list_by_serial_unit(su.id)
+        # Enrich records with operation + station names
+        from lightmes.modules.masterdata.models import Operation
+        op_cache: dict[int, str] = {}
+        ws_cache: dict[int, str] = {}
+        rec_views = []
+        for r in records:
+            if r.operation_id not in op_cache:
+                op = self.db.get(Operation, r.operation_id)
+                op_cache[r.operation_id] = op.name if op else f"#{r.operation_id}"
+            if r.work_station_id not in ws_cache:
+                ws = self.query.get_work_station(r.work_station_id)
+                ws_cache[r.work_station_id] = ws.name if ws else f"#{r.work_station_id}"
+            rec_views.append(OpRecordView(
+                operation_id=r.operation_id,
+                operation_name=op_cache[r.operation_id],
+                operation_seq=0,
+                work_station_id=r.work_station_id,
+                work_station_name=ws_cache[r.work_station_id],
+                line_id=r.line_id,
+                result=r.result,
+                end_time=r.end_time,
+            ))
         return HistoryView(
             sn=sn,
-            records=[OpRecordView(
-                operation_id=r.operation_id, work_station_id=r.work_station_id,
-                line_id=r.line_id, result=r.result, end_time=r.end_time)
-                for r in records],
+            records=rec_views,
             components=[_bind_view(b) for b in binds],
             params=[ParamView(
                 param_key=p.param_key, param_value=p.param_value, unit=p.unit,

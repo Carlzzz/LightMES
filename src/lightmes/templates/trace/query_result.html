@@ -1,0 +1,141 @@
+{# Trace query result partial #}
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+{% endif %}
+
+{% if genealogy %}
+<div class="card">
+  <div class="card__title">正向追溯：成品 {{ genealogy.sn }} → 组件</div>
+  {% if genealogy.components %}
+  <table class="data-table">
+    <thead><tr><th>类型</th><th>组件标识</th><th>数量</th><th>状态</th></tr></thead>
+    <tbody>
+      {% for c in genealogy.components %}
+      <tr>
+        <td><span class="badge">{{ c.component_type }}</span></td>
+        <td>{{ c.component_ref }}</td>
+        <td>{{ c.qty }}</td>
+        <td>
+          {% if c.status == 'active' %}
+          <span class="badge">{{ c.status }}</span>
+          {% else %}
+          <span class="badge badge--warn">{{ c.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="nav-card__desc">该成品无组件绑定记录。</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if parents %}
+<div class="card">
+  <div class="card__title">反向追溯：{{ search_label }} → 成品</div>
+  <table class="data-table">
+    <thead><tr><th>成品 SN</th><th>组件标识</th><th>状态</th></tr></thead>
+    <tbody>
+      {% for p in parents %}
+      <tr>
+        <td><a href="/trace/query?type=history&value={{ p.parent_sn }}">{{ p.parent_sn }}</a></td>
+        <td>{{ p.component_ref }}</td>
+        <td>
+          {% if p.status == 'active' %}
+          <span class="badge">{{ p.status }}</span>
+          {% else %}
+          <span class="badge badge--warn">{{ p.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if history %}
+<div class="card">
+  <div class="card__title">产品履历时间线：{{ history.sn }}</div>
+
+  {# 过站履历时间线 #}
+  <div class="trace-timeline">
+    {% for r in history.records %}
+    <div class="trace-timeline__item trace-timeline__item--{{ r.result }}">
+      <div class="trace-timeline__dot"></div>
+      <div class="trace-timeline__content">
+        <div class="trace-timeline__header">
+          <span class="trace-timeline__op">{{ r.operation_name }}</span>
+          <span class="trace-timeline__result badge {% if r.result == 'pass' %}{{ '' }}{% else %}badge--danger{% endif %}">{{ r.result }}</span>
+        </div>
+        <div class="trace-timeline__meta">
+          作业站 {{ r.work_station_name }} · 产线 #{{ r.line_id }} · {{ r.end_time.strftime('%Y-%m-%d %H:%M:%S') }}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% if not history.records %}
+    <div class="nav-card__desc">无过站记录。</div>
+    {% endif %}
+  </div>
+</div>
+
+{# 物料谱系 #}
+<div class="card">
+  <div class="card__title">物料谱系</div>
+  {% if history.components %}
+  <table class="data-table">
+    <thead><tr><th>类型</th><th>组件标识</th><th>数量</th><th>状态</th></tr></thead>
+    <tbody>
+      {% for c in history.components %}
+      <tr>
+        <td><span class="badge">{{ c.component_type }}</span></td>
+        <td>{{ c.component_ref }}</td>
+        <td>{{ c.qty }}</td>
+        <td>
+          {% if c.status == 'active' %}
+          <span class="badge">{{ c.status }}</span>
+          {% else %}
+          <span class="badge badge--warn">{{ c.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="nav-card__desc">无物料绑定记录。</div>
+  {% endif %}
+</div>
+
+{# 工艺参数 #}
+<div class="card">
+  <div class="card__title">工艺参数</div>
+  {% if history.params %}
+  <table class="data-table">
+    <thead><tr><th>参数名</th><th>数值</th><th>单位</th><th>来源</th><th>记录时间</th></tr></thead>
+    <tbody>
+      {% for p in history.params %}
+      <tr>
+        <td>{{ p.param_key }}</td>
+        <td>{{ p.param_value }}</td>
+        <td>{{ p.unit or '—' }}</td>
+        <td>
+          {% if p.source == 'auto' %}
+          <span class="badge">{{ p.source }}</span>
+          {% else %}
+          <span class="badge badge--warn">{{ p.source }}</span>
+          {% endif %}
+        </td>
+        <td>{{ p.recorded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="nav-card__desc">无工艺参数记录。</div>
+  {% endif %}
+</div>
+{% endif %}

@@ -20,7 +20,10 @@ class BindView(BaseModel):
 
 class OpRecordView(BaseModel):
     operation_id: int
+    operation_name: str = ""
+    operation_seq: int = 0
     work_station_id: int
+    work_station_name: str = ""
     line_id: int
     result: str
     end_time: datetime
@@ -48,5 +51,6 @@ class HistoryView(BaseModel):
 
 class ParentRef(BaseModel):
     parent_sn_id: int
+    parent_sn: str = ""
     component_ref: str
     status: str
