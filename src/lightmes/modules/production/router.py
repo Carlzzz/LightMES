@@ -181,10 +181,12 @@ def sn_rules_create_page(
 def wip_page(
     request: Request, work_order_id: int = 0, db: Session = Depends(get_db)
 ) -> HTMLResponse:
-    items = WipService(db).wip_by_work_order(work_order_id) if work_order_id else []
+    svc = WipService(db)
+    items = svc.wip_by_work_order(work_order_id) if work_order_id else []
+    summary = svc.summary_by_work_order(work_order_id) if work_order_id else None
     return templates.TemplateResponse(
         request, "production/wip.html",
-        {"work_order_id": work_order_id, "items": items},
+        {"work_order_id": work_order_id, "items": items, "summary": summary},
     )
 
 

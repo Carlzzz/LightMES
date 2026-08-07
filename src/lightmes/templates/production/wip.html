@@ -6,14 +6,73 @@
 <div class="card">
   <div class="card__title">查询工单在制品</div>
   <form class="form-row" method="get" action="/production/wip">
-    <div class="field"><label>工单 ID</label><input name="work_order_id" value="{{ work_order_id }}"></div>
+    <div class="field"><label>工单 ID</label><input name="work_order_id" value="{{ work_order_id }}" autofocus></div>
     <button type="submit">查询</button>
   </form>
 </div>
 
+{% if summary and summary.work_order %}
+<div class="wip-summary">
+  <!-- 工单进度卡片 -->
+  <div class="card wip-progress-card">
+    <div class="card__title">工单进度</div>
+    <div class="wip-progress-body">
+      <div class="wip-progress-info">
+        <span class="wip-stat-label">工单号</span>
+        <span class="wip-stat-value">{{ summary.work_order.code }}</span>
+      </div>
+      <div class="wip-progress-bar-wrap">
+        <div class="wip-progress-bar">
+          <div class="wip-progress-fill" style="width: {{ summary.progress_pct }}%"></div>
+        </div>
+        <span class="wip-progress-text">{{ summary.produced }} / {{ summary.planned_qty }} ({{ summary.progress_pct }}%)</span>
+      </div>
+      <div class="wip-progress-status">
+        <span class="badge">{{ summary.work_order.status }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 状态分布卡片 -->
+  <div class="card wip-status-card">
+    <div class="card__title">状态分布</div>
+    <div class="wip-status-grid">
+      {% for status, count in summary.status_counts.items() %}
+      <div class="wip-status-chip wip-status--{{ status }}">
+        <span class="wip-status-num">{{ count }}</span>
+        <span class="wip-status-label">{{ status }}</span>
+      </div>
+      {% endfor %}
+      {% if not summary.status_counts %}
+      <div class="nav-card__desc">暂无数据</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 工序分布卡片 -->
+  <div class="card wip-station-card">
+    <div class="card__title">在制工序分布</div>
+    {% if summary.station_dist %}
+    <div class="wip-station-list">
+      {% for s in summary.station_dist %}
+      <div class="wip-station-row">
+        <span class="wip-station-seq">{{ s.seq }}</span>
+        <span class="wip-station-name">{{ s.op_name }}</span>
+        <span class="wip-station-count">{{ s.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="nav-card__desc">当前无在制/返工件</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
-  <div class="card__title">在制品列表</div>
+  <div class="card__title">在制品列表 (in_process)</div>
   {% if items %}
+  <div class="data-table-wrap">
   <table class="data-table">
     <thead><tr><th>SN</th><th>状态</th><th>当前工序</th></tr></thead>
     <tbody>
@@ -26,6 +85,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <div class="nav-card__desc">该工单暂无在制品（或未输入工单 ID）。</div>
   {% endif %}

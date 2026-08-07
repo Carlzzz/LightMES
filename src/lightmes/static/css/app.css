@@ -391,3 +391,83 @@ body { background: #f3f7f4; }
   .station__grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 }
 
+/* ---- WIP 看板 ---- */
+.wip-summary {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 768px) {
+  .wip-summary { grid-template-columns: 1fr; }
+}
+
+.wip-progress-card .wip-progress-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wip-progress-info { display: flex; flex-direction: column; gap: 2px; }
+.wip-stat-label { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; }
+.wip-stat-value { font-size: 18px; font-weight: 700; color: var(--ink); }
+.wip-progress-bar-wrap { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 4px; }
+.wip-progress-bar { height: 22px; background: var(--mint-50); border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+.wip-progress-fill { height: 100%; background: linear-gradient(90deg, var(--mint-400), var(--mint-600)); border-radius: 11px; transition: width .3s; }
+.wip-progress-text { font-size: 13px; color: var(--ink-soft); }
+.wip-progress-status { flex: 0 0 auto; }
+
+.wip-status-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.wip-status-chip {
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 10px;
+  min-width: 70px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.wip-status-num { font-size: 22px; font-weight: 800; }
+.wip-status-label { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; }
+.wip-status--pending { background: #f0f4f2; }
+.wip-status--pending .wip-status-num { color: var(--ink-soft); }
+.wip-status--in_process { background: var(--mint-50); border-color: var(--mint-200); }
+.wip-status--in_process .wip-status-num { color: var(--mint-600); }
+.wip-status--finished { background: var(--ok-bg); border-color: var(--mint-200); }
+.wip-status--finished .wip-status-num { color: var(--ok); }
+.wip-status--scrapped { background: var(--danger-bg); border-color: #f3c6cb; }
+.wip-status--scrapped .wip-status-num { color: var(--danger); }
+.wip-status--reworking { background: #fff4e0; border-color: #f0d8a8; }
+.wip-status--reworking .wip-status-num { color: #b06a00; }
+
+.wip-station-list { display: flex; flex-direction: column; gap: 6px; }
+.wip-station-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--mint-50);
+  border: 1px solid var(--line);
+}
+.wip-station-seq {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--mint-500);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.wip-station-name { flex: 1; font-size: 14px; }
+.wip-station-count {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--mint-700);
+  min-width: 30px;
+  text-align: right;
+}
+
