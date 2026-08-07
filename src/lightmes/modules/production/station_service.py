@@ -99,6 +99,12 @@ class StationService:
                     qty=float(item.qty)))
 
         operator = self.users.get(operator_id) if operator_id else None
+        # SOP 内容来自当前工序
+        sop_text = None
+        sop_url = None
+        if expected is not None:
+            sop_text = expected.sop_text
+            sop_url = expected.sop_url
         return StationView(
             sn=su.sn if su is not None else "",
             work_order_code=wo.code,
@@ -113,5 +119,6 @@ class StationService:
             operations=op_views,
             current_op=current_op,
             components=components,
-            sop_placeholder=True,
+            sop_text=sop_text,
+            sop_url=sop_url,
         )

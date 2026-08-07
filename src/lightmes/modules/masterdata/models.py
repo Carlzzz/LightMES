@@ -132,6 +132,8 @@ class Operation(Base, TimestampMixin):
         ForeignKey("skill.id"), default=None)
     required_level: Mapped[int | None] = mapped_column(default=None)
     sop_id: Mapped[int | None] = mapped_column(default=None)
+    sop_text: Mapped[str | None] = mapped_column(default=None)
+    sop_url: Mapped[str | None] = mapped_column(default=None)
     panels: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 

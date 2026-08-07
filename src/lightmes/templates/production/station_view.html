@@ -91,7 +91,17 @@
       <div class="station__aside">
         <div class="card">
           <div class="card__title">SOP 作业指导书</div>
-          <div class="station__sop">SOP 内容待建设（本期留白）。</div>
+          <div class="station__sop">
+            {% if view.sop_url %}
+            <div class="sop-content">
+              <iframe src="{{ view.sop_url }}" class="sop-iframe" frameborder="0"></iframe>
+            </div>
+            {% elif view.sop_text %}
+            <div class="sop-content sop-text">{{ view.sop_text }}</div>
+            {% else %}
+            <div class="sop-empty">该工序暂无 SOP 内容</div>
+            {% endif %}
+          </div>
         </div>
         <div class="card">
           <div class="card__title">异常干预</div>

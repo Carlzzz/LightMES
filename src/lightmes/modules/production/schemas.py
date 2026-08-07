@@ -121,7 +121,8 @@ class StationView(BaseModel):
     operations: list[StationOpView]
     current_op: StationOpView | None
     components: list[StationComponentView]
-    sop_placeholder: bool = True
+    sop_text: str | None = None
+    sop_url: str | None = None
 
 
 class CarrierBindInput(BaseModel):
