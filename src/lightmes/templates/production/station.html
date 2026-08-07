@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}工位作业{% endblock %}
 {% block chrome %}{% endblock %}
+{% block container_class %}--station{% endblock %}
 {% block content %}
 <div class="station-shell">
   <div class="station-ready card">
@@ -10,7 +11,7 @@
       <div class="field"><label>作业站</label>
         <select id="station-ws-select" name="work_station_id" required
                 onchange="if(this.value){htmx.trigger(document.getElementById('station-wo-select'),'reset-wo'); document.getElementById('station-root').innerHTML='';}">
-          <option value="" disabled selected>— 选择作业站 —</option>
+          <option value="" disabled selected>- 选择作业站 -</option>
           {% for s in station_options %}
           <option value="{{ s.id }}" {% if s.id == work_station_id %}selected{% endif %}>{{ s.label }}</option>
           {% endfor %}
@@ -24,10 +25,10 @@
                 hx-swap="innerHTML"
                 hx-include="#station-ws-select"
                 onchange="document.getElementById('station-root').innerHTML='';">
-          <option value="" disabled selected>— 选择工单 —</option>
+          <option value="" disabled selected>- 选择工单 -</option>
         </select>
       </div>
-      <div class="field" style="flex:1"><label>扫 SN / 载体码</label>
+      <div class="field" style="flex:1;min-width:240px"><label>扫 SN / 载体码</label>
         <input id="enter-scan" name="scan" placeholder="首件扫载体码，后续扫 SN/载体码" required autofocus></div>
       <button type="submit">进入</button>
     </form>
