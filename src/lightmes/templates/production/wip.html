@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}WIP 看板{% endblock %}
 {% block content %}
-<h1 class="page-title">WIP 看板 <small>工单 #{{ work_order_id }}</small></h1>
+<h1 class="page-title">WIP 看板{% if work_order %} <small>{{ work_order }}</small>{% endif %}</h1>
 
 <div class="card">
   <div class="card__title">查询工单在制品</div>
   <form class="form-row" method="get" action="/production/wip">
-    <div class="field"><label>工单 ID</label><input name="work_order_id" value="{{ work_order_id }}" autofocus></div>
+    <div class="field" style="flex:1"><label>工单号</label><input name="work_order" value="{{ work_order }}" placeholder="输入工单号" autofocus></div>
     <button type="submit">查询</button>
   </form>
 </div>
@@ -87,7 +87,7 @@
   </table>
   </div>
   {% else %}
-  <div class="nav-card__desc">该工单暂无在制品（或未输入工单 ID）。</div>
+  <div class="nav-card__desc">该工单暂无在制品（或未输入工单号）。</div>
   {% endif %}
 </div>
 {% endblock %}

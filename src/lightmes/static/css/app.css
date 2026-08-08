@@ -273,6 +273,7 @@ input::placeholder { color: #9bb0a9; }
 }
 .alert--ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--mint-200); }
 .alert--danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #f3c6cb; }
+.alert--success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; padding: 12px 16px; border-radius: 8px; margin: 8px 0; }
 
 /* ---- 登录页 ---- */
 .auth-wrap {

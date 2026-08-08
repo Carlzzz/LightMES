@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.repository import (
     SerialUnitRepository, OperationRecordRepository, OperationParamRepository,
 )
@@ -24,6 +25,7 @@ def _bind_view(b: GenealogyBind) -> BindView:
 class TraceService:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.query = MasterDataQueryService(db)
         self.binds = GenealogyBindRepository(db)
         self.serial_units = SerialUnitRepository(db)
         self.records = OperationRecordRepository(db)

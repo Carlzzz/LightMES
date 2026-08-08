@@ -54,14 +54,21 @@
           {% if view.components %}
           <div class="data-table-wrap">
           <table class="data-table" id="component-table">
-            <thead><tr><th>物料</th><th>需求量</th><th>批次/条码（扫码）</th></tr></thead>
+            <thead><tr><th>物料</th><th>需求量</th><th>扫码</th></tr></thead>
             <tbody>
               {% for c in view.components %}
               <tr>
-                <td>{{ c.component_code }} {{ c.component_name }}</td>
+                <td>{{ c.component_code }} {{ c.component_name }}
+                  {% if c.track_mode == 'serial' %}<span class="badge">唯一件</span>{% elif c.track_mode == 'batch' %}<span class="badge">批次</span>{% endif %}
+                </td>
                 <td>{{ c.qty }}</td>
                 <td><input type="hidden" name="component_product_id" value="{{ c.component_product_id }}">
-                  <input name="component_batch" class="comp-scan" placeholder="扫描该物料批次..." autocomplete="off"></td>
+                  {% if c.track_mode == 'serial' %}
+                  <input name="component_sn" class="comp-scan" placeholder="扫描唯一件 SN..." autocomplete="off">
+                  {% else %}
+                  <input name="component_batch" class="comp-scan" placeholder="扫描批次号..." autocomplete="off">
+                  {% endif %}
+                </td>
               </tr>
               {% endfor %}
             </tbody>

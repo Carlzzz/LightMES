@@ -17,7 +17,8 @@ from lightmes.modules.production.station_service import StationService
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
 from lightmes.modules.production.carrier_service import CarrierService
-from lightmes.modules.production.repository import SerialUnitRepository
+from lightmes.modules.production.models import WorkOrder
+from lightmes.modules.production.repository import SerialUnitRepository, WorkOrderRepository
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.shared.errors import DomainError, NotFoundError, BusinessRuleError
 
@@ -103,45 +104,10 @@ def api_pass_operation(
     return OperationPassService(db).pass_operation(data)  # DomainError→全局handler
 
 
-@router.get("/production/scan", response_class=HTMLResponse)
-def scan_page(
-    request: Request, work_station_id: int = 0, db: Session = Depends(get_db)
-) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "production/scan.html", {"work_station_id": work_station_id}
-    )
-
-
-@router.post("/production/scan", response_class=HTMLResponse)
-def scan_submit(
-    request: Request,
-    work_station_id: int = Form(...),
-    code_or_sn: str = Form(...),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    user = current_user_or_none(request, db)
-    if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    svc = OperationPassService(db)
-    # 页面便利：先按 SN 试，NotFound 再当工单号试首站
-    try:
-        try:
-            result = svc.pass_operation(OperationPassInput(
-                work_station_id=work_station_id, sn=code_or_sn, operator_id=user.id))
-        except NotFoundError:
-            result = svc.pass_operation(OperationPassInput(
-                work_station_id=work_station_id, work_order_code=code_or_sn,
-                operator_id=user.id))
-    except DomainError as e:
-        # 事务中已 flush 的写入（如首站生成的 SerialUnit / SN 流水）必须回滚，
-        # 否则 get_db 的成功路径会把它们 commit，留下孤儿数据。
-        db.rollback()
-        return templates.TemplateResponse(
-            request, "production/partials/scan_result.html", {"error": e.detail}
-        )
-    return templates.TemplateResponse(
-        request, "production/partials/scan_result.html", {"result": result}
-    )
+@router.get("/production/scan")
+def scan_page():
+    """已废弃：重定向到工位作业页。"""
+    return Response(status_code=302, headers={"Location": "/production/station"})
 
 
 @router.get("/production/sn-rules", response_class=HTMLResponse)
@@ -179,14 +145,26 @@ def sn_rules_create_page(
 
 @router.get("/production/wip", response_class=HTMLResponse)
 def wip_page(
-    request: Request, work_order_id: int = 0, db: Session = Depends(get_db)
+    request: Request, work_order: str = "", db: Session = Depends(get_db)
 ) -> HTMLResponse:
+    """WIP 看板：支持工单号(code)或数字 ID 查询。"""
+    wo_id = 0
+    wo_code = ""
+    if work_order:
+        wo = None
+        if work_order.isdigit():
+            wo = db.get(WorkOrder, int(work_order))
+        if wo is None:
+            wo = WorkOrderRepository(db).get_by_code(work_order)
+        if wo is not None:
+            wo_id = wo.id
+            wo_code = wo.code
     svc = WipService(db)
-    items = svc.wip_by_work_order(work_order_id) if work_order_id else []
-    summary = svc.summary_by_work_order(work_order_id) if work_order_id else None
+    items = svc.wip_by_work_order(wo_id) if wo_id else []
+    summary = svc.summary_by_work_order(wo_id) if wo_id else None
     return templates.TemplateResponse(
         request, "production/wip.html",
-        {"work_order_id": work_order_id, "items": items, "summary": summary},
+        {"work_order": wo_code or work_order, "items": items, "summary": summary},
     )
 
 
@@ -238,6 +216,7 @@ def station_pass(
     scan: str = Form(...),
     component_product_id: list[int] = Form(default=[]),
     component_batch: list[str] = Form(default=[]),
+    component_sn: list[str] = Form(default=[]),
     param_key: list[str] = Form(default=[]),
     param_value: list[str] = Form(default=[]),
     param_unit: list[str] = Form(default=[]),
@@ -246,12 +225,15 @@ def station_pass(
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    # 组件：仅收已扫批次的行
-    components = [
-        ComponentInput(component_product_id=pid, component_batch_no=batch.strip())
-        for pid, batch in zip(component_product_id, component_batch)
-        if batch.strip()
-    ]
+    # 组件：收集 serial (component_sn) 和 batch (component_batch) 两种
+    components = []
+    for i, pid in enumerate(component_product_id):
+        sn_val = component_sn[i].strip() if i < len(component_sn) and component_sn[i] else ""
+        batch_val = component_batch[i].strip() if i < len(component_batch) and component_batch[i] else ""
+        if sn_val:
+            components.append(ComponentInput(component_product_id=pid, component_sn=sn_val))
+        elif batch_val:
+            components.append(ComponentInput(component_product_id=pid, component_batch_no=batch_val))
     # 参数：仅收 key+value 都非空的行
     params = []
     for i, key in enumerate(param_key):

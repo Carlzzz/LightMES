@@ -102,7 +102,8 @@ class StationService:
                     component_product_id=item.component_product_id,
                     component_code=comp.code if comp else str(item.component_product_id),
                     component_name=comp.name if comp else "",
-                    qty=float(item.qty)))
+                    qty=float(item.qty),
+                    track_mode=item.track_mode))
 
         operator = self.users.get(operator_id) if operator_id else None
         # SOP 内容来自当前工序

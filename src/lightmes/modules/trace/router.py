@@ -84,10 +84,13 @@ def rework_submit(
             sn, target_seq=target_seq, reason=reason or None, operator_id=user.id)
     except DomainError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {e.detail}</div>')
+        return HTMLResponse(
+            f'<div class="alert alert--danger">✗ {e.detail}</div>'
+            f'<script>if(window.showErrorModal)showErrorModal("{e.detail}");</script>')
     return HTMLResponse(
-        f'<div style="color:green">✓ {su.sn} '
-        f'已返工至工序 {su.current_operation_seq}</div>')
+        f'<div class="alert alert--success">✓ {su.sn} '
+        f'已返工至工序 {su.current_operation_seq}</div>'
+        f'<script>setTimeout(function(){{location.href="/production/station";}},2000);</script>')
 
 
 @router.get("/trace/carrier-unbind", response_class=HTMLResponse)
@@ -104,6 +107,9 @@ def carrier_unbind_submit(
         su = CarrierService(db).unbind(scan, user.id)
     except DomainError as e:
         db.rollback()
-        return HTMLResponse(f'<div style="color:red">✗ {e.detail}</div>')
+        return HTMLResponse(
+            f'<div class="alert alert--danger">✗ {e.detail}</div>'
+            f'<script>if(window.showErrorModal)showErrorModal("{e.detail}");</script>')
+    carrier = su.carrier_code or ''
     return HTMLResponse(
-        f'<div style="color:green">✓ {su.sn} 已解绑载体码</div>')
+        f'<div class="alert alert--success">✓ {su.sn} 已解绑载体码 {carrier}</div>')

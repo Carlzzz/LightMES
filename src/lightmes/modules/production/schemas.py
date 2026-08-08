@@ -105,6 +105,7 @@ class StationComponentView(BaseModel):
     component_code: str
     component_name: str
     qty: float
+    track_mode: str = "none"
 
 
 class StationView(BaseModel):

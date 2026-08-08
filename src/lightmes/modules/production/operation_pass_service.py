@@ -97,20 +97,29 @@ class OperationPassService:
                     f"{level if level is not None else '无'}")
 
         # 5c. 物料绑定必扫校验：BOM 中所有 track_mode != "none" 的组件必须扫码
+        #      serial 模式还需校验扫码数量 >= BOM 需求量
         bom_items = self.query.get_active_bom_items(wo.product_id)
         if bom_items:
-            provided_ids = {c.component_product_id for c in data.components}
+            from collections import Counter
+            provided_counts: Counter[int] = Counter()
+            for c in data.components:
+                provided_counts[c.component_product_id] += 1
             missing = []
             for item in bom_items:
                 if item.track_mode == "none":
                     continue
-                if item.component_product_id not in provided_ids:
-                    comp = self.query.get_product(item.component_product_id)
-                    comp_name = comp.name if comp else f"#{item.component_product_id}"
+                comp = self.query.get_product(item.component_product_id)
+                comp_name = comp.name if comp else f"#{item.component_product_id}"
+                provided = provided_counts.get(item.component_product_id, 0)
+                required = int(item.qty) if item.track_mode == "serial" else 1
+                if provided == 0:
                     missing.append(f"{comp_name}（{item.track_mode}）")
+                elif item.track_mode == "serial" and provided < required:
+                    missing.append(
+                        f"{comp_name}（serial，需 {required} 件，已扫 {provided} 件）")
             if missing:
                 raise BusinessRuleError(
-                    f"以下物料未扫码绑定，不可过站：{', '.join(missing)}")
+                    f"物料绑定不完整，不可过站：{', '.join(missing)}")
 
         # 6. 写工序记录 + 乐观锁更新 serial_unit
         record = self.records.add(OperationRecord(
