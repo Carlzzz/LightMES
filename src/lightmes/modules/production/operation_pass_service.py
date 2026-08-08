@@ -96,30 +96,38 @@ class OperationPassService:
                     f"需要技能等级 L{expected.required_level}+，当前 "
                     f"{level if level is not None else '无'}")
 
-        # 5c. 物料绑定必扫校验：BOM 中所有 track_mode != "none" 的组件必须扫码
-        #      serial 模式还需校验扫码数量 >= BOM 需求量
+        # 5c. 物料绑定必扫校验：仅在最终工序强制校验
+        #      检查累积已绑（之前工序扫的）+ 本次扫的 = BOM 需求
         bom_items = self.query.get_active_bom_items(wo.product_id)
         if bom_items:
-            from collections import Counter
-            provided_counts: Counter[int] = Counter()
-            for c in data.components:
-                provided_counts[c.component_product_id] += 1
-            missing = []
-            for item in bom_items:
-                if item.track_mode == "none":
-                    continue
-                comp = self.query.get_product(item.component_product_id)
-                comp_name = comp.name if comp else f"#{item.component_product_id}"
-                provided = provided_counts.get(item.component_product_id, 0)
-                required = int(item.qty) if item.track_mode == "serial" else 1
-                if provided == 0:
-                    missing.append(f"{comp_name}（{item.track_mode}）")
-                elif item.track_mode == "serial" and provided < required:
-                    missing.append(
-                        f"{comp_name}（serial，需 {required} 件，已扫 {provided} 件）")
-            if missing:
-                raise BusinessRuleError(
-                    f"物料绑定不完整，不可过站：{', '.join(missing)}")
+            all_ops = self.query.get_operations(wo.routing_id)
+            is_last_op = (expected.id == all_ops[-1].id) if all_ops else False
+            if is_last_op:
+                from collections import Counter
+                from lightmes.modules.trace.repository import GenealogyBindRepository
+                # 累积已绑组件
+                existing_binds = GenealogyBindRepository(self.db).list_active_by_parent(su.id)
+                provided_counts: Counter[int] = Counter()
+                for b in existing_binds:
+                    provided_counts[b.component_product_id] += 1
+                for c in data.components:
+                    provided_counts[c.component_product_id] += 1
+                missing = []
+                for item in bom_items:
+                    if item.track_mode == "none":
+                        continue
+                    comp = self.query.get_product(item.component_product_id)
+                    comp_name = comp.name if comp else f"#{item.component_product_id}"
+                    provided = provided_counts.get(item.component_product_id, 0)
+                    required = int(item.qty) if item.track_mode == "serial" else 1
+                    if provided == 0:
+                        missing.append(f"{comp_name}（{item.track_mode}）")
+                    elif item.track_mode == "serial" and provided < required:
+                        missing.append(
+                            f"{comp_name}（serial，需 {required} 件，已绑 {provided} 件）")
+                if missing:
+                    raise BusinessRuleError(
+                        f"物料绑定不完整，不可过站：{', '.join(missing)}")
 
         # 6. 写工序记录 + 乐观锁更新 serial_unit
         record = self.records.add(OperationRecord(

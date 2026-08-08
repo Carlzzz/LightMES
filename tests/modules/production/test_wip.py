@@ -55,7 +55,7 @@ def test_wip_page_renders(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
     try:
         client = TestClient(app)
-        resp = client.get(f"/production/wip?work_order_id={wo.id}")
+        resp = client.get(f"/production/wip?work_order={wo.code}")
         assert resp.status_code == 200
         assert "WIP 看板" in resp.text
         assert "W001" in resp.text
