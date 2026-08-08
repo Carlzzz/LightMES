@@ -1,6 +1,7 @@
 {% if error %}
 <div class="alert alert--danger">✗ {{ error }}</div>
 <div class="card"><div class="nav-card__desc">修正后请重新扫码。返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div></div>
+<script>if(window.showErrorModal){showErrorModal("{{ error|e }}");}</script>
 {% elif switch_station %}
 <div class="alert alert--ok">
   ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}

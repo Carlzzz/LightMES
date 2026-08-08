@@ -557,3 +557,47 @@ input::placeholder { color: #9bb0a9; }
 .sop-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6; padding: 8px; overflow: auto; }
 .sop-empty { color: #6b8a76; font-size: 13px; }
 
+
+
+/* ---- 全局错误弹窗 ---- */
+.error-modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  animation: error-modal-fade .15s ease-out;
+}
+.error-modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  max-width: 460px; width: 90%;
+  overflow: hidden;
+  animation: error-modal-pop .2s ease-out;
+}
+@keyframes error-modal-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes error-modal-pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.error-modal__header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 20px;
+  background: var(--danger);
+  color: #fff;
+  font-weight: 700; font-size: 16px;
+}
+.error-modal__body {
+  padding: 20px;
+  font-size: 14px; line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap; word-break: break-word;
+}
+.error-modal__footer {
+  padding: 0 20px 20px;
+  display: flex; justify-content: flex-end;
+}
+.error-modal__footer button {
+  background: var(--danger); color: #fff;
+  border: none; border-radius: 8px;
+  padding: 8px 24px; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.error-modal__footer button:hover { opacity: .9; }

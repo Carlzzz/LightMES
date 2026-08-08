@@ -1,6 +1,7 @@
 <div class="station">
   {% if pass_error %}
   <div class="alert alert--danger pass-error-banner">✗ {{ pass_error }} <button type="button" onclick="this.parentElement.remove()" style="float:right;background:none;border:none;color:inherit;font-size:18px;cursor:pointer">×</button></div>
+  <script>if(window.showErrorModal){showErrorModal("{{ pass_error|e }}");}</script>
   {% endif %}
   <!-- 顶部状态栏 -->
   <div class="station__topbar">

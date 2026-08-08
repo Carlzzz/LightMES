@@ -53,7 +53,7 @@ def test_work_orders_endpoint_returns_options(client, db_session):
     resp = client.get(f"/production/station/work-orders?work_station_id={ws[0].id}")
     assert resp.status_code == 200
     assert f'<option value="{wo.id}"' in resp.text
-    assert "剩余" in resp.text  # 含剩余 pending 数
+    assert "可用" in resp.text  # 含可用 pending 数
 
 
 def test_work_orders_endpoint_filters_other_line(client, db_session):
@@ -111,18 +111,42 @@ def test_enter_downstream_sn_loads_main(client, db_session):
     assert "工艺路径" in resp.text or "确认过站" in resp.text
 
 
-def test_enter_carrier_already_bound_blocks(client, db_session):
+def test_enter_carrier_already_bound_reloads(client, db_session):
+    """同一载体码再次扫描 -> 重新加载已绑 SN（不会误绑第二个 SN）。"""
+    ws, wo, line = _setup(db_session, n_ops=2, qty=2)
+    _login(client, db_session)
+    resp1 = client.post("/production/station/enter",
+                        data={"work_station_id": str(ws[0].id),
+                              "work_order_id": str(wo.id), "scan": "PALLET-DUP"})
+    assert resp1.status_code == 200
+    assert "SN00001" in resp1.text
+    resp2 = client.post("/production/station/enter",
+                        data={"work_station_id": str(ws[0].id),
+                              "work_order_id": str(wo.id), "scan": "PALLET-DUP"})
+    assert resp2.status_code == 200
+    assert "SN00001" in resp2.text
+    assert "工艺路径" in resp2.text
+
+
+def test_enter_carrier_cross_work_order_blocks(client, db_session):
+    """载体码绑定到其他工单的 SN -> 交叉校验拦截。"""
     ws, wo, line = _setup(db_session, n_ops=2, qty=2)
     _login(client, db_session)
     client.post("/production/station/enter",
                 data={"work_station_id": str(ws[0].id),
-                      "work_order_id": str(wo.id), "scan": "PALLET-DUP"})
-    # 同一载体码再投一件 → 已绑拦截
+                      "work_order_id": str(wo.id), "scan": "PALLET-X"})
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.schemas import WorkOrderCreate
+    wo2 = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="WO2", product_id=wo.product_id, routing_id=wo.routing_id,
+        line_id=wo.line_id, qty=2, sn_rule_id=wo.sn_rule_id))
+    ProductionService(db_session).release_work_order(wo2.id)
+    db_session.commit()
     resp = client.post("/production/station/enter",
                        data={"work_station_id": str(ws[0].id),
-                             "work_order_id": str(wo.id), "scan": "PALLET-DUP"})
+                             "work_order_id": str(wo2.id), "scan": "PALLET-X"})
     assert resp.status_code == 200
-    assert "✗" in resp.text and ("解绑" in resp.text or "已绑" in resp.text)
+    assert "✗" in resp.text and "其他工单" in resp.text
 
 
 def test_enter_work_order_exhausted_blocks(client, db_session):

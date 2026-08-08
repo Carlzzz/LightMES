@@ -96,6 +96,22 @@ class OperationPassService:
                     f"需要技能等级 L{expected.required_level}+，当前 "
                     f"{level if level is not None else '无'}")
 
+        # 5c. 物料绑定必扫校验：BOM 中所有 track_mode != "none" 的组件必须扫码
+        bom_items = self.query.get_active_bom_items(wo.product_id)
+        if bom_items:
+            provided_ids = {c.component_product_id for c in data.components}
+            missing = []
+            for item in bom_items:
+                if item.track_mode == "none":
+                    continue
+                if item.component_product_id not in provided_ids:
+                    comp = self.query.get_product(item.component_product_id)
+                    comp_name = comp.name if comp else f"#{item.component_product_id}"
+                    missing.append(f"{comp_name}（{item.track_mode}）")
+            if missing:
+                raise BusinessRuleError(
+                    f"以下物料未扫码绑定，不可过站：{', '.join(missing)}")
+
         # 6. 写工序记录 + 乐观锁更新 serial_unit
         record = self.records.add(OperationRecord(
             serial_unit_id=su.id, work_order_id=wo.id, operation_id=expected.id,

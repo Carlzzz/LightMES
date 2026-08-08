@@ -366,18 +366,25 @@ def station_enter(
                 or wo.line_id != ws.line_id
                 or wo.status not in ("released", "in_process")):
             raise BusinessRuleError("工单不可投产（需已下达且属本产线）")
-        # 三路判定：SN → 活跃载体码（已过首工序的单元） → 首站新载体码（绑 SN）
+        # 三路判定：SN -> 活跃载体码 -> 首站新载体码（绑 SN）
         scan = scan.strip()
         su = su_repo.get_by_sn(scan)
         if su is None:
             bound = su_repo.get_active_by_carrier(scan)
-            if bound is not None and bound.status != "pending":
-                # 已过首工序的活跃载体码 → 加载跟踪（扫后续站载体码）
+            if bound is not None:
+                # 载体码已绑 SN（含 pending/in_process/reworking）--直接加载。
+                # 不再跳过 pending：pending 说明首站绑了载体码但还没 PASS，
+                # 操作员可能换站后重新扫进来，必须能进。
                 su = bound
         if su is None:
             # 首站新载体码：绑 SN（不过站）。bind_first_carrier 内部校验
-            # （重复扫已绑 pending 载体码 → "已绑定其他产品，请先解绑" 拦截）
+            # （重复扫已绑 pending 载体码 -> "已绑定其他产品，请先解绑" 拦截）
             su = CarrierService(db).bind_first_carrier(work_order_id, scan, user.id)
+        else:
+            # 交叉校验：扫到的 SN/载体码必须属于所选工单
+            if su.work_order_id != work_order_id:
+                raise BusinessRuleError(
+                    f"该 SN/载体码属于其他工单（SN: {su.sn}），请选择正确工单")
         view = load_svc.load(su.sn, work_station_id, user.id)
     except DomainError as e:
         db.rollback()

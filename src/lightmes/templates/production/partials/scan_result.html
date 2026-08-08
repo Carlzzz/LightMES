@@ -1,5 +1,6 @@
 {% if error %}
 <div class="alert alert--danger">✗ {{ error }}</div>
+<script>if(window.showErrorModal){showErrorModal("{{ error|e }}");}</script>
 {% else %}
 <div class="alert alert--ok">
   ✓ <strong>{{ result.sn }}</strong> — 已过 工序{{ result.passed_op.seq }} {{ result.passed_op.name }}

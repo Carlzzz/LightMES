@@ -18,6 +18,7 @@
         </select>
       </div>
       <div class="field"><label>工单</label>
+        <div style="display:flex;gap:4px;align-items:flex-end">
         <select id="station-wo-select" name="work_order_id" required
                 hx-get="/production/station/work-orders"
                 hx-trigger="reset-wo from:body"
@@ -27,6 +28,9 @@
                 onchange="document.getElementById('station-root').innerHTML='';">
           <option value="" disabled selected>- 选择工单 -</option>
         </select>
+        <button type="button" class="btn-secondary btn-sm" title="刷新工单列表"
+                onclick="htmx.trigger(document.getElementById('station-wo-select'),'reset-wo')">↻</button>
+        </div>
       </div>
       <div class="field" style="flex:1;min-width:240px"><label>扫 SN / 载体码</label>
         <input id="enter-scan" name="scan" placeholder="首件扫载体码，后续扫 SN/载体码" required autofocus></div>
@@ -42,6 +46,13 @@
     if (wsSel && wsSel.value) {
       htmx.trigger(document.getElementById('station-wo-select'), 'reset-wo');
     }
+    // 报错返回后自动刷新工单列表（防止工单状态已变更但列表是旧数据）
+    document.getElementById('station-root').addEventListener('htmx:afterSwap', function(e) {
+      var html = e.detail.target.innerHTML || '';
+      if (html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0) {
+        htmx.trigger(document.getElementById('station-wo-select'), 'reset-wo');
+      }
+    });
   })();
 </script>
 {% endblock %}

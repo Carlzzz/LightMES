@@ -22,5 +22,51 @@
   <main class="container{% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
+<script>
+  // 全局错误弹窗：调用 showErrorModal(msg) 任意位置触发
+  window.showErrorModal = function(msg) {
+    // 移除已有弹窗
+    var existing = document.querySelector('.error-modal-overlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.className = 'error-modal-overlay';
+    overlay.innerHTML =
+      '<div class="error-modal">' +
+        '<div class="error-modal__header">✗ 错误</div>' +
+        '<div class="error-modal__body">' + msg + '</div>' +
+        '<div class="error-modal__footer"><button onclick="this.closest(\'.error-modal-overlay\').remove()">确定</button></div>' +
+      '</div>';
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+  };
+  // ESC 关闭弹窗
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var m = document.querySelector('.error-modal-overlay');
+      if (m) m.remove();
+    }
+  });
+  // HTMX 响应包含错误时自动弹窗（HX-Retarget 错误片段 / 422 / 400 等）
+  document.body.addEventListener('htmx:afterRequest', function(e) {
+    var xhr = e.detail.xhr;
+    if (!xhr) return;
+    // 如果响应包含 alert--danger 且目标是 station-root 或 result，提取文本弹窗
+    var ct = xhr.getResponseHeader('content-type') || '';
+    if (ct.indexOf('html') < 0) return;
+    var html = xhr.responseText || '';
+    if (html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0) {
+      // 提取第一个 alert--danger 的文本内容
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var alertEl = tmp.querySelector('.alert--danger');
+      if (alertEl) {
+        var msg = alertEl.textContent.replace(/^✗\s*/, '').trim();
+        if (msg) window.showErrorModal(msg);
+      }
+    }
+  });
+</script>
 </body>
 </html>
