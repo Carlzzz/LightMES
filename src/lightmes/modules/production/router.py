@@ -11,14 +11,23 @@ from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
     WorkOrderRead, ComponentInput, ParamInput,
+    FirstInspectionSubmitInput, FirstInspectionCheckResultInput,
+    TestDataRecordSubmitInput, TestDataValueInput,
 )
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.station_service import StationService
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
 from lightmes.modules.production.carrier_service import CarrierService
-from lightmes.modules.production.models import WorkOrder
-from lightmes.modules.production.repository import SerialUnitRepository, WorkOrderRepository
+from lightmes.modules.production.quality_service import (
+    FirstInspectionService, TestDataService,
+)
+from lightmes.modules.production.models import (
+    WorkOrder, OperationRecord, FirstInspectionRecord,
+)
+from lightmes.modules.production.repository import (
+    SerialUnitRepository, WorkOrderRepository, OperationRecordRepository,
+)
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.shared.errors import DomainError, NotFoundError, BusinessRuleError
 
@@ -220,6 +229,21 @@ def station_pass(
     param_key: list[str] = Form(default=[]),
     param_value: list[str] = Form(default=[]),
     param_unit: list[str] = Form(default=[]),
+    # 首检相关
+    fi_check_item_id: list[int] = Form(default=[]),
+    fi_result_type: list[str] = Form(default=[]),
+    fi_boolean_value: list[bool] = Form(default=[]),
+    fi_numeric_value: list[float] = Form(default=[]),
+    fi_text_value: list[str] = Form(default=[]),
+    fi_remark: list[str] = Form(default=[]),
+    fi_overall_remark: str = Form(""),
+    # 测试数据相关
+    td_field_id: list[int] = Form(default=[]),
+    td_value_type: list[str] = Form(default=[]),
+    td_boolean_value: list[bool] = Form(default=[]),
+    td_numeric_value: list[float] = Form(default=[]),
+    td_text_value: list[str] = Form(default=[]),
+    td_overall_remark: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
@@ -245,19 +269,25 @@ def station_pass(
         unit = param_unit[i].strip() if i < len(param_unit) and param_unit[i].strip() else None
         params.append(ParamInput(param_key=key.strip(), param_value=val.strip(), unit=unit))
 
-    svc = OperationPassService(db)
+    # 先过站（创建工序记录）
+    op_svc = OperationPassService(db)
     data = OperationPassInput(
         work_station_id=work_station_id, operator_id=user.id,
         components=components, params=params)
-    # 先按 SN 试，NotFound 再当工单号（首件）
+    # 先按 SN 试，仅当 SN/载体码不存在时才回退当工单号（首件）
     try:
         data.sn = scan
         try:
-            result = svc.pass_operation(data)
-        except NotFoundError:
-            data.sn = None
-            data.work_order_code = scan
-            result = svc.pass_operation(data)
+            result = op_svc.pass_operation(data)
+        except NotFoundError as e:
+            # 只有明确是"未找到 SN 或载体码"才回退到工单号
+            if "未找到 SN 或载体码" in e.detail:
+                data.sn = None
+                data.work_order_code = scan
+                result = op_svc.pass_operation(data)
+            else:
+                # 其他 NotFoundError（如作业站不存在）直接抛出
+                raise
     except DomainError as e:
         db.rollback()
         # 物料绑定/参数等报错不销毁主界面：重新渲染工位视图 + 顶部错误提示
@@ -274,8 +304,95 @@ def station_pass(
                 request, "production/partials/station_pass_result.html",
                 {"error": e.detail, "work_station_id": work_station_id},
             )
+
+    # 获取刚才创建的工序记录
     su = SerialUnitRepository(db).get_by_sn(result.sn)
     wo_id = su.work_order_id if su is not None else None
+
+    # 获取工单以获取routing_id
+    wo = WorkOrderRepository(db).get(wo_id) if wo_id else None
+    operations = MasterDataQueryService(db).get_operations(wo.routing_id) if wo else []
+
+    # 处理首检 - 注意：result.passed_op 是刚完成的工序
+    passed_op_id = result.passed_op.id if result.passed_op else None
+    if fi_check_item_id and passed_op_id:
+        try:
+            fi_svc = FirstInspectionService(db)
+            fi_config = fi_svc.get_config_by_operation(passed_op_id, work_station_id)
+            if fi_config and fi_config.is_enabled and wo:
+                # 检查是否需要首检 - 使用station_view中显示的同样逻辑
+                # 从view中我们已经知道需要首检，所以直接创建记录并提交
+                trigger_reason = "new_order"  # 默认原因
+                # 创建首检记录
+                fi_record = fi_svc.create_inspection_record(
+                    fi_config, wo.id, passed_op_id,
+                    work_station_id, user.id, trigger_reason,
+                    su.id if su else None
+                )
+                # 收集检查结果
+                check_results = []
+                for i, item_id in enumerate(fi_check_item_id):
+                    result_type = fi_result_type[i] if i < len(fi_result_type) else "boolean"
+                    check_result = FirstInspectionCheckResultInput(
+                        check_item_id=item_id,
+                        result_type=result_type,
+                        boolean_value=fi_boolean_value[i] if i < len(fi_boolean_value) else None,
+                        numeric_value=fi_numeric_value[i] if i < len(fi_numeric_value) else None,
+                        text_value=fi_text_value[i] if i < len(fi_text_value) else None,
+                        remark=fi_remark[i] if i < len(fi_remark) else None,
+                    )
+                    check_results.append(check_result)
+                # 提交首检
+                if check_results:
+                    fi_svc.submit_inspection(
+                        FirstInspectionSubmitInput(
+                            record_id=fi_record.id,
+                            check_results=check_results,
+                            remark=fi_overall_remark or None,
+                        ),
+                        user.id
+                    )
+        except Exception as e:
+            # 首检错误不影响过站，只是记录一下
+            pass
+
+    # 处理测试数据
+    if td_field_id and passed_op_id:
+        try:
+            td_svc = TestDataService(db)
+            td_template = td_svc.get_template_by_operation(passed_op_id, work_station_id)
+            if td_template and td_template.is_enabled:
+                # 获取最新的工序记录
+                op_records = OperationRecordRepository(db).list_by_serial_unit(su.id) if su else []
+                latest_op_record = op_records[-1] if op_records else None
+
+                if latest_op_record:
+                    # 收集测试数据值
+                    test_values = []
+                    for i, field_id in enumerate(td_field_id):
+                        value_type = td_value_type[i] if i < len(td_value_type) else "numeric"
+                        test_value = TestDataValueInput(
+                            field_id=field_id,
+                            value_type=value_type,
+                            boolean_value=td_boolean_value[i] if i < len(td_boolean_value) else None,
+                            numeric_value=td_numeric_value[i] if i < len(td_numeric_value) else None,
+                            text_value=td_text_value[i] if i < len(td_text_value) else None,
+                        )
+                        test_values.append(test_value)
+                    # 提交测试数据
+                    if test_values:
+                        td_svc.submit_test_data(
+                            TestDataRecordSubmitInput(
+                                operation_record_id=latest_op_record.id,
+                                values=test_values,
+                                remark=td_overall_remark or None,
+                            ),
+                            user.id
+                        )
+        except Exception as e:
+            # 测试数据错误不影响过站，只是记录一下
+            pass
+
     # 成功分流：finished → 完工片段；next_op 可在本站继续 → 刷富界面到下一工序；否则切站提示
     if result.is_finished:
         return templates.TemplateResponse(

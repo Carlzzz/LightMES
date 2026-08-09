@@ -1,0 +1,15 @@
+
+<td>{{ user.id }}</td>
+<td>{{ user.username }}</td>
+<td>{{ user.display_name }}</td>
+<td>{{ user.role_id }}</td>
+<td>
+  {% if user.is_active %}
+  <span class="badge">正常</span>
+  {% else %}
+  <span class="badge--danger">禁用</span>
+  {% endif %}
+</td>
+<td>
+  <button class="btn-secondary btn-sm">编辑</button>
+</td>

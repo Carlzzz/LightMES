@@ -1,0 +1,15 @@
+<tr id="check-item-{{ item.id }}">
+  <td>{{ item.seq }}</td>
+  <td>{{ item.name }}</td>
+  <td>{% if item.check_type == 'boolean' %}是/否{% elif item.check_type == 'numeric' %}数值{% else %}文本{% endif %}</td>
+  <td>{{ item.unit or '-' }}</td>
+  <td>{{ item.standard_value or '-' }}</td>
+  <td>{{ item.min_value or '-' }}</td>
+  <td>{{ item.max_value or '-' }}</td>
+  <td>{% if item.is_mandatory %}<span class="badge">是</span>{% else %}否{% endif %}</td>
+  <td>
+    <form method="post" action="/quality/first-inspection/{{ item.config_id }}/check-items/{{ item.id }}/delete" onsubmit="return confirm('确认删除此检查项？')">
+      <button type="submit" class="btn btn-sm" style="background: #dc3545; color: white;">删除</button>
+    </form>
+  </td>
+</tr>

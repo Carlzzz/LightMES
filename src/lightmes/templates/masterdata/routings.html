@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}工艺路径管理{% endblock %}
-{% block container_class %}container--wide{% endblock %}
+{% block container_class %}--wide{% endblock %}
 {% block content %}
 <h1 class="page-title">工艺路径管理</h1>
 <div class="card">
@@ -70,7 +70,8 @@
     <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>产品</th><th>状态</th><th>来源</th></tr></thead>
     <tbody>
       {% for r in routings %}
-      <tr><td>{{ r.id }}</td><td><a href="/masterdata/routings/{{ r.id }}">{{ r.code }}</a></td><td>{{ r.name }}</td><td>{{ r.product_id }}</td>
+      <tr><td>{{ r.id }}</td><td><a href="/masterdata/routings/{{ r.id }}">{{ r.code }}</a></td><td>{{ r.name }}</td>
+      <td>{% set p = product_map.get(r.product_id) %}{{ p.code if p else r.product_id }} {{ p.name if p else '' }}</td>
       <td>{{ r.status }}</td><td>{% if r.source=="erp" %}ERP{% else %}本地{% endif %}</td></tr>
       {% endfor %}
     </tbody>

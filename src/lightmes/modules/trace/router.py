@@ -45,6 +45,7 @@ def query_page(request: Request) -> HTMLResponse:
 def query_submit(
     request: Request, query_type: str = Form(...), value: str = Form(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_login),
 ) -> HTMLResponse:
     svc = TraceService(db)
     ctx: dict = {"request": request}
@@ -84,13 +85,10 @@ def rework_submit(
             sn, target_seq=target_seq, reason=reason or None, operator_id=user.id)
     except DomainError as e:
         db.rollback()
-        return HTMLResponse(
-            f'<div class="alert alert--danger">✗ {e.detail}</div>'
-            f'<script>if(window.showErrorModal)showErrorModal("{e.detail}");</script>')
-    return HTMLResponse(
-        f'<div class="alert alert--success">✓ {su.sn} '
-        f'已返工至工序 {su.current_operation_seq}</div>'
-        f'<script>setTimeout(function(){{location.href="/production/station";}},2000);</script>')
+        return templates.TemplateResponse(
+            request, "trace/partials/error_result.html", {"error": e.detail})
+    return templates.TemplateResponse(
+        request, "trace/partials/rework_success.html", {"su": su})
 
 
 @router.get("/trace/carrier-unbind", response_class=HTMLResponse)
@@ -104,12 +102,11 @@ def carrier_unbind_submit(
     user: User = Depends(require_role("admin", "supervisor", "operator")),
 ) -> HTMLResponse:
     try:
-        su = CarrierService(db).unbind(scan, user.id)
+        su, carrier_code = CarrierService(db).unbind(scan, user.id)
     except DomainError as e:
         db.rollback()
-        return HTMLResponse(
-            f'<div class="alert alert--danger">✗ {e.detail}</div>'
-            f'<script>if(window.showErrorModal)showErrorModal("{e.detail}");</script>')
-    carrier = su.carrier_code or ''
-    return HTMLResponse(
-        f'<div class="alert alert--success">✓ {su.sn} 已解绑载体码 {carrier}</div>')
+        return templates.TemplateResponse(
+            request, "trace/partials/error_result.html", {"error": e.detail})
+    return templates.TemplateResponse(
+        request, "trace/partials/carrier_unbind_success.html",
+        {"su": su, "carrier_code": carrier_code})

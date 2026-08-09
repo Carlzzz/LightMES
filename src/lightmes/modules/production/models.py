@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Index, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -110,3 +110,182 @@ class CarrierBinding(Base, TimestampMixin):
     unbound_reason: Mapped[str | None] = mapped_column(default=None)
     operator_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), default=None)
+
+
+class FirstInspectionConfig(Base, TimestampMixin):
+    """首检配置：定义哪些工序/站位需要首检及触发条件"""
+    __tablename__ = "first_inspection_configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("operations.id"), index=True)
+    work_station_id: Mapped[int | None] = mapped_column(ForeignKey("work_stations.id"), default=None, index=True)
+    is_enabled: Mapped[bool] = mapped_column(default=True)
+    name: Mapped[str] = mapped_column()
+
+    # 触发条件配置（各条件可单独启用）
+    trigger_new_order: Mapped[bool] = mapped_column(default=True)  # 新工单开始
+    trigger_material_change: Mapped[bool] = mapped_column(default=False)  # 物料/批次变更
+    trigger_tooling_change: Mapped[bool] = mapped_column(default=False)  # 工装/模具变更
+    trigger_tool_change: Mapped[bool] = mapped_column(default=False)  # 工装变更（别名）
+    trigger_param_revision: Mapped[bool] = mapped_column(default=False)  # 参数修订
+    trigger_abnormal_restart: Mapped[bool] = mapped_column(default=False)  # 异常重启
+    trigger_shift_handover: Mapped[bool] = mapped_column(default=False)  # 交接班
+    trigger_cold_start: Mapped[bool] = mapped_column(default=False)  # 冷启动（停产≥4小时）
+    trigger_previous_failed: Mapped[bool] = mapped_column(default=True)  # 前序失败需首件复检
+
+    # 首检策略
+    sample_size: Mapped[int] = mapped_column(default=1)  # 首检数量（一般1件）
+    require_authorization: Mapped[bool] = mapped_column(default=True)  # 是否需要授权人员放行
+    authorized_roles: Mapped[list[str] | None] = mapped_column(JSON, default=None)  # 可放行的角色列表
+    quarantine_on_fail: Mapped[bool] = mapped_column(default=True)  # 失败时是否批次隔离
+
+
+class FirstInspectionCheckItem(Base, TimestampMixin):
+    """首检检查项配置"""
+    __tablename__ = "first_inspection_check_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("first_inspection_configs.id"), index=True)
+    seq: Mapped[int] = mapped_column()
+    name: Mapped[str] = mapped_column()
+    description: Mapped[str | None] = mapped_column(default=None)
+    check_type: Mapped[str] = mapped_column(default="boolean")  # boolean/value/text
+    unit: Mapped[str | None] = mapped_column(default=None)
+    standard_value: Mapped[str | None] = mapped_column(default=None)
+    min_value: Mapped[float | None] = mapped_column(Numeric(12, 3), default=None)
+    max_value: Mapped[float | None] = mapped_column(Numeric(12, 3), default=None)
+    is_mandatory: Mapped[bool] = mapped_column(default=True)
+
+
+class FirstInspectionRecord(Base, TimestampMixin):
+    """首检记录"""
+    __tablename__ = "first_inspection_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("first_inspection_configs.id"))
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("operations.id"))
+    work_station_id: Mapped[int] = mapped_column(ForeignKey("work_stations.id"))
+    serial_unit_id: Mapped[int | None] = mapped_column(ForeignKey("serial_units.id"), default=None, index=True)
+
+    trigger_reason: Mapped[str] = mapped_column()  # 触发原因（new_order/material_change等）
+    trigger_detail: Mapped[str | None] = mapped_column(default=None)  # 触发详情
+
+    inspector_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    inspected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(default="pending")  # pending/passed/failed/waived
+    remark: Mapped[str | None] = mapped_column(default=None)
+
+    # 授权放行
+    released_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    release_remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class FirstInspectionCheckResult(Base, TimestampMixin):
+    """首检检查项结果"""
+    __tablename__ = "first_inspection_check_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    record_id: Mapped[int] = mapped_column(ForeignKey("first_inspection_records.id"), index=True)
+    check_item_id: Mapped[int] = mapped_column(ForeignKey("first_inspection_check_items.id"))
+    check_item_name: Mapped[str] = mapped_column()  # 快照检查项名称
+    result_type: Mapped[str] = mapped_column()  # boolean/value/text
+    boolean_value: Mapped[bool | None] = mapped_column(default=None)
+    numeric_value: Mapped[float | None] = mapped_column(Numeric(12, 3), default=None)
+    text_value: Mapped[str | None] = mapped_column(default=None)
+    is_pass: Mapped[bool] = mapped_column()
+    remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class FirstInspectionState(Base, TimestampMixin):
+    """首检状态跟踪：记录当前工序/工单的首检状态，避免重复触发"""
+    __tablename__ = "first_inspection_states"
+    __table_args__ = (
+        Index("uq_wo_op_state", "work_order_id", "operation_id", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("operations.id"), index=True)
+    last_inspection_record_id: Mapped[int | None] = mapped_column(ForeignKey("first_inspection_records.id"), default=None)
+    last_passed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    # 状态跟踪用于触发判断
+    current_material_batch: Mapped[str | None] = mapped_column(default=None)
+    current_tooling_id: Mapped[str | None] = mapped_column(default=None)
+    current_param_version: Mapped[str | None] = mapped_column(default=None)
+    last_produced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_shift_date: Mapped[str | None] = mapped_column(default=None)
+    is_abnormal_state: Mapped[bool] = mapped_column(default=False)
+
+
+class TestDataTemplate(Base, TimestampMixin):
+    """测试数据模板：定义测试站位需要采集的参数"""
+    __tablename__ = "test_data_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("operations.id"), index=True)
+    work_station_id: Mapped[int | None] = mapped_column(ForeignKey("work_stations.id"), default=None, index=True)
+    name: Mapped[str] = mapped_column()
+    description: Mapped[str | None] = mapped_column(default=None)
+    is_enabled: Mapped[bool] = mapped_column(default=True)
+    version: Mapped[str] = mapped_column(default="1")
+
+
+class TestDataField(Base, TimestampMixin):
+    """测试数据字段定义"""
+    __tablename__ = "test_data_fields"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("test_data_templates.id"), index=True)
+    seq: Mapped[int] = mapped_column()
+    code: Mapped[str] = mapped_column()
+    name: Mapped[str] = mapped_column()
+    field_type: Mapped[str] = mapped_column(default="numeric")  # numeric/boolean/text/select
+    unit: Mapped[str | None] = mapped_column(default=None)
+    is_required: Mapped[bool] = mapped_column(default=True)
+    standard_value: Mapped[str | None] = mapped_column(default=None)
+    min_value: Mapped[float | None] = mapped_column(Numeric(12, 3), default=None)
+    max_value: Mapped[float | None] = mapped_column(Numeric(12, 3), default=None)
+    options: Mapped[list[str] | None] = mapped_column(JSON, default=None)  # select类型的选项
+    display_group: Mapped[str | None] = mapped_column(default=None)
+
+
+class TestDataRecord(Base, TimestampMixin):
+    """测试数据记录"""
+    __tablename__ = "test_data_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("test_data_templates.id"))
+    operation_record_id: Mapped[int] = mapped_column(ForeignKey("operation_records.id"), index=True)
+    serial_unit_id: Mapped[int] = mapped_column(ForeignKey("serial_units.id"), index=True)
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    operation_id: Mapped[int] = mapped_column(ForeignKey("operations.id"))
+    work_station_id: Mapped[int] = mapped_column(ForeignKey("work_stations.id"))
+    operator_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+    overall_result: Mapped[str] = mapped_column(default="pending")  # pending/passed/failed
+    test_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    test_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class TestDataValue(Base, TimestampMixin):
+    """测试数据明细值"""
+    __tablename__ = "test_data_values"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    record_id: Mapped[int] = mapped_column(ForeignKey("test_data_records.id"), index=True)
+    field_id: Mapped[int] = mapped_column(ForeignKey("test_data_fields.id"))
+    field_code: Mapped[str] = mapped_column()
+    field_name: Mapped[str] = mapped_column()
+
+    value_type: Mapped[str] = mapped_column()
+    numeric_value: Mapped[float | None] = mapped_column(Numeric(12, 3), default=None)
+    boolean_value: Mapped[bool | None] = mapped_column(default=None)
+    text_value: Mapped[str | None] = mapped_column(default=None)
+
+    is_pass: Mapped[bool | None] = mapped_column(default=None)
+    out_of_spec: Mapped[bool] = mapped_column(default=False)
+    remark: Mapped[str | None] = mapped_column(default=None)

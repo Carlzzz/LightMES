@@ -8,6 +8,14 @@ from lightmes.modules.production.repository import (
 )
 from lightmes.modules.production.schemas import (
     StationOpView, StationComponentView, StationView,
+    FirstInspectionStationView, TestDataStationView,
+    FirstInspectionCheckItemRead, TestDataFieldRead,
+)
+from lightmes.modules.production.quality_service import (
+    FirstInspectionService, TestDataService,
+)
+from lightmes.modules.production.models import (
+    FirstInspectionConfig, TestDataTemplate,
 )
 from lightmes.shared.errors import NotFoundError, BusinessRuleError
 
@@ -112,6 +120,49 @@ class StationService:
         if expected is not None:
             sop_text = expected.sop_text
             sop_url = expected.sop_url
+
+        # 加载首检和测试数据信息
+        first_inspection_view = None
+        test_data_view = None
+        if expected is not None:
+            fi_svc = FirstInspectionService(self.db)
+            fi_config = fi_svc.get_config_by_operation(expected.id, work_station_id)
+            if fi_config and fi_config.is_enabled:
+                # 检查是否需要首检
+                needs_inspection = False
+                trigger_reason = None
+                if su is not None:
+                    needs_inspection, trigger_reason, _ = fi_svc.check_needs_inspection(fi_config, wo.id, expected.id)
+                else:
+                    # 首件总是需要首检（如果配置了）
+                    needs_inspection, trigger_reason = True, "new_order"
+
+                check_items = [FirstInspectionCheckItemRead.model_validate(item) for item in fi_svc.list_check_items(fi_config.id)]
+
+                first_inspection_view = FirstInspectionStationView(
+                    needs_inspection=needs_inspection,
+                    trigger_reason=trigger_reason,
+                    config_id=fi_config.id,
+                    config_name=fi_config.name,
+                    check_items=check_items
+                )
+
+            # 测试数据
+            td_svc = TestDataService(self.db)
+            td_template = td_svc.get_template_by_operation(expected.id, work_station_id)
+            if td_template and td_template.is_enabled:
+                fields = [TestDataFieldRead.model_validate(f) for f in td_svc.list_fields(td_template.id)]
+                test_data_view = TestDataStationView(
+                    needs_test_data=True,
+                    template_id=td_template.id,
+                    template_name=td_template.name,
+                    fields=fields
+                )
+            else:
+                test_data_view = TestDataStationView(
+                    needs_test_data=False
+                )
+
         return StationView(
             sn=su.sn if su is not None else "",
             work_order_code=wo.code,
@@ -128,4 +179,6 @@ class StationService:
             components=components,
             sop_text=sop_text,
             sop_url=sop_url,
+            first_inspection=first_inspection_view,
+            test_data=test_data_view,
         )

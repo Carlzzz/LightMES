@@ -1,0 +1,111 @@
+- generic [active] [ref=f1e1]:
+  - banner [ref=f1e2]:
+    - link "◆ LightMES" [ref=f1e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f1e4]: ◆
+      - text: LightMES
+    - link "首页" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f1e6] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f1e7] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f1e8] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f1e9] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f1e10]:
+    - heading "生产控制台 笔记本外壳组装 MES" [level=1] [ref=f1e11]
+    - generic [ref=f1e12]:
+      - generic [ref=f1e13]:
+        - generic [ref=f1e14]: 主数据
+        - generic [ref=f1e15]:
+          - link "📦 产品管理 成品、组件、辅料" [ref=f1e16] [cursor=pointer]:
+            - /url: /masterdata/products
+            - generic [ref=f1e17]: 📦
+            - generic [ref=f1e18]: 产品管理
+            - generic [ref=f1e19]: 成品、组件、辅料
+          - link "🏭 产线管理 产线布局" [ref=f1e20] [cursor=pointer]:
+            - /url: /masterdata/lines
+            - generic [ref=f1e21]: 🏭
+            - generic [ref=f1e22]: 产线管理
+            - generic [ref=f1e23]: 产线布局
+          - link "🔧 作业站管理 工位配置" [ref=f1e24] [cursor=pointer]:
+            - /url: /masterdata/work-stations
+            - generic [ref=f1e25]: 🔧
+            - generic [ref=f1e26]: 作业站管理
+            - generic [ref=f1e27]: 工位配置
+          - link "🛠️ 工艺路径 工序编排" [ref=f1e28] [cursor=pointer]:
+            - /url: /masterdata/routings
+            - generic [ref=f1e29]: 🛠️
+            - generic [ref=f1e30]: 工艺路径
+            - generic [ref=f1e31]: 工序编排
+          - link "📋 BOM 管理 物料清单" [ref=f1e32] [cursor=pointer]:
+            - /url: /masterdata/boms
+            - generic [ref=f1e33]: 📋
+            - generic [ref=f1e34]: BOM 管理
+            - generic [ref=f1e35]: 物料清单
+          - link "🎓 技能管理 技能与等级定义" [ref=f1e36] [cursor=pointer]:
+            - /url: /masterdata/skills
+            - generic [ref=f1e37]: 🎓
+            - generic [ref=f1e38]: 技能管理
+            - generic [ref=f1e39]: 技能与等级定义
+          - link "👷 人员技能 操作员资格档案" [ref=f1e40] [cursor=pointer]:
+            - /url: /masterdata/operator-skills
+            - generic [ref=f1e41]: 👷
+            - generic [ref=f1e42]: 人员技能
+            - generic [ref=f1e43]: 操作员资格档案
+          - link "🔢 SN 规则 编码规则" [ref=f1e44] [cursor=pointer]:
+            - /url: /production/sn-rules
+            - generic [ref=f1e45]: 🔢
+            - generic [ref=f1e46]: SN 规则
+            - generic [ref=f1e47]: 编码规则
+          - link "📥 ERP 导入 主数据下发" [ref=f1e48] [cursor=pointer]:
+            - /url: /integration/import
+            - generic [ref=f1e49]: 📥
+            - generic [ref=f1e50]: ERP 导入
+            - generic [ref=f1e51]: 主数据下发
+      - generic [ref=f1e52]:
+        - generic [ref=f1e53]: 生产执行
+        - generic [ref=f1e54]:
+          - link "🖥️ 工位作业 工位主界面 · 路径/物料/参数/过站" [ref=f1e55] [cursor=pointer]:
+            - /url: /production/station?work_station_id=0
+            - generic [ref=f1e56]: 🖥️
+            - generic [ref=f1e57]: 工位作业
+            - generic [ref=f1e58]: 工位主界面 · 路径/物料/参数/过站
+          - link "📊 WIP 看板 在制品实时状态" [ref=f1e59] [cursor=pointer]:
+            - /url: /production/wip?work_order=
+            - generic [ref=f1e60]: 📊
+            - generic [ref=f1e61]: WIP 看板
+            - generic [ref=f1e62]: 在制品实时状态
+      - generic [ref=f1e63]:
+        - generic [ref=f1e64]: 追溯管理
+        - generic [ref=f1e65]:
+          - link "🔍 追溯查询 履历 · 正向 · 反向召回" [ref=f1e66] [cursor=pointer]:
+            - /url: /trace/query
+            - generic [ref=f1e67]: 🔍
+            - generic [ref=f1e68]: 追溯查询
+            - generic [ref=f1e69]: 履历 · 正向 · 反向召回
+          - link "🔧 返工 / 拆解 回退工序、解绑组件" [ref=f1e70] [cursor=pointer]:
+            - /url: /trace/rework
+            - generic [ref=f1e71]: 🔧
+            - generic [ref=f1e72]: 返工 / 拆解
+            - generic [ref=f1e73]: 回退工序、解绑组件
+          - link "🔗 载体码解绑 解除 SN 与载体码绑定" [ref=f1e74] [cursor=pointer]:
+            - /url: /trace/carrier-unbind
+            - generic [ref=f1e75]: 🔗
+            - generic [ref=f1e76]: 载体码解绑
+            - generic [ref=f1e77]: 解除 SN 与载体码绑定
+      - generic [ref=f1e78]:
+        - generic [ref=f1e79]: 质量管理
+        - generic [ref=f1e80]:
+          - link "✅ 首检配置 关键工位首件检查规则" [ref=f1e81] [cursor=pointer]:
+            - /url: /quality/first-inspection
+            - generic [ref=f1e82]: ✅
+            - generic [ref=f1e83]: 首检配置
+            - generic [ref=f1e84]: 关键工位首件检查规则
+          - link "📝 测试数据 测试工位数据录入模板" [ref=f1e85] [cursor=pointer]:
+            - /url: /quality/test-data
+            - generic [ref=f1e86]: 📝
+            - generic [ref=f1e87]: 测试数据
+            - generic [ref=f1e88]: 测试工位数据录入模板

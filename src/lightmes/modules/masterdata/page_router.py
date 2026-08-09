@@ -198,13 +198,14 @@ def work_stations_create_page(
 def routings_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     svc = MasterDataService(db)
     products = svc.products.list_all()
+    product_map = {p.id: p for p in products}
     work_stations = svc.work_stations.list_all()
     routings = svc.routings.list_all()
     skills = SkillService(db).list_skills()
     return templates.TemplateResponse(
         request, "masterdata/routings.html",
-        {"products": products, "work_stations": work_stations,
-         "routings": routings, "skills": skills}
+        {"products": products, "product_map": product_map,
+         "work_stations": work_stations, "routings": routings, "skills": skills}
     )
 
 
@@ -254,9 +255,12 @@ def routings_create_page(
 
 @router.get("/masterdata/boms", response_class=HTMLResponse)
 def boms_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    boms = MasterDataService(db).boms.list_all()
+    svc = MasterDataService(db)
+    boms = svc.boms.list_all()
+    products = svc.products.list_all()
+    product_map = {p.id: p for p in products}
     return templates.TemplateResponse(
-        request, "masterdata/boms.html", {"boms": boms}
+        request, "masterdata/boms.html", {"boms": boms, "product_map": product_map}
     )
 
 

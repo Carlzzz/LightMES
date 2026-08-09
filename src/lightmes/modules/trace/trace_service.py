@@ -68,20 +68,24 @@ class TraceService:
         params = self.params.list_by_serial_unit(su.id)
         # Enrich records with operation + station names
         from lightmes.modules.masterdata.models import Operation
-        op_cache: dict[int, str] = {}
+        op_cache: dict[int, tuple[str, int]] = {}
         ws_cache: dict[int, str] = {}
         rec_views = []
         for r in records:
             if r.operation_id not in op_cache:
                 op = self.db.get(Operation, r.operation_id)
-                op_cache[r.operation_id] = op.name if op else f"#{r.operation_id}"
+                op_cache[r.operation_id] = (
+                    (op.name if op else f"#{r.operation_id}"),
+                    (op.seq if op else 0)
+                )
             if r.work_station_id not in ws_cache:
                 ws = self.query.get_work_station(r.work_station_id)
                 ws_cache[r.work_station_id] = ws.name if ws else f"#{r.work_station_id}"
+            op_name, op_seq = op_cache[r.operation_id]
             rec_views.append(OpRecordView(
                 operation_id=r.operation_id,
-                operation_name=op_cache[r.operation_id],
-                operation_seq=0,
+                operation_name=op_name,
+                operation_seq=op_seq,
                 work_station_id=r.work_station_id,
                 work_station_name=ws_cache[r.work_station_id],
                 line_id=r.line_id,

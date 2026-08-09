@@ -1,0 +1,49 @@
+- generic [ref=f27e1]:
+  - banner [ref=f27e2]:
+    - link "◆ LightMES" [ref=f27e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f27e4]: ◆
+      - text: LightMES
+    - link "首页" [ref=f27e5] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f27e6] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f27e7] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f27e8] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f27e9] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f27e10]:
+    - generic [ref=f27e11]:
+      - generic [ref=f27e12]:
+        - generic [ref=f27e13]: 扫码进入
+        - generic [ref=f27e14]:
+          - generic [ref=f27e15]:
+            - generic [ref=f27e16]: 作业站
+            - combobox [ref=f27e17]:
+              - option "- 选择作业站 -" [disabled]
+              - option "WS-01 上线工位（演示装配线）"
+              - option "WS-02 核心装配工位（演示装配线）" [selected]
+              - option "WS-03 测试包装工位（演示装配线）"
+          - generic [ref=f27e18]:
+            - generic [ref=f27e19]: 工单
+            - combobox [ref=f27e20]:
+              - option "- 选择工单 -" [disabled] [selected]
+              - option "WO-DEMO（可用 5）"
+          - generic [ref=f27e21]:
+            - generic [ref=f27e22]: 扫 SN / 载体码
+            - textbox "首件扫载体码，后续扫 SN/载体码" [active] [ref=f27e23]
+          - button "进入" [ref=f27e24] [cursor=pointer]
+        - generic [ref=f27e25]: 作业站选定后自动列出本产线可用工单；首件扫载体码即自动绑定 SN 进入主界面，再手动确认过站。
+      - generic [ref=f27e26]:
+        - generic [ref=f27e27]: ✗ 该 SN 当前工序 10 上线准备 应在【上线工位】之一作业站做，当前作业站不符
+        - generic [ref=f27e29]:
+          - text: 请检查作业站/工单/扫码后重新进入。 返回
+          - link "工位作业" [ref=f27e30] [cursor=pointer]:
+            - /url: /production/station?work_station_id=2
+          - text: 。
+  - generic [ref=f27e32]:
+    - generic [ref=f27e33]: ✗ 错误
+    - generic [ref=f27e34]: 该 SN 当前工序 10 上线准备 应在【上线工位】之一作业站做，当前作业站不符
+    - button "确定" [ref=f27e36] [cursor=pointer]

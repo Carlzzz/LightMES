@@ -34,7 +34,7 @@ class CarrierService:
         self.db.flush()
         return su
 
-    def unbind(self, scan: str, operator_id: int | None) -> SerialUnit:
+    def unbind(self, scan: str, operator_id: int | None) -> tuple[SerialUnit, str | None]:
         # 权限校验钩子（P2e 预留；后续角色管理模块在此接入）：
         # 目前任何登录用户可解绑，暂不做角色判断。
         su = self.serial_units.get_by_sn(scan)
@@ -42,10 +42,13 @@ class CarrierService:
             su = self.serial_units.get_active_by_carrier(scan)
         if su is None:
             raise NotFoundError(f"未找到 SN 或载体码: {scan}")
+        carrier_code = su.carrier_code
         binding = self.bindings.active_by_serial_unit(su.id)
+        if binding is None and carrier_code is None:
+            raise BusinessRuleError("该 SN 无活跃载体码绑定")
         if binding is not None:
             binding.unbound_at = datetime.now()
             binding.unbound_reason = "manual"
         su.carrier_code = None
         self.db.flush()
-        return su
+        return su, carrier_code

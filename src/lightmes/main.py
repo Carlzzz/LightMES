@@ -9,7 +9,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
 from lightmes.database import get_db
-from lightmes.modules import auth, integration, masterdata, production, trace
+from lightmes.modules import auth, integration, masterdata, production, trace, quality
+from lightmes.database import engine
+from lightmes.shared.base import Base
 from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import User
 from lightmes.shared.errors import DomainError
@@ -27,6 +29,7 @@ masterdata.register(app)
 production.register(app)
 trace.register(app)
 integration.register(app)
+quality.register(app)
 
 
 @app.exception_handler(DomainError)
@@ -51,3 +54,19 @@ def home(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name}
+
+
+@app.on_event("startup")
+def on_startup():
+    """应用启动时初始化数据库和默认数据"""
+    # 创建所有表（如果不存在）
+    Base.metadata.create_all(bind=engine)
+
+    # 初始化默认角色和管理员用户
+    from lightmes.database import SessionLocal
+    from lightmes.modules.auth.service import AuthService
+    db = SessionLocal()
+    try:
+        AuthService(db).ensure_admin_user()
+    finally:
+        db.close()

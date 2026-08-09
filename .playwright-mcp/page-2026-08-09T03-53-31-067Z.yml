@@ -1,0 +1,99 @@
+- generic [active] [ref=f5e1]:
+  - banner [ref=f5e66]:
+    - link "◆ LightMES" [ref=f5e67] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f5e68]: ◆
+      - text: LightMES
+    - link "首页" [ref=f5e69] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f5e70] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f5e71] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f5e72] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f5e73] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f5e74]:
+    - heading "首检配置 关键工位首件检查" [level=1] [ref=f5e75]
+    - link "← 返回首页" [ref=f5e77] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f5e78]:
+      - generic [ref=f5e79]: 配置列表
+      - table [ref=f5e80]:
+        - rowgroup [ref=f5e81]:
+          - row [ref=f5e82]:
+            - columnheader "ID" [ref=f5e83]
+            - columnheader "名称" [ref=f5e84]
+            - columnheader "工序" [ref=f5e85]
+            - columnheader "作业站" [ref=f5e86]
+            - columnheader "触发条件" [ref=f5e87]
+            - columnheader "状态" [ref=f5e88]
+            - columnheader [ref=f5e89]
+        - rowgroup [ref=f5e90]:
+          - row [ref=f5e91]:
+            - cell "1" [ref=f5e92]
+            - cell "OP20首检" [ref=f5e93]
+            - cell "核心部件装配" [ref=f5e94]
+            - cell "不限" [ref=f5e95]
+            - cell "新工单" [ref=f5e96]
+            - cell "启用" [ref=f5e99]
+            - cell "配置检查项" [ref=f5e101]
+    - generic [ref=f5e103]:
+      - generic [ref=f5e104]: 新建配置
+      - generic [ref=f5e105]:
+        - generic [ref=f5e106]:
+          - generic [ref=f5e107]: 配置名称
+          - textbox "如：OP20首检" [ref=f5e108]
+        - generic [ref=f5e109]:
+          - generic [ref=f5e110]: 工序
+          - combobox [ref=f5e111]:
+            - option "请选择工序" [selected]
+            - option "OP10 - 上线准备"
+            - option "OP20 - 核心部件装配"
+            - option "OP30 - 性能测试"
+            - option "OP40 - 包装入库"
+        - generic [ref=f5e112]:
+          - generic [ref=f5e113]: 作业站（可选）
+          - combobox [ref=f5e114]:
+            - option "不限" [selected]
+            - option "WS-01 - 上线工位"
+            - option "WS-02 - 核心装配工位"
+            - option "WS-03 - 测试包装工位"
+        - generic [ref=f5e115]:
+          - generic [ref=f5e116]: 首检数量
+          - spinbutton [ref=f5e117]: "1"
+        - generic [ref=f5e118]:
+          - generic [ref=f5e119]: 触发条件
+          - generic [ref=f5e120]:
+            - generic [ref=f5e121]:
+              - checkbox "新工单" [checked] [ref=f5e122]
+              - generic [ref=f5e123]: 新工单
+            - generic [ref=f5e124]:
+              - checkbox "物料变更" [ref=f5e125]
+              - generic [ref=f5e126]: 物料变更
+            - generic [ref=f5e127]:
+              - checkbox "工装变更" [ref=f5e128]
+              - generic [ref=f5e129]: 工装变更
+            - generic [ref=f5e130]:
+              - checkbox "交接班" [ref=f5e131]
+              - generic [ref=f5e132]: 交接班
+            - generic [ref=f5e133]:
+              - checkbox "冷启动" [ref=f5e134]
+              - generic [ref=f5e135]: 冷启动
+            - generic [ref=f5e136]:
+              - checkbox "前序失败" [ref=f5e137]
+              - generic [ref=f5e138]: 前序失败
+        - generic [ref=f5e139]:
+          - generic [ref=f5e140]: 选项
+          - generic [ref=f5e141]:
+            - generic [ref=f5e142]:
+              - checkbox "启用" [checked] [ref=f5e143]
+              - generic [ref=f5e144]: 启用
+            - generic [ref=f5e145]:
+              - checkbox "需授权放行" [ref=f5e146]
+              - generic [ref=f5e147]: 需授权放行
+            - generic [ref=f5e148]:
+              - checkbox "失败隔离" [ref=f5e149]
+              - generic [ref=f5e150]: 失败隔离
+        - button "创建配置" [ref=f5e151] [cursor=pointer]

@@ -115,7 +115,7 @@ def main() -> None:
         print(f"   或页面 /production/scan?work_station_id={ws1.id} 输入工单号 WO-DEMO-001 → 生成 SN 并过上料站")
         print(f"2. 装配:     {{work_station_id: {ws2.id}, sn: '<上一步的SN>'}}")
         print(f"3. 检测(末站完工): {{work_station_id: {ws3.id}, sn: '<该SN>'}}")
-        print(f"4. WIP 看板: /production/wip?work_order_id={wo.id}")
+        print(f"4. WIP 看板: /production/wip?work_order={wo.id}")
         print("5. 追溯查询: /trace/query  (输入成品 SN 看履历/正向；输入组件SN/批次看反向)")
         print("6. 返工: /trace/rework  (输入 SN + 回退到的工序序号)")
         print()

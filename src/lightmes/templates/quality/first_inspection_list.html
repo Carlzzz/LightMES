@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}首检配置 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">首检配置 <small>关键工位首件检查</small></h1>
+
+<div class="page-header-links">
+  <a href="/" class="btn-secondary btn-sm">← 返回首页</a>
+</div>
+
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <div class="card__title">配置列表</div>
+  {% if configs %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>名称</th>
+        <th>工序</th>
+        <th>作业站</th>
+        <th>触发条件</th>
+        <th>状态</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cfg in configs %}
+      <tr>
+        <td>{{ cfg.id }}</td>
+        <td>{{ cfg.name }}</td>
+        <td>{{ op_map[cfg.operation_id].name if cfg.operation_id in op_map else '-' }}</td>
+        <td>{{ ws_map[cfg.work_station_id].name if cfg.work_station_id and cfg.work_station_id in ws_map else '不限' }}</td>
+        <td>
+          <div class="wip-status-grid" style="gap: 4px; display: flex; flex-wrap: wrap;">
+            {% if cfg.trigger_new_order %}<span class="badge">新工单</span>{% endif %}
+            {% if cfg.trigger_material_change %}<span class="badge">物料变更</span>{% endif %}
+            {% if cfg.trigger_tooling_change %}<span class="badge">工装变更</span>{% endif %}
+            {% if cfg.trigger_param_revision %}<span class="badge">参数修订</span>{% endif %}
+            {% if cfg.trigger_abnormal_restart %}<span class="badge">异常重启</span>{% endif %}
+            {% if cfg.trigger_shift_handover %}<span class="badge">交接班</span>{% endif %}
+            {% if cfg.trigger_cold_start %}<span class="badge">冷启动</span>{% endif %}
+            {% if cfg.trigger_previous_failed %}<span class="badge--warn">前序失败</span>{% endif %}
+          </div>
+        </td>
+        <td>{% if cfg.is_enabled %}<span class="badge">启用</span>{% else %}<span class="badge--warn">停用</span>{% endif %}</td>
+        <td>
+          <a href="/quality/first-inspection/{{ cfg.id }}" class="btn-secondary btn-sm">配置检查项</a>
+          <form method="post" action="/quality/first-inspection/{{ cfg.id }}/delete" style="display: inline;" onsubmit="return confirm('确认删除此配置吗？');">
+            <button type="submit" class="btn btn-sm" style="background: #dc3545; color: white;">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="nav-card__desc">暂无首检配置</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card__title">新建配置</div>
+  <form class="form-row" hx-post="/quality/first-inspection" hx-target="body" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+    <div class="field" style="min-width: 180px;">
+      <label>配置名称</label>
+      <input type="text" name="name" required placeholder="如：OP20首检">
+    </div>
+    <div class="field" style="min-width: 180px;">
+      <label>工序</label>
+      <select name="operation_id" required>
+        <option value="">请选择工序</option>
+        {% for op in operations %}
+        <option value="{{ op.id }}">{{ op.code }} - {{ op.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width: 180px;">
+      <label>作业站（可选）</label>
+      <select name="work_station_id">
+        <option value="">不限</option>
+        {% for ws in workstations %}
+        <option value="{{ ws.id }}">{{ ws.code }} - {{ ws.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width: 100px;">
+      <label>首检数量</label>
+      <input type="number" name="sample_size" value="1" min="1">
+    </div>
+    <div class="field" style="min-width: 300px; display: flex; flex-direction: column; gap: 4px;">
+      <label>触发条件</label>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t1" name="trigger_new_order" checked>
+          <label for="t1" style="font-size: 12px;">新工单</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t2" name="trigger_material_change">
+          <label for="t2" style="font-size: 12px;">物料变更</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t3" name="trigger_tooling_change">
+          <label for="t3" style="font-size: 12px;">工装变更</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t4" name="trigger_shift_handover">
+          <label for="t4" style="font-size: 12px;">交接班</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t5" name="trigger_cold_start">
+          <label for="t5" style="font-size: 12px;">冷启动</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t6" name="trigger_previous_failed">
+          <label for="t6" style="font-size: 12px;">前序失败</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t7" name="trigger_param_revision">
+          <label for="t7" style="font-size: 12px;">参数修订</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="t8" name="trigger_abnormal_restart">
+          <label for="t8" style="font-size: 12px;">异常重启</label>
+        </div>
+      </div>
+    </div>
+    <div class="field" style="min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+      <label>选项</label>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="e1" name="is_enabled" checked>
+          <label for="e1" style="font-size: 12px;">启用</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="a1" name="require_authorization">
+          <label for="a1" style="font-size: 12px;">需授权放行</label>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <input type="checkbox" id="q1" name="quarantine_on_fail">
+          <label for="q1" style="font-size: 12px;">失败隔离</label>
+        </div>
+      </div>
+    </div>
+    <button type="submit">创建配置</button>
+  </form>
+</div>
+{% endblock %}

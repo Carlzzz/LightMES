@@ -1,0 +1,14 @@
+- main [ref=f3e2]:
+  - generic [ref=f3e4]:
+    - generic [ref=f3e5]: ◆
+    - heading "LightMES" [level=1] [ref=f3e6]
+    - generic [ref=f3e7]: 笔记本外壳组装制造执行系统
+    - generic [ref=f3e8]:
+      - generic [ref=f3e9]:
+        - generic [ref=f3e10]: 用户名
+        - textbox "请输入用户名" [active] [ref=f3e11]
+      - generic [ref=f3e12]:
+        - generic [ref=f3e13]: 密码
+        - textbox "请输入密码" [ref=f3e14]
+      - button "登录" [ref=f3e15] [cursor=pointer]
+    - generic [ref=f3e16]: 演示账号：admin / admin123

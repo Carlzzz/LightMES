@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}首检配置 - {{ config.name }}{% endblock %}
+{% block content %}
+<h1 class="page-title">首检配置 - {{ config.name }} <small><a href="/quality/first-inspection">← 返回列表</a></small></h1>
+
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+{% endif %}
+
+<div class="card" id="config-card">
+  <div class="card__title">
+    基本信息
+    <div style="float: right;">
+      <button id="edit-btn" class="btn-secondary btn-sm" onclick="toggleEdit()">编辑</button>
+      <form method="post" action="/quality/first-inspection/{{ config.id }}/delete" style="display: inline;" onsubmit="return confirm('确认删除此配置吗？');">
+        <button type="submit" class="btn btn-sm" style="background: #dc3545; color: white;">删除</button>
+      </form>
+    </div>
+  </div>
+  <div class="card__body" id="view-mode">
+    <div class="form-row" style="gap: 20px;">
+      <div class="field">
+        <label>名称</label>
+        <div>{{ config.name }}</div>
+      </div>
+      <div class="field">
+        <label>工序</label>
+        <div>{{ op_map[config.operation_id].code }} - {{ op_map[config.operation_id].name }}</div>
+      </div>
+      <div class="field">
+        <label>作业站</label>
+        <div>{% if config.work_station_id and config.work_station_id in ws_map %}{{ ws_map[config.work_station_id].code }} - {{ ws_map[config.work_station_id].name }}{% else %}不限{% endif %}</div>
+      </div>
+      <div class="field">
+        <label>状态</label>
+        <div>{% if config.is_enabled %}<span class="badge">启用</span>{% else %}<span class="badge--warn">停用</span>{% endif %}</div>
+      </div>
+      <div class="field">
+        <label>首检数量</label>
+        <div>{{ config.sample_size }}</div>
+      </div>
+    </div>
+    <div class="form-row" style="gap: 20px; margin-top: 16px;">
+      <div class="field" style="min-width: 400px;">
+        <label>触发条件</label>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+          {% if config.trigger_new_order %}<span class="badge">新工单</span>{% endif %}
+          {% if config.trigger_material_change %}<span class="badge">物料变更</span>{% endif %}
+          {% if config.trigger_tooling_change %}<span class="badge">工装变更</span>{% endif %}
+          {% if config.trigger_param_revision %}<span class="badge">参数修订</span>{% endif %}
+          {% if config.trigger_abnormal_restart %}<span class="badge">异常重启</span>{% endif %}
+          {% if config.trigger_shift_handover %}<span class="badge">交接班</span>{% endif %}
+          {% if config.trigger_cold_start %}<span class="badge">冷启动</span>{% endif %}
+          {% if config.trigger_previous_failed %}<span class="badge--warn">前序失败</span>{% endif %}
+          {% if not config.trigger_new_order and not config.trigger_material_change and not config.trigger_tooling_change and not config.trigger_param_revision and not config.trigger_abnormal_restart and not config.trigger_shift_handover and not config.trigger_cold_start and not config.trigger_previous_failed %}<span style="color: #888;">无触发条件</span>{% endif %}
+        </div>
+      </div>
+      <div class="field">
+        <label>选项</label>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+          {% if config.require_authorization %}<span class="badge--warn">需授权放行</span>{% endif %}
+          {% if config.quarantine_on_fail %}<span class="badge--warn">失败隔离</span>{% endif %}
+          {% if not config.require_authorization and not config.quarantine_on_fail %}<span style="color: #888;">无特殊选项</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card__body" id="edit-mode" style="display: none;">
+    <form method="post" action="/quality/first-inspection/{{ config.id }}/update">
+      <div class="form-row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="field" style="min-width: 180px;">
+          <label>配置名称</label>
+          <input type="text" name="name" value="{{ config.name }}" required>
+        </div>
+        <div class="field" style="min-width: 180px;">
+          <label>工序</label>
+          <select name="operation_id" required>
+            {% for op in operations %}
+            <option value="{{ op.id }}" {% if op.id == config.operation_id %}selected{% endif %}>{{ op.code }} - {{ op.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field" style="min-width: 180px;">
+          <label>作业站（可选）</label>
+          <select name="work_station_id">
+            <option value="">不限</option>
+            {% for ws in workstations %}
+            <option value="{{ ws.id }}" {% if ws.id == config.work_station_id %}selected{% endif %}>{{ ws.code }} - {{ ws.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field" style="min-width: 100px;">
+          <label>首检数量</label>
+          <input type="number" name="sample_size" value="{{ config.sample_size }}" min="1">
+        </div>
+        <div class="field" style="min-width: 100px; display: flex; flex-direction: column; gap: 4px;">
+          <label>&nbsp;</label>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="checkbox" id="is_enabled" name="is_enabled" {% if config.is_enabled %}checked{% endif %}>
+            <label for="is_enabled" style="font-size: 12px;">启用</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-row" style="gap: 20px; margin-top: 16px; flex-wrap: wrap;">
+        <div class="field" style="min-width: 500px; display: flex; flex-direction: column; gap: 4px;">
+          <label>触发条件</label>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t1" name="trigger_new_order" {% if config.trigger_new_order %}checked{% endif %}>
+              <label for="t1" style="font-size: 12px;">新工单</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t2" name="trigger_material_change" {% if config.trigger_material_change %}checked{% endif %}>
+              <label for="t2" style="font-size: 12px;">物料变更</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t3" name="trigger_tooling_change" {% if config.trigger_tooling_change %}checked{% endif %}>
+              <label for="t3" style="font-size: 12px;">工装变更</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t7" name="trigger_param_revision" {% if config.trigger_param_revision %}checked{% endif %}>
+              <label for="t7" style="font-size: 12px;">参数修订</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t8" name="trigger_abnormal_restart" {% if config.trigger_abnormal_restart %}checked{% endif %}>
+              <label for="t8" style="font-size: 12px;">异常重启</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t4" name="trigger_shift_handover" {% if config.trigger_shift_handover %}checked{% endif %}>
+              <label for="t4" style="font-size: 12px;">交接班</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t5" name="trigger_cold_start" {% if config.trigger_cold_start %}checked{% endif %}>
+              <label for="t5" style="font-size: 12px;">冷启动</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="t6" name="trigger_previous_failed" {% if config.trigger_previous_failed %}checked{% endif %}>
+              <label for="t6" style="font-size: 12px;">前序失败</label>
+            </div>
+          </div>
+        </div>
+        <div class="field" style="min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+          <label>选项</label>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="a1" name="require_authorization" {% if config.require_authorization %}checked{% endif %}>
+              <label for="a1" style="font-size: 12px;">需授权放行</label>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="checkbox" id="q1" name="quarantine_on_fail" {% if config.quarantine_on_fail %}checked{% endif %}>
+              <label for="q1" style="font-size: 12px;">失败隔离</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="form-row" style="margin-top: 16px; gap: 12px;">
+        <button type="submit">保存</button>
+        <button type="button" class="btn-secondary" onclick="toggleEdit()">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card__title">检查项</div>
+  {% if check_items %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>序号</th>
+        <th>名称</th>
+        <th>类型</th>
+        <th>单位</th>
+        <th>标准值</th>
+        <th>最小值</th>
+        <th>最大值</th>
+        <th>必检</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="check-items-body">
+      {% for item in check_items %}
+      {% include "quality/partials/check_item_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="nav-card__desc">暂无检查项</p>
+  {% endif %}
+  <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+    <h3 style="margin-bottom: 12px;">添加检查项</h3>
+    <form class="form-row" hx-post="/quality/first-inspection/{{ config.id }}/check-items" hx-target="#check-items-body" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+      <div class="field" style="min-width: 80px;">
+        <label>序号</label>
+        <input type="number" name="seq" value="{{ (check_items|length + 1) if check_items else 1 }}" required>
+      </div>
+      <div class="field" style="min-width: 180px;">
+        <label>名称</label>
+        <input type="text" name="name" required placeholder="如：外观检查">
+      </div>
+      <div class="field" style="min-width: 120px;">
+        <label>类型</label>
+        <select name="check_type">
+          <option value="boolean">是/否</option>
+          <option value="numeric">数值</option>
+          <option value="text">文本</option>
+        </select>
+      </div>
+      <div class="field" style="min-width: 100px;">
+        <label>单位</label>
+        <input type="text" name="unit" placeholder="可选">
+      </div>
+      <div class="field" style="min-width: 100px;">
+        <label>标准值</label>
+        <input type="text" name="standard_value" placeholder="可选">
+      </div>
+      <div class="field" style="min-width: 100px;">
+        <label>最小值</label>
+        <input type="number" step="0.001" name="min_value" placeholder="可选">
+      </div>
+      <div class="field" style="min-width: 100px;">
+        <label>最大值</label>
+        <input type="number" step="0.001" name="max_value" placeholder="可选">
+      </div>
+      <div class="field" style="min-width: 100px; display: flex; flex-direction: column; gap: 4px;">
+        <label>&nbsp;</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="checkbox" id="is_mandatory" name="is_mandatory" checked>
+          <label for="is_mandatory" style="font-size: 12px;">必检</label>
+        </div>
+      </div>
+      <button type="submit">添加</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleEdit() {
+  const viewMode = document.getElementById('view-mode');
+  const editMode = document.getElementById('edit-mode');
+  const editBtn = document.getElementById('edit-btn');
+  if (viewMode.style.display === 'none') {
+    viewMode.style.display = 'block';
+    editMode.style.display = 'none';
+    editBtn.textContent = '编辑';
+  } else {
+    viewMode.style.display = 'none';
+    editMode.style.display = 'block';
+    editBtn.textContent = '取消编辑';
+  }
+}
+</script>
+{% endblock %}

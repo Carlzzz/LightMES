@@ -1,0 +1,108 @@
+- generic [active] [ref=f37e1]:
+  - banner [ref=f37e2]:
+    - link "◆ LightMES" [ref=f37e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f37e4]: ◆
+      - text: LightMES
+    - link "首页" [ref=f37e5] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f37e6] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f37e7] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f37e8] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f37e9] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f37e10]:
+    - heading "首检配置 关键工位首件检查" [level=1] [ref=f37e11]
+    - link "← 返回首页" [ref=f37e13] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f37e14]:
+      - generic [ref=f37e15]: 配置列表
+      - table [ref=f37e16]:
+        - rowgroup [ref=f37e17]:
+          - row [ref=f37e18]:
+            - columnheader "ID" [ref=f37e19]
+            - columnheader "名称" [ref=f37e20]
+            - columnheader "工序" [ref=f37e21]
+            - columnheader "作业站" [ref=f37e22]
+            - columnheader "触发条件" [ref=f37e23]
+            - columnheader "状态" [ref=f37e24]
+            - columnheader [ref=f37e25]
+        - rowgroup [ref=f37e26]:
+          - row [ref=f37e27]:
+            - cell "1" [ref=f37e28]
+            - cell "OP20首检" [ref=f37e29]
+            - cell "核心部件装配" [ref=f37e30]
+            - cell "不限" [ref=f37e31]
+            - cell "新工单" [ref=f37e32]
+            - cell "启用" [ref=f37e35]
+            - cell [ref=f37e37]:
+              - link "配置检查项" [ref=f37e38] [cursor=pointer]:
+                - /url: /quality/first-inspection/1
+              - button "删除" [ref=f37e40] [cursor=pointer]
+    - generic [ref=f37e41]:
+      - generic [ref=f37e42]: 新建配置
+      - generic [ref=f37e43]:
+        - generic [ref=f37e44]:
+          - generic [ref=f37e45]: 配置名称
+          - textbox "如：OP20首检" [ref=f37e46]
+        - generic [ref=f37e47]:
+          - generic [ref=f37e48]: 工序
+          - combobox [ref=f37e49]:
+            - option "请选择工序" [selected]
+            - option "OP10 - 上线准备"
+            - option "OP20 - 核心部件装配"
+            - option "OP30 - 性能测试"
+            - option "OP40 - 包装入库"
+        - generic [ref=f37e50]:
+          - generic [ref=f37e51]: 作业站（可选）
+          - combobox [ref=f37e52]:
+            - option "不限" [selected]
+            - option "WS-01 - 上线工位"
+            - option "WS-02 - 核心装配工位"
+            - option "WS-03 - 测试包装工位"
+        - generic [ref=f37e53]:
+          - generic [ref=f37e54]: 首检数量
+          - spinbutton [ref=f37e55]: "1"
+        - generic [ref=f37e56]:
+          - generic [ref=f37e57]: 触发条件
+          - generic [ref=f37e58]:
+            - generic [ref=f37e59]:
+              - checkbox "新工单" [checked] [ref=f37e60]
+              - generic [ref=f37e61]: 新工单
+            - generic [ref=f37e62]:
+              - checkbox "物料变更" [ref=f37e63]
+              - generic [ref=f37e64]: 物料变更
+            - generic [ref=f37e65]:
+              - checkbox "工装变更" [ref=f37e66]
+              - generic [ref=f37e67]: 工装变更
+            - generic [ref=f37e68]:
+              - checkbox "交接班" [ref=f37e69]
+              - generic [ref=f37e70]: 交接班
+            - generic [ref=f37e71]:
+              - checkbox "冷启动" [ref=f37e72]
+              - generic [ref=f37e73]: 冷启动
+            - generic [ref=f37e74]:
+              - checkbox "前序失败" [ref=f37e75]
+              - generic [ref=f37e76]: 前序失败
+            - generic [ref=f37e77]:
+              - checkbox "参数修订" [ref=f37e78]
+              - generic [ref=f37e79]: 参数修订
+            - generic [ref=f37e80]:
+              - checkbox "异常重启" [ref=f37e81]
+              - generic [ref=f37e82]: 异常重启
+        - generic [ref=f37e83]:
+          - generic [ref=f37e84]: 选项
+          - generic [ref=f37e85]:
+            - generic [ref=f37e86]:
+              - checkbox "启用" [checked] [ref=f37e87]
+              - generic [ref=f37e88]: 启用
+            - generic [ref=f37e89]:
+              - checkbox "需授权放行" [ref=f37e90]
+              - generic [ref=f37e91]: 需授权放行
+            - generic [ref=f37e92]:
+              - checkbox "失败隔离" [ref=f37e93]
+              - generic [ref=f37e94]: 失败隔离
+        - button "创建配置" [ref=f37e95] [cursor=pointer]

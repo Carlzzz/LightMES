@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from lightmes.modules.production.models import SerialUnit
-from lightmes.modules.production.repository import SerialUnitRepository
+from lightmes.modules.production.repository import SerialUnitRepository, CarrierBindingRepository
 from lightmes.modules.trace.events import SerialUnitReworkStarted
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.shared.errors import (
@@ -16,6 +18,7 @@ class ReworkService:
         self.db = db
         self.serial_units = SerialUnitRepository(db)
         self.genealogy = GenealogyService(db)
+        self.carrier_bindings = CarrierBindingRepository(db)
 
     def rework(
         self, sn: str, target_seq: int, unbind_bind_ids: list[int] | None = None,
@@ -55,6 +58,13 @@ class ReworkService:
             raise NotFoundError(f"SN 不存在: {sn}")
         if su.status not in ("in_process", "reworking"):
             raise BusinessRuleError(f"仅在制/返工件可判废，当前: {su.status}")
+        # 清除载体码绑定（与完工路径一致）
+        if su.carrier_code is not None:
+            binding = self.carrier_bindings.active_by_serial_unit(su.id)
+            if binding is not None:
+                binding.unbound_at = datetime.now()
+                binding.unbound_reason = "scrap"
+            su.carrier_code = None
         su.status = "scrapped"
         self.db.flush()
         return su

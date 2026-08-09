@@ -1,0 +1,4 @@
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+<script>if(window.showErrorModal){showErrorModal("{{ error|e }}");}</script>
+{% endif %}

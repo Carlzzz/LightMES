@@ -1,0 +1,72 @@
+- generic [active] [ref=f6e1]:
+  - banner [ref=f6e41]:
+    - link "◆ LightMES" [ref=f6e42] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f6e43]: ◆
+      - text: LightMES
+    - link "首页" [ref=f6e44] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f6e45] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f6e46] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f6e47] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f6e48] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f6e49]:
+    - heading "测试数据配置 测试工位数据录入" [level=1] [ref=f6e50]
+    - link "← 返回首页" [ref=f6e52] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f6e53]:
+      - generic [ref=f6e54]: 模板列表
+      - table [ref=f6e55]:
+        - rowgroup [ref=f6e56]:
+          - row [ref=f6e57]:
+            - columnheader "ID" [ref=f6e58]
+            - columnheader "名称" [ref=f6e59]
+            - columnheader "工序" [ref=f6e60]
+            - columnheader "作业站" [ref=f6e61]
+            - columnheader "版本" [ref=f6e62]
+            - columnheader "状态" [ref=f6e63]
+            - columnheader [ref=f6e64]
+        - rowgroup [ref=f6e65]:
+          - row [ref=f6e66]:
+            - cell "1" [ref=f6e67]
+            - cell "OP30测试" [ref=f6e68]
+            - cell "性能测试" [ref=f6e69]
+            - cell "测试包装工位" [ref=f6e70]
+            - cell "1" [ref=f6e71]
+            - cell "启用" [ref=f6e72]
+            - cell "配置字段" [ref=f6e74]
+    - generic [ref=f6e76]:
+      - generic [ref=f6e77]: 新建模板
+      - generic [ref=f6e78]:
+        - generic [ref=f6e79]:
+          - generic [ref=f6e80]: 模板名称
+          - textbox "如：OP30测试" [ref=f6e81]
+        - generic [ref=f6e82]:
+          - generic [ref=f6e83]: 工序
+          - combobox [ref=f6e84]:
+            - option "请选择工序" [selected]
+            - option "OP10 - 上线准备"
+            - option "OP20 - 核心部件装配"
+            - option "OP30 - 性能测试"
+            - option "OP40 - 包装入库"
+        - generic [ref=f6e85]:
+          - generic [ref=f6e86]: 作业站（可选）
+          - combobox [ref=f6e87]:
+            - option "不限" [selected]
+            - option "WS-01 - 上线工位"
+            - option "WS-02 - 核心装配工位"
+            - option "WS-03 - 测试包装工位"
+        - generic [ref=f6e88]:
+          - generic [ref=f6e89]: 版本
+          - textbox [ref=f6e90]: "1"
+        - generic [ref=f6e91]:
+          - generic [ref=f6e92]: 描述
+          - textbox "可选描述" [ref=f6e93]
+        - generic [ref=f6e96]:
+          - checkbox "启用" [checked] [ref=f6e97]
+          - generic [ref=f6e98]: 启用
+        - button "创建模板" [ref=f6e99] [cursor=pointer]

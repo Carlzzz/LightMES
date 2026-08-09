@@ -1,0 +1,17 @@
+- generic [active] [ref=f35e1]:
+  - banner [ref=f35e2]:
+    - link "◆ LightMES" [ref=f35e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f35e4]: ◆
+      - text: LightMES
+    - link "首页" [ref=f35e5] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f35e6] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f35e7] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f35e8] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f35e9] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f35e10]: "<h1 class=\"page-title\">测试数据配置 <small>测试工位数据录入</small></h1> <div class=\"page-header-links\"> <a href=\"/\" class=\"btn-secondary btn-sm\">← 返回首页</a> </div> <div class=\"card\"> <div class=\"card__title\">模板列表</div> <table class=\"data-table\"> <thead> <tr> <th>ID</th> <th>名称</th> <th>工序</th> <th>作业站</th> <th>版本</th> <th>状态</th> <th></th> </tr> </thead> <tbody> <tr> <td>1</td> <td>OP30测试</td> <td>性能测试</td> <td>测试包装工位</td> <td>1</td> <td><span class=\"badge\">启用</span></td> <td> <a href=\"/quality/test-data/1\" class=\"btn-secondary btn-sm\">配置字段</a> <form method=\"post\" action=\"/quality/test-data/1/delete\" style=\"display: inline;\" onsubmit=\"return confirm('确认删除此模板吗？');\"> <button type=\"submit\" class=\"btn btn-sm\" style=\"background: #dc3545; color: white;\">删除</button> </form> </td> </tr> </tbody> </table> </div> <div class=\"card\"> <div class=\"card__title\">新建模板</div> <form class=\"form-row\" hx-post=\"/quality/test-data\" hx-target=\"body\" style=\"flex-wrap: wrap; align-items: flex-end; gap: 12px;\"> <div class=\"field\" style=\"min-width: 180px;\"> <label>模板名称</label> <input type=\"text\" name=\"name\" required placeholder=\"如：OP30测试\"> </div> <div class=\"field\" style=\"min-width: 180px;\"> <label>工序</label> <select name=\"operation_id\" required> <option value=\"\">请选择工序</option> <option value=\"1\">OP10 - 上线准备</option> <option value=\"2\">OP20 - 核心部件装配</option> <option value=\"3\">OP30 - 性能测试</option> <option value=\"4\">OP40 - 包装入库</option> </select> </div> <div class=\"field\" style=\"min-width: 180px;\"> <label>作业站（可选）</label> <select name=\"work_station_id\"> <option value=\"\">不限</option> <option value=\"1\">WS-01 - 上线工位</option> <option value=\"2\">WS-02 - 核心装配工位</option> <option value=\"3\">WS-03 - 测试包装工位</option> </select> </div> <div class=\"field\" style=\"min-width: 100px;\"> <label>版本</label> <input type=\"text\" name=\"version\" value=\"1\"> </div> <div class=\"field\" style=\"min-width: 250px;\"> <label>描述</label> <input type=\"text\" name=\"description\" placeholder=\"可选描述\"> </div> <div class=\"field\" style=\"min-width: 120px; display: flex; flex-direction: column; gap: 4px;\"> <label>&nbsp;</label> <div style=\"display: flex; gap: 8px; align-items: center;\"> <input type=\"checkbox\" id=\"e1\" name=\"is_enabled\" checked> <label for=\"e1\" style=\"font-size: 12px;\">启用</label> </div> </div> <button type=\"submit\">创建模板</button> </form> </div>"

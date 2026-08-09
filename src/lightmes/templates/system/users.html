@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}用户管理 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">用户管理 <small>系统用户与角色分配</small></h1>
+
+<div class="page-header-links">
+  <a href="/" class="btn-secondary btn-sm">← 返回首页</a>
+</div>
+
+<div class="card">
+  <div class="card__title">用户列表</div>
+  <form class="form-row" hx-post="/system/users" hx-target="#user-list" hx-swap="beforeend">
+    <div class="field">
+      <label>用户名</label>
+      <input type="text" name="username" required placeholder="用户名">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" name="password" required placeholder="密码">
+    </div>
+    <div class="field">
+      <label>显示名</label>
+      <input type="text" name="display_name" required placeholder="显示名称">
+    </div>
+    <div class="field">
+      <label>角色</label>
+      <select name="role_id">
+        <option value="">-- 选择角色 --</option>
+        {% for role in roles %}
+        <option value="{{ role.id }}">{{ role.display_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">添加用户</button>
+  </form>
+
+  <table class="data-table" style="margin-top: 16px;">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>用户名</th>
+        <th>显示名</th>
+        <th>角色</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="user-list">
+      {% for user in users %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td>{{ user.username }}</td>
+        <td>{{ user.display_name }}</td>
+        <td>{{ user.role_obj.display_name if user.role_obj else '-' }}</td>
+        <td>
+          {% if user.is_active %}
+          <span class="badge">正常</span>
+          {% else %}
+          <span class="badge--danger">禁用</span>
+          {% endif %}
+        </td>
+        <td>
+          <button class="btn-secondary btn-sm">编辑</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+<tr id="test-field-{{ field.id }}">
+  <td>{{ field.seq }}</td>
+  <td>{{ field.code }}</td>
+  <td>{{ field.name }}</td>
+  <td>{% if field.field_type == 'numeric' %}数值{% elif field.field_type == 'boolean' %}是/否{% elif field.field_type == 'select' %}选择{% else %}文本{% endif %}</td>
+  <td>{{ field.unit or '-' }}</td>
+  <td>{% if field.is_required %}<span class="badge">是</span>{% else %}否{% endif %}</td>
+  <td>{{ field.standard_value or '-' }}</td>
+  <td>{{ field.min_value or '-' }}</td>
+  <td>{{ field.max_value or '-' }}</td>
+  <td>{{ field.display_group or '-' }}</td>
+  <td>{% if field.options %}{{ field.options|join(', ') }}{% else %}-{% endif %}</td>
+  <td>
+    <form method="post" action="/quality/test-data/{{ field.template_id }}/fields/{{ field.id }}/delete" onsubmit="return confirm('确认删除此字段？')">
+      <button type="submit" class="btn btn-sm" style="background: #dc3545; color: white;">删除</button>
+    </form>
+  </td>
+</tr>

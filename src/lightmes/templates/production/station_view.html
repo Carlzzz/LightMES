@@ -43,12 +43,129 @@
   <div class="alert alert--ok">该单元已完工，无待执行工序。</div>
   {% else %}
   <!-- PASS 表单：物料 + 参数一起提交 -->
-  <form hx-post="/production/station/pass" hx-target="#station-root" hx-swap="innerHTML">
+  <form hx-post="/production/station/pass" hx-target="#station-root" hx-swap="innerHTML" id="station-pass-form">
     <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
     <input type="hidden" name="scan" value="{{ view.sn or view.work_order_code }}">
 
     <div class="station__grid">
       <div class="station__main">
+        {% if view.first_inspection and view.first_inspection.needs_inspection %}
+        <div class="card" id="first-inspection-card">
+          <div class="card__title">
+            首件检查 <span class="badge">待执行</span>
+            {% if view.first_inspection.trigger_reason %}
+            <span style="font-size: 12px; margin-left: 8px;">触发原因: {{ view.first_inspection.trigger_reason }}</span>
+            {% endif %}
+          </div>
+          <div class="card__body">
+            <table class="data-table">
+              <thead><tr><th>序号</th><th>检查项</th><th>类型</th><th>检查结果</th><th>备注</th></tr></thead>
+              <tbody>
+                {% for item in view.first_inspection.check_items %}
+                <tr>
+                  <td>{{ item.seq }}</td>
+                  <td>{{ item.name }}</td>
+                  <td>
+                    {% if item.check_type == 'boolean' %}是/否
+                    {% elif item.check_type == 'numeric' %}数值
+                    {% else %}文本{% endif %}
+                    {% if item.is_mandatory %}<span class="badge">必检</span>{% endif %}
+                  </td>
+                  <td>
+                    <input type="hidden" name="fi_check_item_id" value="{{ item.id }}">
+                    {% if item.check_type == 'boolean' %}
+                    <label><input type="checkbox" name="fi_boolean_value" class="fi-check"> OK</label>
+                    <input type="hidden" name="fi_result_type" value="boolean">
+                    {% elif item.check_type == 'numeric' %}
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="number" step="0.001" name="fi_numeric_value" class="fi-input" placeholder="输入数值">
+                      {% if item.unit %}<span>{{ item.unit }}</span>{% endif %}
+                      {% if item.min_value is not none or item.max_value is not none %}
+                      <span style="color: #666; font-size: 12px;">
+                        {% if item.min_value is not none %}≥ {{ item.min_value }}{% endif %}
+                        {% if item.min_value is not none and item.max_value is not none %} / {% endif %}
+                        {% if item.max_value is not none %}≤ {{ item.max_value }}{% endif %}
+                      </span>
+                      {% endif %}
+                    </div>
+                    <input type="hidden" name="fi_result_type" value="numeric">
+                    {% else %}
+                    <input type="text" name="fi_text_value" class="fi-input" placeholder="输入结果">
+                    <input type="hidden" name="fi_result_type" value="text">
+                    {% endif %}
+                  </td>
+                  <td><input type="text" name="fi_remark" placeholder="备注" style="width: 100%;"></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <div style="margin-top: 12px;">
+              <label>整体备注：<input type="text" name="fi_overall_remark" placeholder="首检备注" style="width: 300px;"></label>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if view.test_data and view.test_data.needs_test_data %}
+        <div class="card" id="test-data-card">
+          <div class="card__title">测试数据录入 <span class="badge">必填</span></div>
+          <div class="card__body">
+            <table class="data-table">
+              <thead><tr><th>序号</th><th>参数名</th><th>类型</th><th>录入值</th><th>单位</th><th>规格</th></tr></thead>
+              <tbody>
+                {% for field in view.test_data.fields %}
+                <tr>
+                  <td>{{ field.seq }}</td>
+                  <td>{{ field.name }} ({{ field.code }}){% if field.is_required %}<span class="badge">必填</span>{% endif %}</td>
+                  <td>
+                    {% if field.field_type == 'numeric' %}数值
+                    {% elif field.field_type == 'boolean' %}是/否
+                    {% elif field.field_type == 'select' %}选择
+                    {% else %}文本{% endif %}
+                  </td>
+                  <td>
+                    <input type="hidden" name="td_field_id" value="{{ field.id }}">
+                    {% if field.field_type == 'numeric' %}
+                    <input type="number" step="0.001" name="td_numeric_value" class="td-input" placeholder="输入数值">
+                    <input type="hidden" name="td_value_type" value="numeric">
+                    {% elif field.field_type == 'boolean' %}
+                    <label><input type="checkbox" name="td_boolean_value" class="td-check"> OK</label>
+                    <input type="hidden" name="td_value_type" value="boolean">
+                    {% elif field.field_type == 'select' %}
+                    <select name="td_text_value" class="td-select">
+                      <option value="">请选择</option>
+                      {% for opt in field.options %}
+                      <option value="{{ opt }}">{{ opt }}</option>
+                      {% endfor %}
+                    </select>
+                    <input type="hidden" name="td_value_type" value="text">
+                    {% else %}
+                    <input type="text" name="td_text_value" class="td-input" placeholder="输入文本">
+                    <input type="hidden" name="td_value_type" value="text">
+                    {% endif %}
+                  </td>
+                  <td>{{ field.unit or '-' }}</td>
+                  <td>
+                    {% if field.standard_value %}{{ field.standard_value }}{% endif %}
+                    {% if field.min_value is not none or field.max_value is not none %}
+                    <span style="color: #666; font-size: 12px;">
+                      {% if field.min_value is not none %}≥ {{ field.min_value }}{% endif %}
+                      {% if field.min_value is not none and field.max_value is not none %} / {% endif %}
+                      {% if field.max_value is not none %}≤ {{ field.max_value }}{% endif %}
+                    </span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <div style="margin-top: 12px;">
+              <label>备注：<input type="text" name="td_overall_remark" placeholder="测试备注" style="width: 300px;"></label>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <div class="card">
           <div class="card__title">当前工序物料追溯 <span class="badge">BOM 匹配</span></div>
           {% if view.components %}
@@ -65,7 +182,9 @@
                 <td><input type="hidden" name="component_product_id" value="{{ c.component_product_id }}">
                   {% if c.track_mode == 'serial' %}
                   <input name="component_sn" class="comp-scan" placeholder="扫描唯一件 SN..." autocomplete="off">
+                  <input type="hidden" name="component_batch" value="">
                   {% else %}
+                  <input type="hidden" name="component_sn" value="">
                   <input name="component_batch" class="comp-scan" placeholder="扫描批次号..." autocomplete="off">
                   {% endif %}
                 </td>
@@ -133,67 +252,67 @@
   {% endif %}
 </div>
 <script>
-  (function () {
-    // 滚动当前工序到可视区
-    var cur = document.getElementById('station-current');
-    if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
+(function () {
+  // 滚动当前工序到可视区
+  var cur = document.getElementById('station-current');
+  if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
 
-    // 组件扫码：扫完自动跳到下一行
-    var compInputs = document.querySelectorAll('.comp-scan');
-    compInputs.forEach(function(inp, i) {
-      inp.addEventListener('change', function() {
-        if (inp.value.trim() && i < compInputs.length - 1) {
-          compInputs[i + 1].focus();
-        }
-      });
-    });
-
-    // 参数行动态增减
-    var addBtn = document.getElementById('param-add-btn');
-    var tbody = document.getElementById('param-rows');
-    if (addBtn && tbody) {
-      addBtn.addEventListener('click', function() {
-        var tr = document.createElement('tr');
-        tr.className = 'param-row';
-        tr.innerHTML =
-          '<td><input name="param_key" placeholder="参数名"></td>' +
-          '<td><input name="param_value" placeholder="数值"></td>' +
-          '<td><input name="param_unit" placeholder="单位"></td>' +
-          '<td><button type="button" class="param-del-btn" onclick="this.closest(\'.param-row\').remove()" title="删除">×</button></td>';
-        tbody.appendChild(tr);
-        tr.querySelector('input').focus();
-      });
-    }
-
-    // 过站成功/失败音效反馈
-    document.addEventListener('htmx:afterRequest', function(e) {
-      var target = e.detail.target;
-      if (target && target.id === 'station-root' && e.detail.successful) {
-        var html = target.innerHTML || '';
-        var isPass = html.indexOf('station__pass') >= 0 || html.indexOf('alert--ok') >= 0;
-        var isError = html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0;
-        if (isPass && !isError) {
-          // 成功提示音
-          try {
-            var ctx = new (window.AudioContext || window.webkitAudioContext)();
-            var osc = ctx.createOscillator();
-            var gain = ctx.createGain();
-            osc.connect(gain); gain.connect(ctx.destination);
-            osc.frequency.value = 880; gain.gain.value = 0.15;
-            osc.start(); osc.stop(ctx.currentTime + 0.15);
-          } catch(_) {}
-        } else if (isError) {
-          // 错误提示音
-          try {
-            var ctx = new (window.AudioContext || window.webkitAudioContext)();
-            var osc = ctx.createOscillator();
-            var gain = ctx.createGain();
-            osc.connect(gain); gain.connect(ctx.destination);
-            osc.frequency.value = 220; gain.gain.value = 0.2;
-            osc.start(); osc.stop(ctx.currentTime + 0.3);
-          } catch(_) {}
-        }
+  // 组件扫码：扫完自动跳到下一行
+  var compInputs = document.querySelectorAll('.comp-scan');
+  compInputs.forEach(function(inp, i) {
+    inp.addEventListener('change', function() {
+      if (inp.value.trim() && i < compInputs.length - 1) {
+        compInputs[i + 1].focus();
       }
     });
-  })();
+  });
+
+  // 参数行动态增减
+  var addBtn = document.getElementById('param-add-btn');
+  var tbody = document.getElementById('param-rows');
+  if (addBtn && tbody) {
+    addBtn.addEventListener('click', function() {
+      var tr = document.createElement('tr');
+      tr.className = 'param-row';
+      tr.innerHTML =
+        '<td><input name="param_key" placeholder="参数名"></td>' +
+        '<td><input name="param_value" placeholder="数值"></td>' +
+        '<td><input name="param_unit" placeholder="单位"></td>' +
+        '<td><button type="button" class="param-del-btn" onclick="this.closest(\'.param-row\').remove()" title="删除">×</button></td>';
+      tbody.appendChild(tr);
+      tr.querySelector('input').focus();
+    });
+  }
+
+  // 过站成功/失败音效反馈
+  document.addEventListener('htmx:afterRequest', function(e) {
+    var target = e.detail.target;
+    if (target && target.id === 'station-root' && e.detail.successful) {
+      var html = target.innerHTML || '';
+      var isPass = html.indexOf('station__pass') >= 0 || html.indexOf('alert--ok') >= 0;
+      var isError = html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0;
+      if (isPass && !isError) {
+        // 成功提示音
+        try {
+          var ctx = new (window.AudioContext || window.webkitAudioContext)();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.frequency.value = 880; gain.gain.value = 0.15;
+          osc.start(); osc.stop(ctx.currentTime + 0.15);
+        } catch(_) {}
+      } else if (isError) {
+        // 错误提示音
+        try {
+          var ctx = new (window.AudioContext || window.webkitAudioContext)();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.frequency.value = 220; gain.gain.value = 0.2;
+          osc.start(); osc.stop(ctx.currentTime + 0.3);
+        } catch(_) {}
+      }
+    }
+  });
+})();
 </script>

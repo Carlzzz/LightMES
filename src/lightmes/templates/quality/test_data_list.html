@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}测试数据配置 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">测试数据配置 <small>测试工位数据录入</small></h1>
+
+<div class="page-header-links">
+  <a href="/" class="btn-secondary btn-sm">← 返回首页</a>
+</div>
+
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <div class="card__title">模板列表</div>
+  {% if templates %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>名称</th>
+        <th>工序</th>
+        <th>作业站</th>
+        <th>版本</th>
+        <th>状态</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tpl in templates %}
+      <tr>
+        <td>{{ tpl.id }}</td>
+        <td>{{ tpl.name }}</td>
+        <td>{{ op_map[tpl.operation_id].name if tpl.operation_id in op_map else '-' }}</td>
+        <td>{{ ws_map[tpl.work_station_id].name if tpl.work_station_id and tpl.work_station_id in ws_map else '不限' }}</td>
+        <td>{{ tpl.version }}</td>
+        <td>{% if tpl.is_enabled %}<span class="badge">启用</span>{% else %}<span class="badge--warn">停用</span>{% endif %}</td>
+        <td>
+          <a href="/quality/test-data/{{ tpl.id }}" class="btn-secondary btn-sm">配置字段</a>
+          <form method="post" action="/quality/test-data/{{ tpl.id }}/delete" style="display: inline;" onsubmit="return confirm('确认删除此模板吗？');">
+            <button type="submit" class="btn btn-sm" style="background: #dc3545; color: white;">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="nav-card__desc">暂无测试数据模板</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card__title">新建模板</div>
+  <form class="form-row" hx-post="/quality/test-data" hx-target="body" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+    <div class="field" style="min-width: 180px;">
+      <label>模板名称</label>
+      <input type="text" name="name" required placeholder="如：OP30测试">
+    </div>
+    <div class="field" style="min-width: 180px;">
+      <label>工序</label>
+      <select name="operation_id" required>
+        <option value="">请选择工序</option>
+        {% for op in operations %}
+        <option value="{{ op.id }}">{{ op.code }} - {{ op.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width: 180px;">
+      <label>作业站（可选）</label>
+      <select name="work_station_id">
+        <option value="">不限</option>
+        {% for ws in workstations %}
+        <option value="{{ ws.id }}">{{ ws.code }} - {{ ws.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width: 100px;">
+      <label>版本</label>
+      <input type="text" name="version" value="1">
+    </div>
+    <div class="field" style="min-width: 250px;">
+      <label>描述</label>
+      <input type="text" name="description" placeholder="可选描述">
+    </div>
+    <div class="field" style="min-width: 120px; display: flex; flex-direction: column; gap: 4px;">
+      <label>&nbsp;</label>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="checkbox" id="e1" name="is_enabled" checked>
+        <label for="e1" style="font-size: 12px;">启用</label>
+      </div>
+    </div>
+    <button type="submit">创建模板</button>
+  </form>
+</div>
+{% endblock %}

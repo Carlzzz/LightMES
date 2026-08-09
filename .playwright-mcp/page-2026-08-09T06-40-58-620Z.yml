@@ -1,0 +1,17 @@
+- generic [active] [ref=f3e1]:
+  - banner [ref=f3e2]:
+    - link "◆ LightMES" [ref=f3e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f3e4]: ◆
+      - text: LightMES
+    - link "首页" [ref=f3e5] [cursor=pointer]:
+      - /url: /
+    - link "追溯" [ref=f3e6] [cursor=pointer]:
+      - /url: /trace/query
+    - link "用户" [ref=f3e7] [cursor=pointer]:
+      - /url: /system/users
+    - link "角色" [ref=f3e8] [cursor=pointer]:
+      - /url: /system/roles
+    - link "退出" [ref=f3e9] [cursor=pointer]:
+      - /url: /logout
+  - main [ref=f3e10]: "<h1 class=\"page-title\">首检配置 - OP20首检 <small><a href=\"/quality/first-inspection\">← 返回列表</a></small></h1> <div class=\"card\"> <div class=\"card__title\">基本信息</div> <div class=\"card__body\"> <div class=\"form-row\" style=\"gap: 20px;\"> <div class=\"field\"> <label>名称</label> <div>OP20首检</div> </div> <div class=\"field\"> <label>工序</label> <div>OP20 - 核心部件装配</div> </div> <div class=\"field\"> <label>作业站</label> <div>不限</div> </div> <div class=\"field\"> <label>状态</label> <div><span class=\"badge\">启用</span></div> </div> <div class=\"field\"> <label>首检数量</label> <div>1</div> </div> </div> <div class=\"form-row\" style=\"gap: 20px; margin-top: 16px;\"> <div class=\"field\" style=\"min-width: 400px;\"> <label>触发条件</label> <div style=\"display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;\"> <span class=\"badge\">新工单</span> </div> </div> <div class=\"field\"> <label>选项</label> <div style=\"display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;\"> <span style=\"color: #888;\">无特殊选项</span> </div> </div> </div> </div> </div> <div class=\"card\"> <div class=\"card__title\">检查项</div> <p class=\"nav-card__desc\">暂无检查项</p> <div style=\"margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;\"> <h3 style=\"margin-bottom: 12px;\">添加检查项</h3> <form class=\"form-row\" hx-post=\"/quality/first-inspection/1/check-items\" hx-target=\"#check-items-body\" hx-swap=\"beforeend\" hx-on::after-request=\"if(event.detail.successful) this.reset()\" style=\"flex-wrap: wrap; align-items: flex-end; gap: 12px;\"> <div class=\"field\" style=\"min-width: 80px;\"> <label>序号</label> <input type=\"number\" name=\"seq\" value=\"1\" required> </div> <div class=\"field\" style=\"min-width: 180px;\"> <label>名称</label> <input type=\"text\" name=\"name\" required placeholder=\"如：外观检查\"> </div> <div class=\"field\" style=\"min-width: 120px;\"> <label>类型</label> <select name=\"check_type\"> <option value=\"boolean\">是/否</option> <option value=\"numeric\">数值</option> <option value=\"text\">文本</option> </select> </div> <div class=\"field\" style=\"min-width: 100px;\"> <label>单位</label> <input type=\"text\" name=\"unit\" placeholder=\"可选\"> </div> <div class=\"field\" style=\"min-width: 100px;\"> <label>标准值</label> <input type=\"text\" name=\"standard_value\" placeholder=\"可选\"> </div> <div class=\"field\" style=\"min-width: 100px;\"> <label>最小值</label> <input type=\"number\" step=\"0.001\" name=\"min_value\" placeholder=\"可选\"> </div> <div class=\"field\" style=\"min-width: 100px;\"> <label>最大值</label> <input type=\"number\" step=\"0.001\" name=\"max_value\" placeholder=\"可选\"> </div> <div class=\"field\" style=\"min-width: 100px; display: flex; flex-direction: column; gap: 4px;\"> <label>&nbsp;</label> <div style=\"display: flex; gap: 8px; align-items: center;\"> <input type=\"checkbox\" id=\"is_mandatory\" name=\"is_mandatory\" checked> <label for=\"is_mandatory\" style=\"font-size: 12px;\">必检</label> </div> </div> <button type=\"submit\">添加</button> </form> </div> </div>"

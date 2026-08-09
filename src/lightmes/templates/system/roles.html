@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}角色管理 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">角色管理 <small>权限配置与角色管理</small></h1>
+
+<div class="page-header-links">
+  <a href="/" class="btn-secondary btn-sm">← 返回首页</a>
+</div>
+
+<div class="card">
+  <div class="card__title">角色列表</div>
+
+  <table class="data-table" style="margin-top: 16px;">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>名称</th>
+        <th>显示名</th>
+        <th>描述</th>
+        <th>类型</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for role in roles %}
+      <tr>
+        <td>{{ role.id }}</td>
+        <td>{{ role.name }}</td>
+        <td>{{ role.display_name }}</td>
+        <td>{{ role.description or '-' }}</td>
+        <td>
+          {% if role.is_system %}
+          <span class="badge">系统</span>
+          {% else %}
+          <span class="badge">自定义</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if role.is_active %}
+          <span class="badge">正常</span>
+          {% else %}
+          <span class="badge--danger">禁用</span>
+          {% endif %}
+        </td>
+        <td>
+          <button class="btn-secondary btn-sm">编辑权限</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card__title">权限资源说明</div>
+  <p class="nav-card__desc">系统采用资源+动作的权限模型，权限格式为 <code>resource:action</code>。</p>
+  <table class="data-table" style="margin-top: 12px;">
+    <thead>
+      <tr>
+        <th>资源</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>masterdata:*</code></td>
+        <td>主数据模块（产品、工艺、BOM、产线、工位等）</td>
+      </tr>
+      <tr>
+        <td><code>production:*</code></td>
+        <td>生产模块（工位作业、工单、WIP等）</td>
+      </tr>
+      <tr>
+        <td><code>trace:*</code></td>
+        <td>追溯模块（查询、返工等）</td>
+      </tr>
+      <tr>
+        <td><code>quality:*</code></td>
+        <td>质量模块（首检、测试数据等）</td>
+      </tr>
+      <tr>
+        <td><code>system:*</code></td>
+        <td>系统管理（用户、角色等）</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

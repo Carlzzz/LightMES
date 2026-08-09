@@ -99,9 +99,9 @@ class OperationPassService:
         # 5c. 物料绑定必扫校验：仅在最终工序强制校验
         #      检查累积已绑（之前工序扫的）+ 本次扫的 = BOM 需求
         bom_items = self.query.get_active_bom_items(wo.product_id)
+        is_last_op = False
         if bom_items:
-            all_ops = self.query.get_operations(wo.routing_id)
-            is_last_op = (expected.id == all_ops[-1].id) if all_ops else False
+            is_last_op = (expected.id == operations[-1].id) if operations else False
             if is_last_op:
                 from collections import Counter
                 from lightmes.modules.trace.repository import GenealogyBindRepository
