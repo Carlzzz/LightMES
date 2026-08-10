@@ -682,3 +682,9 @@ input::placeholder { color: #9bb0a9; }
 .severity-critical { background: #dc3545; color: #fff; }
 .severity-major { background: #ffc107; color: #333; }
 .severity-minor { background: #6c757d; color: #fff; }
+
+/* 缺陷处理状态 badge */
+.status-pending { background: #dc3545; color: #fff; }
+.status-rework { background: #17a2b8; color: #fff; }
+.status-scrap { background: #6c757d; color: #fff; }
+.status-concession { background: #28a745; color: #fff; }

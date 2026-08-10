@@ -2,25 +2,28 @@
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none
+from lightmes.modules.auth.dependencies import current_user_or_none, require_role
 from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.models import Operation, WorkStation
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.models import (
-    DefectType,
+    DefectRecord, DefectType,
     FirstInspectionConfig, FirstInspectionCheckItem,
     TestDataTemplate, TestDataField,
+    WorkOrder,
 )
 from lightmes.modules.production.defect_service import DefectService
 from lightmes.modules.production.quality_service import (
     FirstInspectionService, TestDataService,
 )
+from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.production.schemas import (
     FirstInspectionConfigCreate, FirstInspectionCheckItemCreate,
     TestDataTemplateCreate, TestDataFieldCreate,
@@ -639,5 +642,131 @@ def defect_log_submit(
     return templates.TemplateResponse(
         request, "quality/partials/defect_log_success.html",
         {"record": record})
+
+
+# ========== Defect List / Detail / Handling Routes ==========
+
+@router.get("/quality/defects", response_class=HTMLResponse)
+def defect_list_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    status_filter = request.query_params.get("status", "")
+    q = select(DefectRecord).order_by(DefectRecord.discovered_at.desc())
+    if status_filter:
+        q = q.where(DefectRecord.handling_status == status_filter)
+    records = db.execute(q).scalars().all()
+    return templates.TemplateResponse(
+        request, "quality/defect_list.html",
+        {"records": records, "status_filter": status_filter})
+
+
+@router.get("/quality/defects/{record_id}", response_class=HTMLResponse)
+def defect_detail_page(request: Request, record_id: int, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    record = db.get(DefectRecord, record_id)
+    if record is None:
+        return Response(status_code=404)
+    su = SerialUnitRepository(db).get(record.serial_unit_id)
+    wo = db.get(WorkOrder, record.work_order_id)
+    # 工序列表（用于返工 target_seq 下拉）
+    operations = MasterDataQueryService(db).get_operations(wo.routing_id) if wo else []
+    user = current_user_or_none(request, db)
+    can_concede = user is not None and user.role_obj is not None and user.role_obj.name in ("admin", "supervisor")
+    return templates.TemplateResponse(
+        request, "quality/defect_detail.html",
+        {"record": record, "su": su, "operations": operations, "can_concede": can_concede})
+
+
+@router.get("/quality/defects/{record_id}/rework-stations", response_class=HTMLResponse)
+def defect_rework_stations(
+    request: Request, record_id: int,
+    target_seq: int = Query(...), db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """HTMX：target_seq 选定后联动站位下拉（复用 P2h _resolve_rework_stations 模式）。"""
+    if (r := _login_guard(request, db)): return r
+    record = db.get(DefectRecord, record_id)
+    if record is None:
+        return Response(status_code=404)
+    su = SerialUnitRepository(db).get(record.serial_unit_id)
+    wo = db.get(WorkOrder, su.work_order_id)
+    query = MasterDataQueryService(db)
+    operations = query.get_operations(wo.routing_id)
+    first_repass_op = next((o for o in operations if o.seq > target_seq), None)
+    stations = []
+    if first_repass_op:
+        allowed = query.get_allowed_work_stations(first_repass_op.id)
+        station_ids = [w.id for w in allowed] or [first_repass_op.default_work_station_id]
+        stations = list(db.execute(
+            select(WorkStation).where(WorkStation.id.in_(station_ids))
+        ).scalars().all())
+    return templates.TemplateResponse(
+        request, "quality/partials/rework_stations.html",
+        {"stations": stations, "first_repass_op": first_repass_op})
+
+
+@router.post("/quality/defects/{record_id}/handle-rework", response_class=HTMLResponse)
+def defect_handle_rework(
+    request: Request, record_id: int,
+    target_seq: int = Form(...),
+    expected_repass_station_id: int = Form(...),
+    remark: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    user = current_user_or_none(request, db)
+    try:
+        DefectService(db).handle_rework(
+            record_id=record_id, handled_by=user.id,
+            target_seq=target_seq,
+            expected_repass_station_id=expected_repass_station_id,
+            remark=remark or None)
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return Response(status_code=422, content=e.detail)
+    except Exception:
+        db.rollback()
+        return Response(status_code=422, content="处理失败，请稍后重试")
+    return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
+
+
+@router.post("/quality/defects/{record_id}/handle-scrap", response_class=HTMLResponse)
+def defect_handle_scrap(
+    request: Request, record_id: int,
+    remark: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    user = current_user_or_none(request, db)
+    try:
+        DefectService(db).handle_scrap(
+            record_id=record_id, handled_by=user.id, remark=remark or None)
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return Response(status_code=422, content=e.detail)
+    except Exception:
+        db.rollback()
+        return Response(status_code=422, content="处理失败，请稍后重试")
+    return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
+
+
+@router.post("/quality/defects/{record_id}/handle-concession", response_class=HTMLResponse)
+def defect_handle_concession(
+    request: Request, record_id: int,
+    remark: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> HTMLResponse:
+    try:
+        DefectService(db).handle_concession(
+            record_id=record_id, handled_by=user.id, remark=remark or None)
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return Response(status_code=422, content=e.detail)
+    except Exception:
+        db.rollback()
+        return Response(status_code=422, content="处理失败，请稍后重试")
+    return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
 
 
