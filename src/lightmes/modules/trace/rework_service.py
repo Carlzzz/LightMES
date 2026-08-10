@@ -81,8 +81,8 @@ class ReworkService:
         su = self.serial_units.get_by_sn(sn)
         if su is None:
             raise NotFoundError(f"SN 不存在: {sn}")
-        if su.status not in ("in_process", "reworking"):
-            raise BusinessRuleError(f"仅在制/返工件可判废，当前: {su.status}")
+        if su.status not in ("in_process", "reworking", "quarantined", "finished"):
+            raise BusinessRuleError(f"仅在制/返工/隔离/完工件可判废，当前: {su.status}")
         # 清除载体码绑定（与完工路径一致）
         if su.carrier_code is not None:
             binding = self.carrier_bindings.active_by_serial_unit(su.id)
