@@ -41,7 +41,7 @@ class OperationPassService:
                 su = self.serial_units.get_active_by_carrier(data.sn)
             if su is None:
                 raise NotFoundError(f"未找到 SN 或载体码: {data.sn}")
-            if su.status in ("finished", "scrapped"):
+            if su.status in ("finished", "scrapped", "quarantined"):
                 raise BusinessRuleError(f"SN 已{su.status}，不可过站: {su.sn}")
             wo = self.work_orders.get(su.work_order_id)
         else:
@@ -282,7 +282,7 @@ class OperationPassService:
                 su = self.serial_units.get_active_by_carrier(data.sn)
             if su is None:
                 raise NotFoundError(f"未找到 SN 或载体码: {data.sn}")
-            if su.status in ("finished", "scrapped"):
+            if su.status in ("finished", "scrapped", "quarantined"):
                 raise BusinessRuleError(f"SN 已{su.status}，不可跳站: {su.sn}")
             wo = self.work_orders.get(su.work_order_id)
         else:
