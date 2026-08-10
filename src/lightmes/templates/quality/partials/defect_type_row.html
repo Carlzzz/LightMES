@@ -1,0 +1,12 @@
+<tr>
+  <td>{{ dt.code }}</td>
+  <td>{{ dt.name }}</td>
+  <td>{{ dt.category or '-' }}</td>
+  <td><span class="badge severity-{{ dt.severity }}">{{ dt.severity }}</span></td>
+  <td>{% if dt.is_active %}<span class="badge">启用</span>{% else %}<span class="badge" style="background:#999">停用</span>{% endif %}</td>
+  <td>
+    <form hx-post="/quality/defect-types/{{ dt.id }}/delete" hx-target="closest tr" hx-swap="outerHTML" style="display:inline">
+      <button type="submit" class="btn-secondary btn-sm" onclick="return confirm('确定停用？')">停用</button>
+    </form>
+  </td>
+</tr>

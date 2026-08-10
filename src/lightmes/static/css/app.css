@@ -677,3 +677,8 @@ input::placeholder { color: #9bb0a9; }
   border-radius: 4px;
   cursor: pointer;
 }
+
+/* 缺陷严重度 badge */
+.severity-critical { background: #dc3545; color: #fff; }
+.severity-major { background: #ffc107; color: #333; }
+.severity-minor { background: #6c757d; color: #fff; }

@@ -13,6 +13,7 @@ from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.models import Operation, WorkStation
 from lightmes.modules.production.models import (
+    DefectType,
     FirstInspectionConfig, FirstInspectionCheckItem,
     TestDataTemplate, TestDataField,
 )
@@ -498,4 +499,58 @@ def test_data_update(
         db.rollback()
 
     return Response(status_code=303, headers={"Location": f"/quality/test-data/{template_id}"})
+
+
+# ========== Defect Type Routes ==========
+
+@router.get("/quality/defect-types", response_class=HTMLResponse)
+def defect_types_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    types = db.execute(
+        select(DefectType).order_by(DefectType.id)
+    ).scalars().all()
+    return templates.TemplateResponse(
+        request, "quality/defect_types.html",
+        {"types": types})
+
+
+@router.post("/quality/defect-types", response_class=HTMLResponse)
+def defect_type_create(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    category: str = Form(""),
+    severity: str = Form("major"),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    try:
+        dt = DefectType(
+            code=code, name=name,
+            category=category if category else None,
+            severity=severity,
+            description=description if description else None)
+        db.add(dt); db.commit(); db.refresh(dt)
+        return templates.TemplateResponse(
+            request, "quality/partials/defect_type_row.html",
+            {"dt": dt})
+    except Exception as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "quality/partials/error_row.html",
+            {"error": str(e), "colspan": 6})
+
+
+@router.post("/quality/defect-types/{dt_id}/delete")
+def defect_type_delete(
+    request: Request, dt_id: int, db: Session = Depends(get_db),
+) -> Response:
+    if (r := _login_guard(request, db)): return r
+    dt = db.get(DefectType, dt_id)
+    if dt:
+        dt.is_active = False  # 软删
+        db.commit()
+    return Response(status_code=303, headers={"Location": "/quality/defect-types"})
+
 
