@@ -25,6 +25,12 @@ from lightmes.modules.production.schemas import (
     FirstInspectionConfigCreate, FirstInspectionCheckItemCreate,
     TestDataTemplateCreate, TestDataFieldCreate,
 )
+from lightmes.shared.errors import DomainError
+from sqlalchemy.exc import IntegrityError
+
+# 缺陷类型字段允许集合（service 层校验）
+VALID_SEVERITIES = {"minor", "major", "critical"}
+VALID_CATEGORIES = {"外观", "尺寸", "功能", "其他", None}
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -33,9 +39,19 @@ templates = Jinja2Templates(
 
 
 def _login_guard(request: Request, db: Session) -> Response | None:
+    """登录守卫：返回 None 表示通过，返回 Response 表示拒绝（401 跳登录）。"""
     if current_user_or_none(request, db) is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
     return None
+
+
+def _can_manage_defect_types(request: Request, db: Session) -> bool:
+    """缺陷类型主数据修改权限：仅 supervisor/admin。"""
+    user = current_user_or_none(request, db)
+    if user is None:
+        return False
+    role_name = user.role_obj.name if user.role_obj else None
+    return role_name in ("admin", "supervisor")
 
 
 # ========== First Inspection Routes ==========
@@ -526,21 +542,39 @@ def defect_type_create(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     if (r := _login_guard(request, db)): return r
+    if not _can_manage_defect_types(request, db):
+        return templates.TemplateResponse(
+            request, "quality/partials/error_row.html",
+            {"error": "仅主管/管理员可修改缺陷类型", "colspan": 6})
+    # 字段白名单校验
+    cat = category if category else None
+    if severity not in VALID_SEVERITIES:
+        return templates.TemplateResponse(
+            request, "quality/partials/error_row.html",
+            {"error": f"严重度必须是 {sorted(VALID_SEVERITIES)} 之一", "colspan": 6})
+    if cat not in VALID_CATEGORIES:
+        return templates.TemplateResponse(
+            request, "quality/partials/error_row.html",
+            {"error": f"分类必须是 {sorted(c for c in VALID_CATEGORIES if c)} 之一", "colspan": 6})
     try:
         dt = DefectType(
-            code=code, name=name,
-            category=category if category else None,
+            code=code, name=name, category=cat,
             severity=severity,
             description=description if description else None)
         db.add(dt); db.commit(); db.refresh(dt)
         return templates.TemplateResponse(
             request, "quality/partials/defect_type_row.html",
             {"dt": dt})
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
         return templates.TemplateResponse(
             request, "quality/partials/error_row.html",
-            {"error": str(e), "colspan": 6})
+            {"error": f"编码已存在: {code}", "colspan": 6})
+    except Exception:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "quality/partials/error_row.html",
+            {"error": "创建失败，请检查输入", "colspan": 6})
 
 
 @router.post("/quality/defect-types/{dt_id}/delete")
@@ -548,6 +582,8 @@ def defect_type_delete(
     request: Request, dt_id: int, db: Session = Depends(get_db),
 ) -> Response:
     if (r := _login_guard(request, db)): return r
+    if not _can_manage_defect_types(request, db):
+        return Response(status_code=403, content="仅主管/管理员可删除缺陷类型")
     dt = db.get(DefectType, dt_id)
     if dt:
         dt.is_active = False  # 软删
@@ -586,12 +622,20 @@ def defect_log_submit(
             position=position if position else None,
             remark=remark if remark else None)
         db.commit()
-    except Exception as e:
+    except DomainError as e:
+        # 领域错误（SN 不存在/已隔离等）：用户可见的中文消息
         db.rollback()
         types = db.execute(select(DefectType).where(DefectType.is_active == True).order_by(DefectType.code)).scalars().all()
         return templates.TemplateResponse(
             request, "quality/defect_log.html",
-            {"types": types, "sn": sn, "error": str(e)})
+            {"types": types, "sn": sn, "error": e.detail})
+    except Exception:
+        # 未预期错误：不暴露内部细节
+        db.rollback()
+        types = db.execute(select(DefectType).where(DefectType.is_active == True).order_by(DefectType.code)).scalars().all()
+        return templates.TemplateResponse(
+            request, "quality/defect_log.html",
+            {"types": types, "sn": sn, "error": "登记失败，请稍后重试或联系管理员"})
     return templates.TemplateResponse(
         request, "quality/partials/defect_log_success.html",
         {"record": record})
