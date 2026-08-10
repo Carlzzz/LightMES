@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}缺陷登记{% endblock %}
+{% block content %}
+<h1 class="page-title">缺陷登记</h1>
+
+{% if error %}
+<div class="alert alert--danger">✗ {{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <div class="card__title">登记新缺陷</div>
+  <form hx-post="/quality/defects/log" hx-target="#result" hx-swap="innerHTML">
+    <div class="field"><label>成品 SN</label><input name="sn" value="{{ sn }}" required></div>
+    <div class="field"><label>缺陷类型</label>
+      <select name="defect_type_id" required>
+        <option value="">请选择</option>
+        {% for t in types %}
+        <option value="{{ t.id }}">{{ t.code }} {{ t.name }}（{{ t.severity }}）</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>位置（可选）</label><input name="position" placeholder="如：左上角"></div>
+    <div class="field" style="flex:1"><label>备注（可选）</label><input name="remark"></div>
+    <button type="submit">登记</button>
+  </form>
+  <div id="result"></div>
+</div>
+{% endblock %}

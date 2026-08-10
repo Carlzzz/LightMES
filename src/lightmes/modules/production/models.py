@@ -293,3 +293,47 @@ class TestDataValue(Base, TimestampMixin):
     is_pass: Mapped[bool | None] = mapped_column(default=None)
     out_of_spec: Mapped[bool] = mapped_column(default=False)
     remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class DefectType(Base, TimestampMixin):
+    """缺陷类型主数据"""
+    __tablename__ = "defect_types"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(unique=True, index=True)
+    name: Mapped[str] = mapped_column()
+    category: Mapped[str | None] = mapped_column(default=None)  # 外观/尺寸/功能/其他
+    severity: Mapped[str] = mapped_column(default="major")  # critical/major/minor
+    description: Mapped[str | None] = mapped_column(default=None)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class DefectRecord(Base, TimestampMixin):
+    """缺陷记录（实例）"""
+    __tablename__ = "defect_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    defect_type_id: Mapped[int] = mapped_column(
+        ForeignKey("defect_types.id"), index=True)
+    defect_type_code: Mapped[str] = mapped_column()  # 快照
+    defect_type_name: Mapped[str] = mapped_column()  # 快照
+    severity: Mapped[str] = mapped_column()  # 快照（登记时刻）
+    serial_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("serial_units.id"), index=True)
+    work_order_id: Mapped[int] = mapped_column(
+        ForeignKey("work_orders.id"), index=True)
+    operation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("operations.id"), default=None)
+    work_station_id: Mapped[int | None] = mapped_column(
+        ForeignKey("work_stations.id"), default=None)
+    position: Mapped[str | None] = mapped_column(default=None)
+    discovered_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    discovered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    handling_status: Mapped[str] = mapped_column(default="pending")  # pending/rework/scrap/concession
+    handled_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), default=None)
+    handled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None)
+    handling_remark: Mapped[str | None] = mapped_column(default=None)
+    remark: Mapped[str | None] = mapped_column(default=None)

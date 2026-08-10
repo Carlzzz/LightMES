@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}缺陷详情 #{{ record.id }}{% endblock %}
+{% block content %}
+<h1 class="page-title">缺陷详情 <small>#{{ record.id }}</small></h1>
+
+<div class="card">
+  <div class="card__title">基本信息</div>
+  <table class="data-table">
+    <tr><th>缺陷类型</th><td>{{ record.defect_type_code }} {{ record.defect_type_name }}</td></tr>
+    <tr><th>严重度</th><td><span class="badge severity-{{ record.severity }}">{{ record.severity }}</span></td></tr>
+    <tr><th>SN ID</th><td>{{ record.serial_unit_id }}</td></tr>
+    <tr><th>SN 状态</th><td>{{ su.status if su else '-' }}</td></tr>
+    <tr><th>位置</th><td>{{ record.position or '-' }}</td></tr>
+    <tr><th>发现时间</th><td>{{ record.discovered_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    <tr><th>处理状态</th><td><span class="badge status-{{ record.handling_status }}">{{ record.handling_status }}</span></td></tr>
+    {% if record.handled_at %}
+    <tr><th>处理时间</th><td>{{ record.handled_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    <tr><th>处理备注</th><td>{{ record.handling_remark or '-' }}</td></tr>
+    {% endif %}
+    <tr><th>备注</th><td>{{ record.remark or '-' }}</td></tr>
+  </table>
+</div>
+
+{% if record.handling_status == 'pending' %}
+<div class="card">
+  <div class="card__title">处理决策</div>
+
+  <details>
+    <summary><strong>返工</strong>（SN 回到 target_seq 工序重做）</summary>
+    <form hx-post="/quality/defects/{{ record.id }}/handle-rework" class="form-row" style="margin-top:12px"
+          onsubmit="return confirm('确认返工？')">
+      <div class="field"><label>回退到工序</label>
+        <select name="target_seq" required
+                hx-get="/quality/defects/{{ record.id }}/rework-stations"
+                hx-trigger="change"
+                hx-target="#rework-stations"
+                hx-swap="innerHTML"
+                hx-include="this">
+          <option value="">请选择</option>
+          {% for op in operations %}
+          <option value="{{ op.seq - 1 }}">回退到工序 {{ op.seq - 1 }} 之前（重做 {{ op.code }} {{ op.name }}）</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="rework-stations"></div>
+      <div class="field" style="flex:1"><label>备注</label><input name="remark"></div>
+      <button type="submit">确认返工</button>
+    </form>
+  </details>
+
+  <details>
+    <summary><strong>报废</strong>（SN 终态判废）</summary>
+    <form method="post" action="/quality/defects/{{ record.id }}/handle-scrap" class="form-row" style="margin-top:12px"
+          onsubmit="return confirm('确认报废？此操作不可逆')">
+      <div class="field" style="flex:1"><label>备注</label><input name="remark"></div>
+      <button type="submit" class="btn-danger">确认报废</button>
+    </form>
+  </details>
+
+  {% if can_concede %}
+  <details>
+    <summary><strong>让步接收</strong>（supervisor 授权，SN 回 in_process 继续生产）</summary>
+    <form method="post" action="/quality/defects/{{ record.id }}/handle-concession" class="form-row" style="margin-top:12px"
+          onsubmit="return confirm('确认让步接收？')">
+      <div class="field" style="flex:1"><label>让步理由（必填）</label><input name="remark" required></div>
+      <button type="submit">确认让步</button>
+    </form>
+  </details>
+  {% else %}
+  <p class="nav-card__desc">让步接收需 supervisor/admin 角色</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="alert alert--ok">该缺陷已处理（{{ record.handling_status }}）</div>
+{% endif %}
+
+<p><a href="/quality/defects">返回缺陷列表</a></p>
+{% endblock %}

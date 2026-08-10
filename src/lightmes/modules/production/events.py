@@ -28,3 +28,20 @@ class SerialUnitFinished(Event):
     serial_unit_id: int
     sn: str
     work_order_id: int
+
+
+@dataclass
+class DefectLogged(Event):
+    defect_record_id: int
+    serial_unit_id: int
+    sn: str
+    defect_type_code: str
+    severity: str
+
+
+@dataclass
+class DefectHandled(Event):
+    defect_record_id: int
+    serial_unit_id: int
+    sn: str
+    decision: str  # rework/scrap/concession

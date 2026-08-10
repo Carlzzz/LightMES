@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}缺陷记录{% endblock %}
+{% block content %}
+<h1 class="page-title">缺陷记录</h1>
+
+<div class="card">
+  <div class="card__title">过滤</div>
+  <form method="get" class="form-row">
+    <div class="field"><label>处理状态</label>
+      <select name="status" onchange="this.form.submit()">
+        <option value="">全部</option>
+        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>待处理</option>
+        <option value="rework" {% if status_filter == 'rework' %}selected{% endif %}>已返工</option>
+        <option value="scrap" {% if status_filter == 'scrap' %}selected{% endif %}>已报废</option>
+        <option value="concession" {% if status_filter == 'concession' %}selected{% endif %}>已让步</option>
+      </select>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">缺陷列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>SN ID</th><th>缺陷类型</th><th>严重度</th><th>发现时间</th><th>处理状态</th></tr></thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td><a href="/quality/defects/{{ r.id }}">#{{ r.id }}</a></td>
+        <td>{{ r.serial_unit_id }}</td>
+        <td>{{ r.defect_type_code }} {{ r.defect_type_name }}</td>
+        <td><span class="badge severity-{{ r.severity }}">{{ r.severity }}</span></td>
+        <td>{{ r.discovered_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td><span class="badge status-{{ r.handling_status }}">{{ r.handling_status }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">无记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

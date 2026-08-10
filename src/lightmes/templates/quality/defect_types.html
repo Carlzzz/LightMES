@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}缺陷类型管理{% endblock %}
+{% block content %}
+<h1 class="page-title">缺陷类型管理</h1>
+
+<div class="card">
+  <div class="card__title">新增缺陷类型</div>
+  <form class="form-row" hx-post="/quality/defect-types" hx-target="#type-list" hx-swap="beforeend">
+    <div class="field"><label>编码</label><input name="code" required></div>
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field"><label>分类</label>
+      <select name="category">
+        <option value="">无</option>
+        <option value="外观">外观</option>
+        <option value="尺寸">尺寸</option>
+        <option value="功能">功能</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="field"><label>严重度</label>
+      <select name="severity">
+        <option value="minor">minor</option>
+        <option value="major" selected>major</option>
+        <option value="critical">critical</option>
+      </select>
+    </div>
+    <div class="field" style="flex:1"><label>描述</label><input name="description"></div>
+    <button type="submit">新增</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">缺陷类型列表</div>
+  <table class="data-table">
+    <thead><tr><th>编码</th><th>名称</th><th>分类</th><th>严重度</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody id="type-list">
+      {% for dt in types %}
+      {% include "quality/partials/defect_type_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
