@@ -250,6 +250,9 @@ class OperationPassService:
 
     def skip_operation(self, data: OperationSkipInput) -> OperationSkipResult:
         """跳过当前工序：写 result='skip' 记录，推进 seq，不绑料/不校验技能/不完工。"""
+        # 跳站是特权操作，operator_id 必须有值留审计（路由层 supervisor 守卫已确保登录）
+        if data.operator_id is None:
+            raise BusinessRuleError("跳站需登录操作员，operator_id 不可为空")
         # 1+3. 定位单元：SN -> 载体码 -> 工单号(取第一个 pending)
         su = None
         if data.sn is not None:
