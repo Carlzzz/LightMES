@@ -1,0 +1,24 @@
+<div class="skip-form">
+  <h3>确认跳站</h3>
+  {% if view.current_op %}
+  <form hx-post="/production/station/skip" hx-target="#station-root" hx-swap="innerHTML">
+    <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
+    <input type="hidden" name="scan" value="{{ view.sn or view.work_order_code }}">
+    <div class="alert alert--warning">
+      确认跳过工序 {{ view.current_op.seq }} {{ view.current_op.name }}？
+      跳过后该工序不再补做，可后续返工重做。
+    </div>
+    <div class="field">
+      <label>跳站原因（必填）：</label>
+      <input name="reason" required placeholder="如：临时取消该工序">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-danger">确认跳站</button>
+      <button type="button" class="btn-secondary"
+              onclick="document.getElementById('skip-modal').style.display='none'">取消</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="alert alert--danger">无当前工序可跳过。</div>
+  {% endif %}
+</div>

@@ -11,6 +11,7 @@ from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
     WorkOrderRead, ComponentInput, ParamInput,
+    OperationSkipInput, OperationSkipResult,
     FirstInspectionSubmitInput, FirstInspectionCheckResultInput,
     TestDataRecordSubmitInput, TestDataValueInput,
 )
@@ -35,6 +36,26 @@ router = APIRouter()
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
 )
+
+
+def _can_skip(user: User | None) -> bool:
+    """跳站权限：仅 supervisor/admin。"""
+    if user is None:
+        return False
+    role_name = user.role_obj.name if user.role_obj else None
+    return role_name in ("admin", "supervisor")
+
+
+def _skip_auth_guard(request: Request, db: Session) -> User | HTMLResponse:
+    """跳站路由登录+角色守卫；返回 User 或错误片段 Response。"""
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    if not _can_skip(user):
+        return templates.TemplateResponse(
+            request, "production/partials/station_enter_error.html",
+            {"error": "仅主管/管理员可跳站"})
+    return user
 
 
 @router.post(
@@ -214,7 +235,7 @@ def station_load(
         )
     return templates.TemplateResponse(
         request, "production/station_view.html",
-        {"view": view, "work_station_id": work_station_id},
+        {"view": view, "work_station_id": work_station_id, "can_skip": _can_skip(user)},
     )
 
 
@@ -412,13 +433,78 @@ def station_pass(
         return templates.TemplateResponse(
             request, "production/station_view.html",
             {"view": view, "work_station_id": work_station_id,
-             "just_passed": result.passed_op},
+             "just_passed": result.passed_op, "can_skip": _can_skip(user)},
         )
     # 下一工序不在本站 → 切站提示
     return templates.TemplateResponse(
         request, "production/partials/station_pass_result.html",
         {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id,
          "switch_station": True},
+    )
+
+
+@router.get("/production/station/skip-form", response_class=HTMLResponse)
+def station_skip_form(
+    request: Request,
+    work_station_id: int = Query(...),
+    scan: str = Query(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    auth = _skip_auth_guard(request, db)
+    if not isinstance(auth, User):
+        return auth
+    user = auth
+    try:
+        view = StationService(db).load(scan, work_station_id, user.id)
+    except DomainError as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "production/partials/station_enter_error.html",
+            {"error": str(e.detail)})
+    return templates.TemplateResponse(
+        request, "production/partials/station_skip_form.html",
+        {"view": view, "work_station_id": work_station_id})
+
+
+@router.post("/production/station/skip", response_class=HTMLResponse)
+def station_skip(
+    request: Request,
+    work_station_id: int = Form(...),
+    scan: str = Form(...),
+    reason: str = Form(...),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    auth = _skip_auth_guard(request, db)
+    if not isinstance(auth, User):
+        return auth
+    user = auth
+    try:
+        result = OperationPassService(db).skip_operation(OperationSkipInput(
+            work_station_id=work_station_id, sn=scan,
+            operator_id=user.id, reason=reason))
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "production/partials/station_enter_error.html",
+            {"error": str(e.detail)})
+    # skip 永不完工（末工序不可跳），分流：本站可继续 → 刷富界面；否则切站提示
+    if result.next_op_can_continue_here:
+        try:
+            view = StationService(db).load(scan, work_station_id, user.id)
+        except DomainError as e:
+            db.rollback()
+            return templates.TemplateResponse(
+                request, "production/partials/station_enter_error.html",
+                {"error": str(e.detail)})
+        return templates.TemplateResponse(
+            request, "production/station_view.html",
+            {"view": view, "work_station_id": work_station_id,
+             "just_skipped": result.skipped_op, "can_skip": True})
+    return templates.TemplateResponse(
+        request, "production/partials/station_pass_result.html",
+        {"result": result, "work_station_id": work_station_id,
+         "skipped": True, "switch_station": True},
     )
 
 
