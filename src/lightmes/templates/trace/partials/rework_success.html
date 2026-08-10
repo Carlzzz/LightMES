@@ -1,2 +1,2 @@
-<div class="alert alert--success">✓ {{ su.sn }} 已返工至工序 {{ su.current_operation_seq }}</div>
+<div class="alert alert--success">✓ {{ su.sn }} 已回退到工序 {{ target_seq }}，请前往 <strong>{{ station_name }}</strong>{% if first_repass_op_seq is not none %} 重做工序 {{ first_repass_op_seq }} {{ first_repass_op_name }}{% endif %}。</div>
 <script>setTimeout(function(){location.href="/production/station";},2000);</script>
