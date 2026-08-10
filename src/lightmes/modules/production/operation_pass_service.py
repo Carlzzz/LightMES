@@ -85,6 +85,16 @@ class OperationPassService:
                 f"该 SN 当前工序 {expected.seq} {expected.name} "
                 f"应在【{names}】之一作业站做，当前作业站不符")
 
+        # 5a. 返工首次 re-pass 站位硬卡（仅 reworking 态 + 已设预期站位时生效）
+        if su.status == "reworking" and su.rework_target_station_id is not None:
+            if data.work_station_id != su.rework_target_station_id:
+                expected_ws = self.query.get_work_station(su.rework_target_station_id)
+                current_ws = ws  # 步骤 5 已查
+                raise BusinessRuleError(
+                    f"该返工件须在【{expected_ws.name if expected_ws else f'#{su.rework_target_station_id}'}】重做，"
+                    f"当前作业站【{current_ws.name if current_ws else f'#{data.work_station_id}'}】不符。"
+                    f"如需更改，请重新发起返工选择正确站位。")
+
         # 5b. 技能校验（硬拦截）：工序有技能要求时，操作员该技能等级须 >= 要求
         if expected.required_skill_id is not None:
             level = (SkillService(self.db).get_operator_level(
@@ -144,6 +154,10 @@ class OperationPassService:
         if r.rowcount == 0:
             raise ConflictError("该产品正被其他作业站处理，请重试")
         self.db.refresh(su)
+
+        # 6a. 首次 re-pass 成功后清除返工站位约束
+        if su.status == "reworking" and su.rework_target_station_id is not None:
+            su.rework_target_station_id = None
 
         # 7. 绑料（同事务，失败整单回滚）
         bound_count = 0
