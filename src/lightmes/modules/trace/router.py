@@ -85,7 +85,7 @@ def rework_allowed_stations(
     sn: str = Query(...),
     target_seq: int = Query(...),
     db: Session = Depends(get_db),
-    user: User = Depends(require_login),
+    user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
     """返工页 target_seq onblur 触发：返回站位下拉片段。"""
     try:
