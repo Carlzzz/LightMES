@@ -13,6 +13,17 @@ class OperationPassed(Event):
 
 
 @dataclass
+class OperationSkipped(Event):
+    serial_unit_id: int
+    sn: str
+    work_order_id: int
+    operation_id: int
+    work_station_id: int
+    line_id: int
+    reason: str
+
+
+@dataclass
 class SerialUnitFinished(Event):
     serial_unit_id: int
     sn: str
