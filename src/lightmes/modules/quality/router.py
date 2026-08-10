@@ -17,6 +17,7 @@ from lightmes.modules.production.models import (
     FirstInspectionConfig, FirstInspectionCheckItem,
     TestDataTemplate, TestDataField,
 )
+from lightmes.modules.production.defect_service import DefectService
 from lightmes.modules.production.quality_service import (
     FirstInspectionService, TestDataService,
 )
@@ -552,5 +553,47 @@ def defect_type_delete(
         dt.is_active = False  # 软删
         db.commit()
     return Response(status_code=303, headers={"Location": "/quality/defect-types"})
+
+
+# ========== Defect Logging Routes ==========
+
+@router.get("/quality/defects/log", response_class=HTMLResponse)
+def defect_log_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    sn = request.query_params.get("sn", "")
+    types = db.execute(
+        select(DefectType).where(DefectType.is_active == True).order_by(DefectType.code)
+    ).scalars().all()
+    return templates.TemplateResponse(
+        request, "quality/defect_log.html",
+        {"types": types, "sn": sn})
+
+
+@router.post("/quality/defects/log", response_class=HTMLResponse)
+def defect_log_submit(
+    request: Request,
+    sn: str = Form(...),
+    defect_type_id: int = Form(...),
+    position: str = Form(""),
+    remark: str = Form(""),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
+    user = current_user_or_none(request, db)
+    try:
+        record = DefectService(db).log_defect(
+            defect_type_id=defect_type_id, sn=sn, discovered_by=user.id,
+            position=position if position else None,
+            remark=remark if remark else None)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        types = db.execute(select(DefectType).where(DefectType.is_active == True).order_by(DefectType.code)).scalars().all()
+        return templates.TemplateResponse(
+            request, "quality/defect_log.html",
+            {"types": types, "sn": sn, "error": str(e)})
+    return templates.TemplateResponse(
+        request, "quality/partials/defect_log_success.html",
+        {"record": record})
 
 
