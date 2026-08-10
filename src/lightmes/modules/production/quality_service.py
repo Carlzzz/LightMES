@@ -257,6 +257,33 @@ class FirstInspectionService:
         self.db.flush()
         return record
 
+    def submit_new_inspection(
+        self, config: FirstInspectionConfig, work_order_id: int, operation_id: int,
+        work_station_id: int, inspector_id: int, trigger_reason: str,
+        serial_unit_id: int | None,
+        check_results: list,
+        remark: str | None = None,
+    ) -> FirstInspectionRecord:
+        """创建 + 提交首检记录，返回带最终 status (passed/failed) 的 record。
+
+        若 FirstInspectionState 不存在则创建（与 check_needs_inspection 一致），
+        使本 helper 可独立调用而不依赖前置 check_needs_inspection。
+        """
+        state = self.get_state(work_order_id, operation_id)
+        if state is None:
+            state = FirstInspectionState(
+                work_order_id=work_order_id, operation_id=operation_id)
+            self.db.add(state)
+            self.db.flush()
+        record = self.create_inspection_record(
+            config, work_order_id, operation_id, work_station_id,
+            inspector_id, trigger_reason,
+            serial_unit_id=serial_unit_id)
+        return self.submit_inspection(
+            FirstInspectionSubmitInput(
+                record_id=record.id, check_results=check_results, remark=remark),
+            inspector_id)
+
     def _evaluate_check_result(
         self, item: FirstInspectionCheckItem, result_data,
     ) -> bool:

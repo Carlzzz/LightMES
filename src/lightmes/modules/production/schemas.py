@@ -60,6 +60,11 @@ class ParamInput(BaseModel):
     unit: str | None = None
 
 
+class FirstInspectionInput(BaseModel):
+    check_results: list[FirstInspectionCheckResultInput]
+    remark: str | None = None
+
+
 class OperationPassInput(BaseModel):
     work_station_id: int
     work_order_code: str | None = None
@@ -67,6 +72,7 @@ class OperationPassInput(BaseModel):
     operator_id: int | None = None
     components: list[ComponentInput] = []
     params: list[ParamInput] = []
+    first_inspection: FirstInspectionInput | None = None
 
 
 class OpInfo(BaseModel):
