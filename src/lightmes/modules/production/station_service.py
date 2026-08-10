@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.modules.auth.repository import UserRepository
@@ -15,7 +16,7 @@ from lightmes.modules.production.quality_service import (
     FirstInspectionService, TestDataService,
 )
 from lightmes.modules.production.models import (
-    FirstInspectionConfig, TestDataTemplate,
+    FirstInspectionConfig, TestDataTemplate, OperationRecord,
 )
 from lightmes.shared.errors import NotFoundError, BusinessRuleError
 
@@ -56,24 +57,45 @@ class StationService:
         all_op_ids = [o.id for o in operations]
         op_ws_map = self.query.batch_allowed_work_stations(all_op_ids)
 
+        # 取该 SN 全部 operation_records，按 operation_id 分组取 end_time 最新的 result
+        latest_result_by_op: dict[int, str] = {}
+        if su is not None:
+            all_records = list(self.db.execute(
+                select(OperationRecord)
+                .where(OperationRecord.serial_unit_id == su.id)
+                .order_by(OperationRecord.operation_id, OperationRecord.end_time.desc())
+            ).scalars().all())
+            for r in all_records:
+                if r.operation_id not in latest_result_by_op:
+                    latest_result_by_op[r.operation_id] = r.result  # 第一条 = 最新
+
         op_views: list[StationOpView] = []
         for o in operations:
-            if o.seq <= current_seq:
-                st = "done"
-            elif expected is not None and o.id == expected.id:
+            if expected is not None and o.id == expected.id and (su is None or su.status != "finished"):
                 st = "current"
-            else:
+            elif o.seq > current_seq:
                 st = "future"
+            elif latest_result_by_op.get(o.id) == "skip":
+                st = "skipped"
+            else:
+                st = "done"
             op_allowed = op_ws_map.get(o.id, [])
             allowed_names = [w.name for w in op_allowed]
             if not allowed_names:
                 ws = self.query.get_work_station(o.default_work_station_id)
                 allowed_names = [ws.name if ws else f"#{o.default_work_station_id}"]
             op_views.append(StationOpView(
+                operation_id=o.id,
                 seq=o.seq, name=o.name, code=o.code,
                 work_station_id=o.default_work_station_id, status=st,
                 allowed_work_stations=allowed_names,
             ))
+
+        # Layer 2：本作业站 allowed 子集
+        station_op_views = [
+            v for v in op_views
+            if work_station_id in [w.id for w in op_ws_map.get(v.operation_id, [])]
+        ]
 
         current_op = next((v for v in op_views if v.status == "current"), None)
 
@@ -175,6 +197,7 @@ class StationService:
             is_off_station=is_off_station,
             is_finished=expected is None,
             operations=op_views,
+            station_operations=station_op_views,
             current_op=current_op,
             components=components,
             sop_text=sop_text,
