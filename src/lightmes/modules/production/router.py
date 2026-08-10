@@ -12,7 +12,7 @@ from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
     WorkOrderRead, ComponentInput, ParamInput,
     OperationSkipInput, OperationSkipResult,
-    FirstInspectionSubmitInput, FirstInspectionCheckResultInput,
+    FirstInspectionInput, FirstInspectionCheckResultInput,
     TestDataRecordSubmitInput, TestDataValueInput,
 )
 from lightmes.modules.production.service import ProductionService
@@ -21,10 +21,10 @@ from lightmes.modules.production.operation_pass_service import OperationPassServ
 from lightmes.modules.production.wip_service import WipService
 from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.production.quality_service import (
-    FirstInspectionService, TestDataService,
+    TestDataService,
 )
 from lightmes.modules.production.models import (
-    WorkOrder, OperationRecord, FirstInspectionRecord,
+    WorkOrder,
 )
 from lightmes.modules.production.repository import (
     SerialUnitRepository, WorkOrderRepository, OperationRecordRepository,
@@ -290,11 +290,30 @@ def station_pass(
         unit = param_unit[i].strip() if i < len(param_unit) and param_unit[i].strip() else None
         params.append(ParamInput(param_key=key.strip(), param_value=val.strip(), unit=unit))
 
+    # 首检：把表单字段聚合成 FirstInspectionInput
+    first_inspection = None
+    if fi_check_item_id:
+        check_results = []
+        for i, item_id in enumerate(fi_check_item_id):
+            result_type = fi_result_type[i] if i < len(fi_result_type) else "boolean"
+            check_results.append(FirstInspectionCheckResultInput(
+                check_item_id=item_id,
+                result_type=result_type,
+                boolean_value=fi_boolean_value[i] if i < len(fi_boolean_value) else None,
+                numeric_value=fi_numeric_value[i] if i < len(fi_numeric_value) else None,
+                text_value=fi_text_value[i] if i < len(fi_text_value) else None,
+                remark=fi_remark[i] if i < len(fi_remark) else None,
+            ))
+        first_inspection = FirstInspectionInput(
+            check_results=check_results,
+            remark=fi_overall_remark or None)
+
     # 先过站（创建工序记录）
     op_svc = OperationPassService(db)
     data = OperationPassInput(
         work_station_id=work_station_id, operator_id=user.id,
-        components=components, params=params)
+        components=components, params=params,
+        first_inspection=first_inspection)
     # 先按 SN 试，仅当 SN/载体码不存在时才回退当工单号（首件）
     try:
         data.sn = scan
@@ -334,48 +353,8 @@ def station_pass(
     wo = WorkOrderRepository(db).get(wo_id) if wo_id else None
     operations = MasterDataQueryService(db).get_operations(wo.routing_id) if wo else []
 
-    # 处理首检 - 注意：result.passed_op 是刚完成的工序
+    # 首检已在 pass_operation 内部 5c 处理（first_inspection 通过 OperationPassInput 传入）
     passed_op_id = result.passed_op.id if result.passed_op else None
-    if fi_check_item_id and passed_op_id:
-        try:
-            fi_svc = FirstInspectionService(db)
-            fi_config = fi_svc.get_config_by_operation(passed_op_id, work_station_id)
-            if fi_config and fi_config.is_enabled and wo:
-                # 检查是否需要首检 - 使用station_view中显示的同样逻辑
-                # 从view中我们已经知道需要首检，所以直接创建记录并提交
-                trigger_reason = "new_order"  # 默认原因
-                # 创建首检记录
-                fi_record = fi_svc.create_inspection_record(
-                    fi_config, wo.id, passed_op_id,
-                    work_station_id, user.id, trigger_reason,
-                    su.id if su else None
-                )
-                # 收集检查结果
-                check_results = []
-                for i, item_id in enumerate(fi_check_item_id):
-                    result_type = fi_result_type[i] if i < len(fi_result_type) else "boolean"
-                    check_result = FirstInspectionCheckResultInput(
-                        check_item_id=item_id,
-                        result_type=result_type,
-                        boolean_value=fi_boolean_value[i] if i < len(fi_boolean_value) else None,
-                        numeric_value=fi_numeric_value[i] if i < len(fi_numeric_value) else None,
-                        text_value=fi_text_value[i] if i < len(fi_text_value) else None,
-                        remark=fi_remark[i] if i < len(fi_remark) else None,
-                    )
-                    check_results.append(check_result)
-                # 提交首检
-                if check_results:
-                    fi_svc.submit_inspection(
-                        FirstInspectionSubmitInput(
-                            record_id=fi_record.id,
-                            check_results=check_results,
-                            remark=fi_overall_remark or None,
-                        ),
-                        user.id
-                    )
-        except Exception as e:
-            # 首检错误不影响过站，只是记录一下
-            pass
 
     # 处理测试数据
     if td_field_id and passed_op_id:
