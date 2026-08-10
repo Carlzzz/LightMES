@@ -3,7 +3,8 @@ from datetime import datetime
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from lightmes.modules.production.models import SerialUnit
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
+from lightmes.modules.production.models import SerialUnit, WorkOrder
 from lightmes.modules.production.repository import SerialUnitRepository, CarrierBindingRepository
 from lightmes.modules.trace.events import SerialUnitReworkStarted
 from lightmes.modules.trace.genealogy_service import GenealogyService
@@ -19,9 +20,12 @@ class ReworkService:
         self.serial_units = SerialUnitRepository(db)
         self.genealogy = GenealogyService(db)
         self.carrier_bindings = CarrierBindingRepository(db)
+        self.query = MasterDataQueryService(db)
 
     def rework(
-        self, sn: str, target_seq: int, unbind_bind_ids: list[int] | None = None,
+        self, sn: str, target_seq: int,
+        expected_repass_station_id: int,
+        unbind_bind_ids: list[int] | None = None,
         reason: str | None = None, operator_id: int | None = None,
     ) -> SerialUnit:
         su = self.serial_units.get_by_sn(sn)
@@ -29,9 +33,29 @@ class ReworkService:
             raise NotFoundError(f"SN 不存在: {sn}")
         if su.status == "scrapped":
             raise BusinessRuleError(f"SN 已判废，不可返工: {sn}")
-        if target_seq < 0 or target_seq >= su.current_operation_seq:
+        # 放宽：原 `>=` 改 `>`；reworking 态允许 ==（重选站位），非 reworking 态仍拒绝 ==
+        if target_seq < 0 or target_seq > su.current_operation_seq:
             raise ValidationError(
-                f"返工目标工序 {target_seq} 必须小于当前 {su.current_operation_seq}")
+                f"返工目标工序 {target_seq} 必须小于等于当前 {su.current_operation_seq}")
+        if target_seq == su.current_operation_seq and su.status != "reworking":
+            raise ValidationError(
+                f"返工目标工序 {target_seq} 等于当前 {su.current_operation_seq}，"
+                f"仅返工态可重选站位")
+        # 校验 expected 站 ∈ 首个 re-pass 工序 allowed
+        wo = self.db.get(WorkOrder, su.work_order_id)
+        if wo is None:
+            raise NotFoundError(f"工单不存在: {su.work_order_id}")
+        operations = self.query.get_operations(wo.routing_id)
+        first_repass_op = next((o for o in operations if o.seq > target_seq), None)
+        if first_repass_op is None:
+            raise ValidationError(f"target_seq {target_seq} 之后无工序可重做")
+        allowed = self.query.get_allowed_work_stations(first_repass_op.id)
+        allowed_ids = [w.id for w in allowed] or [first_repass_op.default_work_station_id]
+        if expected_repass_station_id not in allowed_ids:
+            raise ValidationError(
+                f"站位 #{expected_repass_station_id} 不在工序 "
+                f"{first_repass_op.seq} {first_repass_op.name} 的允许集合内")
+        # 解绑组件
         for bind_id in (unbind_bind_ids or []):
             bind = self.genealogy.binds.get(bind_id)
             if bind is None or bind.parent_sn_id != su.id:
@@ -42,6 +66,7 @@ class ReworkService:
             update(SerialUnit)
             .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
             .values(status="reworking", current_operation_seq=target_seq,
+                    rework_target_station_id=expected_repass_station_id,
                     version=prev_version + 1)
         )
         if result.rowcount == 0:
