@@ -22,13 +22,37 @@
   <div class="alert alert--danger">⚠ 操作员技能不足，过站将被拦截。</div>
   {% endif %}
 
-  <!-- 工艺路径全景 -->
+  <!-- 本作业站工序范围（Layer 2 - 作业站级） -->
+  {% if view.station_operations %}
+  <div class="station__path-wrap card">
+    <div class="card__title">本作业站工序范围</div>
+    <div class="station__path station__path--station" id="station-path-station">
+      {% for o in view.station_operations %}
+      <div class="station__step station__step--{{ o.status }}">
+        <div class="station__step-node">
+          {% if o.status == 'done' %}✓
+          {% elif o.status == 'skipped' %}⊘
+          {% else %}{{ o.seq }}{% endif %}
+        </div>
+        <div class="station__step-name">{{ o.name }}</div>
+        {% if o.status == 'current' %}<div class="badge">当前</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 工艺路径全景（Layer 1 - 路线级） -->
   <div class="station__path-wrap card">
     <div class="card__title">工艺路径全景</div>
     <div class="station__path" id="station-path">
       {% for o in view.operations %}
       <div class="station__step station__step--{{ o.status }}" {% if o.status == 'current' %}id="station-current"{% endif %}>
-        <div class="station__step-node">{% if o.status == 'done' %}✓{% else %}{{ o.seq }}{% endif %}</div>
+        <div class="station__step-node">
+          {% if o.status == 'done' %}✓
+          {% elif o.status == 'skipped' %}⊘
+          {% else %}{{ o.seq }}{% endif %}
+        </div>
         <div class="station__step-name">{{ o.name }}</div>
         {% if o.allowed_work_stations %}
         <div class="station__step-allowed">可在：{{ o.allowed_work_stations|join('、') }}</div>
@@ -237,7 +261,17 @@
           <div class="card__title">异常干预</div>
           <div class="station__aside-actions">
             <a class="btn-secondary" href="/trace/rework">申请返工</a>
-            <button type="button" class="btn-secondary" disabled title="暂未开放">申请跳站</button>
+            {% if can_skip %}
+            <button type="button" class="btn-secondary" id="skip-btn"
+                    hx-get="/production/station/skip-form"
+                    hx-vals='{"work_station_id": "{{ work_station_id }}", "scan": "{{ view.sn or view.work_order_code }}"}'
+                    hx-target="#skip-modal-body"
+                    onclick="document.getElementById('skip-modal').style.display='flex'">
+              申请跳站
+            </button>
+            {% else %}
+            <button type="button" class="btn-secondary" disabled title="仅主管/管理员可跳站">申请跳站</button>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -249,6 +283,14 @@
       <button type="submit" class="station__pass">确认过站 (PASS)</button>
     </div>
   </form>
+  {% endif %}
+
+  {% if can_skip %}
+  <div class="modal" id="skip-modal" style="display:none">
+    <div class="modal__body">
+      <div id="skip-modal-body"></div>
+    </div>
+  </div>
   {% endif %}
 </div>
 <script>

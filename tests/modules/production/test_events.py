@@ -49,3 +49,16 @@ def test_serial_unit_finished_event_published(db_session):
     res = svc.pass_operation(OperationPassInput(
         work_station_id=wss[0].id, work_order_code="EVWO"))
     assert any(e.sn == res.sn for e in captured)
+
+
+def test_operation_skipped_event_published():
+    from lightmes.modules.production.events import OperationSkipped
+    from lightmes.shared.events import event_bus
+    received = []
+    event_bus.subscribe(OperationSkipped, lambda e: received.append(e))
+    ev = OperationSkipped(
+        serial_unit_id=1, sn="SN001", work_order_id=2, operation_id=3,
+        work_station_id=4, line_id=5, reason="测试跳过")
+    event_bus.publish(ev)
+    assert received == [ev]
+    assert received[0].reason == "测试跳过"

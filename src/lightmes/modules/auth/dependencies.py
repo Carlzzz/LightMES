@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from lightmes.database import get_db
 from lightmes.modules.auth.models import User
@@ -86,10 +87,9 @@ def require_role(*allowed_roles: str):
     allowed_levels = {ROLE_LEVEL.get(r, 0) for r in allowed_roles}
 
     def _check(user: User = Depends(require_login), db: Session = Depends(get_db)) -> User:
-        # 先检查新的role_obj.name
-        from sqlalchemy.orm import joinedload
+        # 先检查新的role_obj.name（SQLAlchemy 2.0 select 语法）
         full_user = db.execute(
-            type(user).query.where(type(user).id == user.id).options(joinedload(type(user).role_obj))
+            select(User).where(User.id == user.id).options(joinedload(User.role_obj))
         ).scalar_one_or_none()
 
         if full_user and full_user.role_obj:
@@ -97,9 +97,10 @@ def require_role(*allowed_roles: str):
             if user_level >= min(allowed_levels):
                 return user
 
-        # 向后兼容：检查旧的role字段
-        if hasattr(user, "role"):
-            user_level = ROLE_LEVEL.get(user.role, 0)
+        # 向后兼容：检查旧的role字段（legacy DB column, 可能为 None）
+        legacy_role = getattr(user, "role", None)
+        if legacy_role:
+            user_level = ROLE_LEVEL.get(legacy_role, 0)
             if user_level >= min(allowed_levels):
                 return user
 
@@ -117,13 +118,14 @@ def require_role_name(*allowed_role_names: str):
     For backward compatibility with the old role system.
     """
     def _check(user: User = Depends(require_login), db: Session = Depends(get_db)) -> User:
-        from sqlalchemy.orm import joinedload
-        stmt = type(user).query.where(type(user).id == user.id).options(joinedload(type(user).role_obj))
-        full_user = db.execute(stmt).scalar_one_or_none()
+        full_user = db.execute(
+            select(User).where(User.id == user.id).options(joinedload(User.role_obj))
+        ).scalar_one_or_none()
         if full_user and full_user.role_obj and full_user.role_obj.name in allowed_role_names:
             return user
         # 向后兼容：如果用户有旧的role字段也检查
-        if hasattr(user, "role") and user.role in allowed_role_names:
+        legacy_role = getattr(user, "role", None)
+        if legacy_role and legacy_role in allowed_role_names:
             return user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

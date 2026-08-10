@@ -13,9 +13,9 @@ from lightmes.modules.production.repository import (
     CarrierBindingRepository, WorkOrderRepository,
 )
 from lightmes.modules.production.schemas import (
-    OperationPassInput, OperationPassResult, OpInfo,
+    OperationPassInput, OperationPassResult, OperationSkipInput, OperationSkipResult, OpInfo,
 )
-from lightmes.modules.production.events import OperationPassed, SerialUnitFinished
+from lightmes.modules.production.events import OperationPassed, OperationSkipped, SerialUnitFinished
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.schemas import ComponentBind
 from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError, SkillError
@@ -85,6 +85,16 @@ class OperationPassService:
                 f"该 SN 当前工序 {expected.seq} {expected.name} "
                 f"应在【{names}】之一作业站做，当前作业站不符")
 
+        # 5a. 返工首次 re-pass 站位硬卡（仅 reworking 态 + 已设预期站位时生效）
+        if su.status == "reworking" and su.rework_target_station_id is not None:
+            if data.work_station_id != su.rework_target_station_id:
+                expected_ws = self.query.get_work_station(su.rework_target_station_id)
+                current_ws = ws  # 步骤 5 已查
+                raise BusinessRuleError(
+                    f"该返工件须在【{expected_ws.name if expected_ws else f'#{su.rework_target_station_id}'}】重做，"
+                    f"当前作业站【{current_ws.name if current_ws else f'#{data.work_station_id}'}】不符。"
+                    f"如需更改，请重新发起返工选择正确站位。")
+
         # 5b. 技能校验（硬拦截）：工序有技能要求时，操作员该技能等级须 >= 要求
         if expected.required_skill_id is not None:
             level = (SkillService(self.db).get_operator_level(
@@ -144,6 +154,10 @@ class OperationPassService:
         if r.rowcount == 0:
             raise ConflictError("该产品正被其他作业站处理，请重试")
         self.db.refresh(su)
+
+        # 6a. 首次 re-pass 成功后清除返工站位约束
+        if su.status == "reworking" and su.rework_target_station_id is not None:
+            su.rework_target_station_id = None
 
         # 7. 绑料（同事务，失败整单回滚）
         bound_count = 0
@@ -231,5 +245,111 @@ class OperationPassService:
             next_op=next_info, is_finished=su.status == "finished",
             work_order_status=wo.status, bound_count=bound_count,
             param_count=param_count,
+            next_op_can_continue_here=next_op_can_continue_here,
+        )
+
+    def skip_operation(self, data: OperationSkipInput) -> OperationSkipResult:
+        """跳过当前工序：写 result='skip' 记录，推进 seq，不绑料/不校验技能/不完工。"""
+        # 跳站是特权操作，operator_id 必须有值留审计（路由层 supervisor 守卫已确保登录）
+        if data.operator_id is None:
+            raise BusinessRuleError("跳站需登录操作员，operator_id 不可为空")
+        # 1+3. 定位单元：SN -> 载体码 -> 工单号(取第一个 pending)
+        su = None
+        if data.sn is not None:
+            su = self.serial_units.get_by_sn(data.sn)
+            if su is None:
+                su = self.serial_units.get_active_by_carrier(data.sn)
+            if su is None:
+                raise NotFoundError(f"未找到 SN 或载体码: {data.sn}")
+            if su.status in ("finished", "scrapped"):
+                raise BusinessRuleError(f"SN 已{su.status}，不可跳站: {su.sn}")
+            wo = self.work_orders.get(su.work_order_id)
+        else:
+            if data.work_order_code is None:
+                raise BusinessRuleError("首件跳站需提供工单号")
+            wo = self.work_orders.get_by_code(data.work_order_code)
+            if wo is None:
+                raise NotFoundError(f"工单不存在: {data.work_order_code}")
+            su = self.serial_units.first_pending_by_work_order(wo.id)
+            if su is None:
+                raise BusinessRuleError("工单 SN 已全部投产")
+
+        # 2. 工单状态
+        if wo.status not in ("released", "in_process"):
+            raise BusinessRuleError(f"工单状态不允许跳站: {wo.status}")
+
+        operations = self.query.get_operations(wo.routing_id)
+        if not operations:
+            raise BusinessRuleError("工艺路径无工序")
+
+        # 4. 期望下一工序
+        next_ops = [o for o in operations if o.seq > su.current_operation_seq]
+        if not next_ops:
+            raise BusinessRuleError("已完工，无后续工序")
+        expected = next_ops[0]
+
+        # 末工序不可跳
+        if expected.id == operations[-1].id:
+            raise BusinessRuleError("末工序不可跳过")
+
+        # 5. 三层防跳站
+        ws = self.query.get_work_station(data.work_station_id)
+        if ws is None:
+            raise NotFoundError(f"作业站不存在: {data.work_station_id}")
+        if ws.line_id != wo.line_id:
+            raise BusinessRuleError("当前作业站不属于本工单产线")
+        allowed = self.query.get_allowed_work_stations(expected.id)
+        allowed_ids = [w.id for w in allowed] or [expected.default_work_station_id]
+        if data.work_station_id not in allowed_ids:
+            names = "、".join(w.name for w in allowed) or f"作业站 #{expected.default_work_station_id}"
+            raise BusinessRuleError(
+                f"该 SN 当前工序 {expected.seq} {expected.name} "
+                f"应在【{names}】之一作业站做，当前作业站不符")
+
+        # 6. 写工序记录 + 乐观锁推进 seq（跳过技能/BOM/绑定/参数/完工）
+        record = self.records.add(OperationRecord(
+            serial_unit_id=su.id, work_order_id=wo.id, operation_id=expected.id,
+            work_station_id=data.work_station_id, line_id=wo.line_id,
+            operator_id=data.operator_id, result="skip", remark=data.reason,
+        ))
+        prev_version = su.version
+        r = self.db.execute(
+            update(SerialUnit)
+            .where(SerialUnit.id == su.id, SerialUnit.version == prev_version)
+            .values(current_operation_seq=expected.seq, version=prev_version + 1)
+        )
+        if r.rowcount == 0:
+            raise ConflictError("该产品正被其他作业站处理，请重试")
+        self.db.refresh(su)
+
+        # 10. 工单/返工件状态复位（skip 不完工）
+        if wo.status == "released":
+            wo.status = "in_process"
+        if su.status in ("reworking", "pending"):
+            su.status = "in_process"
+        self.db.flush()
+
+        # 11. 事件
+        event_bus.publish(OperationSkipped(
+            serial_unit_id=su.id, sn=su.sn, work_order_id=wo.id,
+            operation_id=expected.id, work_station_id=data.work_station_id,
+            line_id=wo.line_id, reason=data.reason))
+
+        remaining = [o for o in operations if o.seq > expected.seq]
+        next_info = None
+        next_op_can_continue_here = False
+        if remaining:
+            next_op_obj = remaining[0]
+            next_info = OpInfo(seq=next_op_obj.seq, name=next_op_obj.name,
+                               work_station_id=next_op_obj.default_work_station_id)
+            next_allowed = self.query.get_allowed_work_stations(next_op_obj.id)
+            next_allowed_ids = [w.id for w in next_allowed] or [next_op_obj.default_work_station_id]
+            next_op_can_continue_here = data.work_station_id in next_allowed_ids
+        return OperationSkipResult(
+            sn=su.sn,
+            skipped_op=OpInfo(seq=expected.seq, name=expected.name,
+                              work_station_id=expected.default_work_station_id),
+            next_op=next_info, is_finished=False,
+            work_order_status=wo.status,
             next_op_can_continue_here=next_op_can_continue_here,
         )

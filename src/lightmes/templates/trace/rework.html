@@ -7,10 +7,18 @@
   <div class="card__title">发起返工</div>
   <form class="form-row" hx-post="/trace/rework" hx-target="#result" hx-swap="innerHTML">
     <div class="field"><label>成品 SN</label><input name="sn" placeholder="要返工的成品 SN" required></div>
-    <div class="field"><label>回退到工序序号</label><input name="target_seq" type="number" placeholder="如 1" required></div>
+    <div class="field"><label>回退到工序序号</label>
+      <input name="target_seq" type="number" placeholder="如 0" required
+             hx-get="/trace/rework/allowed-stations"
+             hx-trigger="blur"
+             hx-include="closest form"
+             hx-target="#station-select"
+             hx-swap="innerHTML">
+    </div>
     <div class="field" style="flex:1"><label>返工原因</label><input name="reason" placeholder="可选"></div>
     <button type="submit">返工</button>
   </form>
+  <div id="station-select"></div>
   <div id="result" class="result-slot"></div>
 </div>
 

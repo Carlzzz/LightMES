@@ -1,0 +1,16 @@
+{% if error %}
+<div class="alert alert--danger">{{ error }}</div>
+{% elif stations %}
+<div class="field">
+  <label>预期返工站位（必选）</label>
+  <select name="expected_repass_station_id" required>
+    <option value="">请选择</option>
+    {% for s in stations %}
+    <option value="{{ s.id }}">{{ s.name }}</option>
+    {% endfor %}
+  </select>
+  {% if first_repass_op %}
+  <div class="nav-card__desc">将重做工序 {{ first_repass_op.seq }} {{ first_repass_op.name }}</div>
+  {% endif %}
+</div>
+{% endif %}

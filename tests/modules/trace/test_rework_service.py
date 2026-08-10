@@ -49,7 +49,7 @@ def test_rework_rolls_back_step_and_status(db_session):
     res = pass_svc.pass_operation(OperationPassInput(work_station_id=w1.id, work_order_code="RWO"))
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
     assert su.current_operation_seq == 1
-    reworked = ReworkService(db_session).rework(res.sn, target_seq=0, reason="上料错误")
+    reworked = ReworkService(db_session).rework(res.sn, target_seq=0, expected_repass_station_id=w1.id, reason="上料错误")
     assert reworked.status == "reworking"
     assert reworked.current_operation_seq == 0
 
@@ -64,6 +64,7 @@ def test_rework_unbinds_components(db_session):
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
     bind = GenealogyBindRepository(db_session).list_active_by_parent(su.id)[0]
     ReworkService(db_session).rework(res.sn, target_seq=0,
+                                     expected_repass_station_id=w1.id,
                                      unbind_bind_ids=[bind.id], reason="换料")
     assert GenealogyBindRepository(db_session).list_active_by_parent(su.id) == []
 
@@ -72,7 +73,7 @@ def test_rework_then_repass_resets_in_process(db_session):
     fin, comp, w1, w2, wo = _two_step_line(db_session)
     pass_svc = OperationPassService(db_session)
     res = pass_svc.pass_operation(OperationPassInput(work_station_id=w1.id, work_order_code="RWO"))
-    ReworkService(db_session).rework(res.sn, target_seq=0)
+    ReworkService(db_session).rework(res.sn, target_seq=0, expected_repass_station_id=w1.id)
     # 重新过首站：reworking → in_process
     r2 = pass_svc.pass_operation(OperationPassInput(work_station_id=w1.id, sn=res.sn))
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
@@ -85,7 +86,7 @@ def test_rework_target_seq_must_be_less(db_session):
     pass_svc = OperationPassService(db_session)
     res = pass_svc.pass_operation(OperationPassInput(work_station_id=w1.id, work_order_code="RWO"))
     with pytest.raises(ValidationError):
-        ReworkService(db_session).rework(res.sn, target_seq=5)  # >= current
+        ReworkService(db_session).rework(res.sn, target_seq=5, expected_repass_station_id=w1.id)  # > current
 
 
 def test_scrap_terminal(db_session):
@@ -135,7 +136,7 @@ def test_rework_history_accumulates_records_and_params(db_session):
     res = pass_svc.pass_operation(OperationPassInput(
         work_station_id=w1.id, work_order_code="RWO",
         params=[ParamInput(param_key="torque", param_value="1.5", unit="N·m")]))
-    ReworkService(db_session).rework(res.sn, target_seq=0, reason="返修")
+    ReworkService(db_session).rework(res.sn, target_seq=0, expected_repass_station_id=w1.id, reason="返修")
     pass_svc.pass_operation(OperationPassInput(
         work_station_id=w1.id, sn=res.sn,
         params=[ParamInput(param_key="torque", param_value="1.8", unit="N·m")]))
@@ -154,7 +155,7 @@ def test_rework_history_accumulates_records_and_params(db_session):
 def test_rework_unknown_sn(db_session):
     fin, comp, w1, w2, wo = _two_step_line(db_session)
     with pytest.raises(NotFoundError):
-        ReworkService(db_session).rework("NOPE", target_seq=0)
+        ReworkService(db_session).rework("NOPE", target_seq=0, expected_repass_station_id=w1.id)
 
 
 def test_rework_then_multistep_repass_all_steps(db_session):
@@ -177,7 +178,7 @@ def test_rework_then_multistep_repass_all_steps(db_session):
     assert su.status == "finished"
 
     # 完工件可返工（rework 仅拒 scrapped，且 target_seq < current_operation_seq）
-    reworked = ReworkService(db_session).rework(res.sn, target_seq=0, reason="返修")
+    reworked = ReworkService(db_session).rework(res.sn, target_seq=0, expected_repass_station_id=w1.id, reason="返修")
     assert reworked.status == "reworking"
     assert reworked.current_operation_seq == 0
 
@@ -195,3 +196,78 @@ def test_rework_then_multistep_repass_all_steps(db_session):
     su = SerialUnitRepository(db_session).get_by_sn(res.sn)
     assert su.current_operation_seq == 3
     assert su.status == "finished"
+
+
+def _two_ws_two_step_line(db_session):
+    """op1 和 op2 都 allowed 在 w1+w2（用于测试返工站位选择）。"""
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="RW2F", name="成品", type="finished"))
+    line = md.create_line(LineCreate(code="RW2L", name="线"))
+    w1 = md.create_work_station(WorkStationCreate(code="RW2W1", name="站1", line_id=line.id, seq=1))
+    w2 = md.create_work_station(WorkStationCreate(code="RW2W2", name="站2", line_id=line.id, seq=2))
+    w3 = md.create_work_station(WorkStationCreate(code="RW2W3", name="站3", line_id=line.id, seq=3))
+    r = md.create_routing(RoutingCreate(code="RW2RT", name="路线", product_id=fin.id,
+        operations=[
+            OperationCreate(seq=1, code="OP1", name="工序1", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id, w2.id]),
+            OperationCreate(seq=2, code="OP2", name="工序2", default_work_station_id=w1.id, allowed_work_station_ids=[w1.id, w2.id]),
+        ]))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="RW2SR", name="r", pattern="RW2{SEQ:3}"))
+    wo = prod.create_work_order(WorkOrderCreate(
+        code="RW2WO", product_id=fin.id, routing_id=r.id, line_id=line.id,
+        qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    return fin, (w1, w2, w3), wo
+
+
+def test_rework_writes_expected_repass_station(db_session):
+    """rework 写入 rework_target_station_id。"""
+    from lightmes.modules.auth.models import User
+    db = db_session
+    fin, (w1, w2, w3), wo = _two_ws_two_step_line(db)
+    user = User(username="rwop", password_hash="x", display_name="操作员")
+    db.add(user); db.flush()
+    res = OperationPassService(db).pass_operation(OperationPassInput(
+        work_station_id=w1.id, work_order_code="RW2WO", operator_id=user.id))
+    su = SerialUnitRepository(db).get_by_sn(res.sn)
+    # 返工到 op1 之前（target_seq=0），预期 re-pass op1 @ w2
+    ReworkService(db).rework(res.sn, target_seq=0, expected_repass_station_id=w2.id)
+    db.refresh(su)
+    assert su.status == "reworking"
+    assert su.current_operation_seq == 0
+    assert su.rework_target_station_id == w2.id
+
+
+def test_rework_rejects_station_not_in_allowed(db_session):
+    """expected_repass_station_id 不在 allowed 集合 -> 拒绝。"""
+    from lightmes.modules.auth.models import User
+    db = db_session
+    fin, (w1, w2, w3), wo = _two_ws_two_step_line(db)
+    user = User(username="rwop2", password_hash="x", display_name="操作员")
+    db.add(user); db.flush()
+    res = OperationPassService(db).pass_operation(OperationPassInput(
+        work_station_id=w1.id, work_order_code="RW2WO", operator_id=user.id))
+    # w3 不在 op1 的 allowed [w1, w2] 中
+    with pytest.raises(ValidationError, match="不在工序.*的允许集合内"):
+        ReworkService(db).rework(res.sn, target_seq=0, expected_repass_station_id=w3.id)
+
+
+def test_rework_reworking_allows_equal_target_seq(db_session):
+    """reworking 态允许 target_seq == current_operation_seq（重选站位）。"""
+    from lightmes.modules.auth.models import User
+    db = db_session
+    fin, (w1, w2, w3), wo = _two_ws_two_step_line(db)
+    user = User(username="rwop3", password_hash="x", display_name="操作员")
+    db.add(user); db.flush()
+    res = OperationPassService(db).pass_operation(OperationPassInput(
+        work_station_id=w1.id, work_order_code="RW2WO", operator_id=user.id))
+    su = SerialUnitRepository(db).get_by_sn(res.sn)
+    # 第一次返工 target_seq=0, w2
+    ReworkService(db).rework(res.sn, target_seq=0, expected_repass_station_id=w2.id)
+    db.refresh(su)
+    assert su.rework_target_station_id == w2.id
+    # 重新发起 target_seq=0（== current），改选 w1 -> 允许，覆盖字段
+    ReworkService(db).rework(res.sn, target_seq=0, expected_repass_station_id=w1.id)
+    db.refresh(su)
+    assert su.rework_target_station_id == w1.id
+

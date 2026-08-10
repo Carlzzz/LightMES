@@ -119,3 +119,83 @@ def test_load_by_active_carrier_code(db_session):
     view = StationService(db).load("CARRIER-1", ws2.id, user.id)
     assert view.sn == r.sn
     assert view.work_order_code == "WO"
+
+
+def test_load_station_operations_subset(db_session):
+    """Layer 2 仅含本站 allowed 工序子集。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
+    )
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate, OperationPassInput
+    from lightmes.modules.production.operation_pass_service import OperationPassService
+    from lightmes.modules.production.station_service import StationService
+    from lightmes.modules.auth.models import User
+
+    md = MasterDataService(db_session)
+    user = User(username="ssop", password_hash="x", display_name="操作员")
+    db_session.add(user); db_session.flush()
+    line = md.create_line(LineCreate(code="SSL", name="线"))
+    ws1 = md.create_work_station(WorkStationCreate(code="SS1", name="站1", line_id=line.id, seq=1))
+    ws2 = md.create_work_station(WorkStationCreate(code="SS2", name="站2", line_id=line.id, seq=2))
+    p = md.create_product(ProductCreate(code="SSP", name="件", type="finished"))
+    # op1 仅 ws1，op2 仅 ws2，op3 ws1+ws2
+    ops = [
+        OperationCreate(seq=1, code="OP1", name="工序1", default_work_station_id=ws1.id, allowed_work_station_ids=[ws1.id]),
+        OperationCreate(seq=2, code="OP2", name="工序2", default_work_station_id=ws2.id, allowed_work_station_ids=[ws2.id]),
+        OperationCreate(seq=3, code="OP3", name="工序3", default_work_station_id=ws1.id, allowed_work_station_ids=[ws1.id, ws2.id]),
+    ]
+    routing = md.create_routing(RoutingCreate(code="SSRT", name="路线", product_id=p.id, operations=ops))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="SSSR", name="r", pattern="SN{SEQ:5}", product_id=p.id))
+    wo = prod.create_work_order(WorkOrderCreate(code="SSWO", product_id=p.id, routing_id=routing.id, line_id=line.id, qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    # 在 ws1 加载（首件 pending）
+    view = StationService(db_session).load("SSWO", ws1.id, user.id)
+    # Layer 2 应仅含 op1, op3（ws1 allowed）
+    station_op_seqs = [o.seq for o in view.station_operations]
+    assert station_op_seqs == [1, 3]
+
+
+def test_load_skipped_status_after_skip(db_session):
+    """跳站后 Layer 1 显示 skipped 状态。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
+    )
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate, OperationPassInput, OperationSkipInput
+    from lightmes.modules.production.operation_pass_service import OperationPassService
+    from lightmes.modules.production.station_service import StationService
+    from lightmes.modules.production.repository import SerialUnitRepository
+    from lightmes.modules.auth.models import User
+
+    md = MasterDataService(db_session)
+    user = User(username="skip2", password_hash="x", display_name="主管")
+    db_session.add(user); db_session.flush()
+    line = md.create_line(LineCreate(code="SKL2", name="线"))
+    ws = md.create_work_station(WorkStationCreate(code="SKW2", name="站", line_id=line.id, seq=1))
+    p = md.create_product(ProductCreate(code="SKP2", name="件", type="finished"))
+    ops = [
+        OperationCreate(seq=1, code="OP1", name="工序1", default_work_station_id=ws.id, allowed_work_station_ids=[ws.id]),
+        OperationCreate(seq=2, code="OP2", name="工序2", default_work_station_id=ws.id, allowed_work_station_ids=[ws.id]),
+        OperationCreate(seq=3, code="OP3", name="工序3", default_work_station_id=ws.id, allowed_work_station_ids=[ws.id]),
+    ]
+    routing = md.create_routing(RoutingCreate(code="SKRT2", name="路线", product_id=p.id, operations=ops))
+    prod = ProductionService(db_session)
+    rule = prod.create_sn_rule(SnRuleCreate(code="SKSR2", name="r", pattern="SN{SEQ:5}", product_id=p.id))
+    wo = prod.create_work_order(WorkOrderCreate(code="SKWO2", product_id=p.id, routing_id=routing.id, line_id=line.id, qty=1, sn_rule_id=rule.id))
+    prod.release_work_order(wo.id)
+    # pass op1, skip op2
+    OperationPassService(db_session).pass_operation(OperationPassInput(
+        work_station_id=ws.id, work_order_code="SKWO2", operator_id=user.id))
+    su = SerialUnitRepository(db_session).list_by_work_order(wo.id)[0]
+    OperationPassService(db_session).skip_operation(OperationSkipInput(
+        work_station_id=ws.id, sn=su.sn, operator_id=user.id, reason="跳过 op2"))
+    # 加载
+    view = StationService(db_session).load(su.sn, ws.id, user.id)
+    status_by_seq = {o.seq: o.status for o in view.operations}
+    assert status_by_seq[1] == "done"
+    assert status_by_seq[2] == "skipped"
+    assert status_by_seq[3] == "current"

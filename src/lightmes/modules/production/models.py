@@ -57,6 +57,10 @@ class SerialUnit(Base, TimestampMixin):
     # 是否已计入工单完工数；返工再完工不重复计数（一个物理 SN 只计一次）
     is_counted: Mapped[bool] = mapped_column(default=False, server_default="false")
     carrier_code: Mapped[str | None] = mapped_column(default=None)
+    # 返工时设定的预期 re-pass 站位；首次 re-pass 后清 null（service 层保证）
+    rework_target_station_id: Mapped[int | None] = mapped_column(
+        ForeignKey("work_stations.id"), default=None
+    )
 
 
 class OperationRecord(Base, TimestampMixin):

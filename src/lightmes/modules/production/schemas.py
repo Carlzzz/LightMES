@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
@@ -84,6 +86,23 @@ class OperationPassResult(BaseModel):
     next_op_can_continue_here: bool = False
 
 
+class OperationSkipInput(BaseModel):
+    work_station_id: int
+    sn: str | None = None
+    work_order_code: str | None = None
+    operator_id: int | None = None
+    reason: str  # 必填
+
+
+class OperationSkipResult(BaseModel):
+    sn: str
+    skipped_op: OpInfo
+    next_op: OpInfo | None
+    is_finished: bool  # 恒 False（末工序不可跳）
+    work_order_status: str
+    next_op_can_continue_here: bool = False
+
+
 class WipItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     sn: str
@@ -92,11 +111,12 @@ class WipItem(BaseModel):
 
 
 class StationOpView(BaseModel):
+    operation_id: int  # 新增：Layer 2 过滤用
     seq: int
     name: str
     code: str
     work_station_id: int
-    status: str  # "done" | "current" | "future"
+    status: str  # "done" | "current" | "future" | "skipped"
     allowed_work_stations: list[str] = []
 
 
@@ -137,6 +157,7 @@ class StationView(BaseModel):
     is_off_station: bool
     is_finished: bool
     operations: list[StationOpView]
+    station_operations: list[StationOpView] = []  # 新增：Layer 2（本站 allowed 子集）
     current_op: StationOpView | None
     components: list[StationComponentView]
     sop_text: str | None = None

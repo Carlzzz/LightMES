@@ -54,3 +54,11 @@ class ParentRef(BaseModel):
     parent_sn: str = ""
     component_ref: str
     status: str
+
+
+class ReworkInput(BaseModel):
+    sn: str
+    target_seq: int
+    expected_repass_station_id: int  # 新增：必填
+    unbind_bind_ids: list[int] | None = None
+    reason: str | None = None
