@@ -16,6 +16,7 @@ from lightmes.modules.production.schemas import (
     OperationPassInput, OperationPassResult, OperationSkipInput, OperationSkipResult, OpInfo,
 )
 from lightmes.modules.production.events import OperationPassed, OperationSkipped, SerialUnitFinished
+from lightmes.modules.production.quality_service import FirstInspectionService
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.schemas import ComponentBind
 from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError, SkillError
@@ -106,7 +107,27 @@ class OperationPassService:
                     f"需要技能等级 L{expected.required_level}+，当前 "
                     f"{level if level is not None else '无'}")
 
-        # 5c. 物料绑定必扫校验：仅在最终工序强制校验
+        # 5c. 首检硬卡：工序有启用的首检配置 + 触发条件命中时，必须提交合格的首检才能过站
+        fi_svc = FirstInspectionService(self.db)
+        fi_config = fi_svc.get_config_by_operation(expected.id, data.work_station_id)
+        if fi_config and fi_config.is_enabled:
+            needs, reason, _fi_state = fi_svc.check_needs_inspection(
+                fi_config, wo.id, expected.id)
+            if needs:
+                if data.first_inspection is None or not data.first_inspection.check_results:
+                    raise BusinessRuleError(
+                        f"该工序需首检（触发：{reason}），请填写首检结果后过站")
+                fi_record = fi_svc.submit_new_inspection(
+                    config=fi_config, work_order_id=wo.id, operation_id=expected.id,
+                    work_station_id=data.work_station_id, inspector_id=data.operator_id,
+                    trigger_reason=reason, serial_unit_id=su.id,
+                    check_results=data.first_inspection.check_results,
+                    remark=data.first_inspection.remark)
+                if fi_record.status == "failed":
+                    raise BusinessRuleError(
+                        f"首检不合格，不可过站（记录 #{fi_record.id}）")
+
+        # 5d. 物料绑定必扫校验（仅最终工序检查累积绑定）：仅在最终工序强制校验
         #      检查累积已绑（之前工序扫的）+ 本次扫的 = BOM 需求
         bom_items = self.query.get_active_bom_items(wo.product_id)
         is_last_op = False
