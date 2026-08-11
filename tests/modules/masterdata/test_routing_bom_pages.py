@@ -8,6 +8,7 @@ from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.repository import OperationWorkStationRepository
 from lightmes.modules.masterdata.schemas import (
     OperationCreate, ProductCreate, LineCreate, RoutingCreate, WorkStationCreate,
+    BomCreate, BomItemCreate,
 )
 
 
@@ -148,3 +149,82 @@ def test_products_page_shows_source_badge(client, db_session):
 def test_boms_page_renders(client, db_session):
     _login(client, db_session)
     assert client.get("/masterdata/boms").status_code == 200
+
+
+def _login_admin(client, db_session):
+    """登录一个 admin 用户（满足 require_role("admin","supervisor")）。
+
+    通过 Role 表 + user.role_id 设置（User 模型无 legacy `role` 字符串列，
+    只能走 role_obj 关系路径触发 require_role 通过）。
+    """
+    from sqlalchemy import select as sa_select
+    from lightmes.modules.auth.models import Role, User as U
+    from lightmes.shared.security import hash_password
+
+    role = db_session.execute(sa_select(Role).where(Role.name == "admin")).scalar_one_or_none()
+    if role is None:
+        role = Role(name="admin", display_name="管理员", is_system=True)
+        db_session.add(role)
+        db_session.flush()
+    u = U(username="admbom", password_hash=hash_password("pw12345"),
+          display_name="Adm", role_id=role.id)
+    db_session.add(u)
+    db_session.flush()
+    client.post("/login", data={"username": "admbom", "password": "pw12345"})
+
+
+def _bom_for_patch(db_session):
+    """构造 product + active routing (3 ops) + active BOM (1 item)。返回 (bom, item, op_seqs)。"""
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="PBF", name="成品", type="finished"))
+    c1 = md.create_product(ProductCreate(code="PBC", name="件", type="component", track_mode="serial"))
+    line = md.create_line(LineCreate(code="PBL", name="线"))
+    w = md.create_work_station(WorkStationCreate(code="PBW", name="站", line_id=line.id, seq=1))
+    md.create_routing(RoutingCreate(
+        code="PBR", name="路线", product_id=fin.id,
+        operations=[OperationCreate(seq=i, code=f"OP{i}", name=f"工序{i}",
+                                    default_work_station_id=w.id,
+                                    allowed_work_station_ids=[w.id])
+                    for i in range(1, 4)]))
+    bom = md.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c1.id, qty=1)]))
+    items = md.boms.items_of(bom.id)
+    return bom, items[0], [1, 2, 3]
+
+
+def test_patch_bom_item_consume_op_updates_field(db_session, client):
+    """PATCH /api/masterdata/bom-items/{id}/consume-op 更新 consume_at_operation_seq 成功。"""
+    bom, item, _ = _bom_for_patch(db_session)
+    db_session.flush()
+    _login_admin(client, db_session)
+    resp = client.patch(f"/api/masterdata/bom-items/{item.id}/consume-op",
+                        json={"consume_at_operation_seq": 2})
+    assert resp.status_code == 200
+    db_session.expire_all()
+    refreshed = db_session.get(type(item), item.id)
+    assert refreshed.consume_at_operation_seq == 2
+
+
+def test_patch_bom_item_consume_op_rejects_invalid_seq(db_session, client):
+    """PATCH 用不属于 routing 的 seq → 400。"""
+    bom, item, _ = _bom_for_patch(db_session)
+    db_session.flush()
+    _login_admin(client, db_session)
+    resp = client.patch(f"/api/masterdata/bom-items/{item.id}/consume-op",
+                        json={"consume_at_operation_seq": 99})
+    assert resp.status_code == 400
+    assert "不属于" in resp.text or "Routing" in resp.text
+
+
+def test_patch_bom_item_consume_op_clears_with_null(db_session, client):
+    """PATCH 用 null 清空 consume_at_operation_seq（回退到兼容老行为）。"""
+    bom, item, _ = _bom_for_patch(db_session)
+    item.consume_at_operation_seq = 2  # 预置
+    db_session.flush()
+    _login_admin(client, db_session)
+    resp = client.patch(f"/api/masterdata/bom-items/{item.id}/consume-op",
+                        json={"consume_at_operation_seq": None})
+    assert resp.status_code == 200
+    db_session.expire_all()
+    refreshed = db_session.get(type(item), item.id)
+    assert refreshed.consume_at_operation_seq is None

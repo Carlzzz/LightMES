@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from markupsafe import escape
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.repository import UserRepository
+from lightmes.modules.masterdata.models import Bom, Operation, Routing
 from lightmes.modules.masterdata.schemas import (
     LineCreate, OperationCreate, ProductCreate,
     RoutingCreate, SkillCreate, WorkStationCreate,
@@ -262,6 +264,53 @@ def boms_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "masterdata/boms.html", {"boms": boms, "product_map": product_map}
     )
+
+
+# ---- BOM Detail ----
+
+@router.get("/masterdata/boms/{bom_id}", response_class=HTMLResponse)
+def bom_detail_page(
+    bom_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    svc = MasterDataService(db)
+    query = MasterDataQueryService(db)
+    bom = svc.boms.get(bom_id)
+    if bom is None:
+        return HTMLResponse(f"BOM 不存在: {bom_id}", status_code=404)
+    items = svc.boms.items_of(bom.id)
+    product = query.get_product(bom.product_id)
+    routing = db.execute(
+        select(Routing).where(
+            Routing.product_id == bom.product_id,
+            Routing.status == "active",
+        )
+    ).scalar_one_or_none()
+    operations = []
+    if routing is not None:
+        operations = query.get_operations(routing.id)
+    item_views = []
+    for it in items:
+        comp = query.get_product(it.component_product_id)
+        item_views.append({
+            "id": it.id,
+            "component_code": comp.code if comp else str(it.component_product_id),
+            "component_name": comp.name if comp else "",
+            "track_mode": it.track_mode,
+            "qty": float(it.qty),
+            "consume_at_operation_seq": it.consume_at_operation_seq,
+        })
+    return templates.TemplateResponse(
+        request, "masterdata/bom_detail.html", {
+            "bom": {
+                "id": bom.id, "version": bom.version, "status": bom.status,
+                "source": bom.source, "product_code": product.code if product else "",
+                "product_name": product.name if product else "",
+                "items": item_views,
+            },
+            "operations": [{"seq": o.seq, "code": o.code, "name": o.name} for o in operations],
+        })
 
 
 # ---- Routing Detail ----
