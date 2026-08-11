@@ -269,6 +269,7 @@ class MasterDataService:
                 component_product_id=item.component_product_id,
                 qty=item.qty,
                 track_mode=components[item.component_product_id].track_mode,
+                consume_at_operation_seq=item.consume_at_operation_seq,
             ))
         self.db.flush()
         return bom

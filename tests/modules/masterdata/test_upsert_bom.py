@@ -56,3 +56,36 @@ def test_upsert_bom_product_change_rejected(db_session):
     with pytest.raises(ValueError, match="成品与已存在记录不一致"):
         svc.upsert_bom(BomUpsert(erp_ref="EB-X", product_code="FIN2", items=[
             BomItemUpsert(component_code="C1", qty=1)]))
+
+
+def test_create_bom_persists_consume_at_operation_seq(db_session):
+    """create_bom 透传 consume_at_operation_seq 到 BomItem。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, BomCreate, BomItemCreate,
+    )
+    md = MasterDataService(db_session)
+    md.create_product(ProductCreate(code="FIN2", name="成品", type="finished"))
+    md.create_product(ProductCreate(code="C1B", name="件", type="component", track_mode="serial"))
+    bom = md.create_bom(BomCreate(product_id=md.products.get_by_code("FIN2").id, items=[
+        BomItemCreate(component_product_id=md.products.get_by_code("C1B").id, qty=1,
+                      consume_at_operation_seq=3),
+    ]))
+    items = md.boms.items_of(bom.id)
+    assert items[0].consume_at_operation_seq == 3
+
+
+def test_create_bom_consume_op_defaults_none(db_session):
+    """不传 consume_at_operation_seq 时默认 None（兼容老行为）。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, BomCreate, BomItemCreate,
+    )
+    md = MasterDataService(db_session)
+    md.create_product(ProductCreate(code="FIN3", name="成品", type="finished"))
+    md.create_product(ProductCreate(code="C1C", name="件", type="component", track_mode="serial"))
+    bom = md.create_bom(BomCreate(product_id=md.products.get_by_code("FIN3").id, items=[
+        BomItemCreate(component_product_id=md.products.get_by_code("C1C").id, qty=1),
+    ]))
+    items = md.boms.items_of(bom.id)
+    assert items[0].consume_at_operation_seq is None
