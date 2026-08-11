@@ -22,6 +22,7 @@ class GenealogyService:
         self, parent_su, components: list[ComponentBind],
         operator_id: int | None,
         operation_record_id: int | None = None,
+        current_op_seq: int | None = None,
     ) -> list[GenealogyBind]:
         items = self.query.get_active_bom_items(parent_su.product_id)
         if not items:
@@ -44,6 +45,13 @@ class GenealogyService:
             elif track == "batch":
                 if not comp.component_batch_no:
                     raise ValidationError("批次件组件必须提供 component_batch_no")
+            # 扫错件拦截（current_op_seq 非 None 且 BOM 声明了 consume_at_operation_seq 时校验）
+            if (current_op_seq is not None
+                    and item.consume_at_operation_seq is not None
+                    and item.consume_at_operation_seq != current_op_seq):
+                raise BusinessRuleError(
+                    f"此物料应在工序 {item.consume_at_operation_seq} 装配，"
+                    f"不可在工序 {current_op_seq} 扫描")
             bind = self.binds.add(GenealogyBind(
                 parent_sn_id=parent_su.id,
                 component_product_id=comp.component_product_id,

@@ -201,6 +201,7 @@ class OperationPassService:
                     ) for c in data.components],
                     operator_id=data.operator_id,
                     operation_record_id=record.id,
+                    current_op_seq=expected.seq,
                 )
             except Exception:
                 self.db.rollback()
