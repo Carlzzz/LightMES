@@ -1,0 +1,168 @@
+/* Inter font (self-hosted) */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/inter-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/fonts/inter-medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/fonts/inter-semibold.woff2") format("woff2");
+}
+
+/* Planner tokens */
+.planner-root {
+  --p-bg:        #f9fafb;
+  --p-surface:   #ffffff;
+  --p-border:    #e5e7eb;
+  --p-border-h:  #d1d5db;
+  --p-text:      #111827;
+  --p-text-soft: #6b7280;
+  --p-accent:    #3b82f6;
+  --p-accent-h:  #2563eb;
+
+  --p-pending:   #e5e7eb;
+  --p-pending-t: #1f2937;
+  --p-progress:  #3b82f6;
+  --p-progress-t:#ffffff;
+  --p-done:      #10b981;
+  --p-done-t:    #ffffff;
+  --p-overdue:   #ef4444;
+  --p-overdue-t: #ffffff;
+
+  font-family: "Inter", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 14px;
+  background: var(--p-bg);
+  color: var(--p-text);
+  padding: 16px;
+}
+
+/* Toolbar */
+.planner-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.planner-toolbar strong { font-size: 16px; color: var(--p-text); }
+.planner-nav-btn, .planner-view-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--p-border);
+  border-radius: 4px;
+  background: var(--p-surface);
+  color: var(--p-text);
+  text-decoration: none;
+  font-size: 13px;
+  transition: all .12s;
+}
+.planner-nav-btn:hover, .planner-view-btn:hover {
+  background: var(--p-accent);
+  color: white;
+  border-color: var(--p-accent);
+}
+
+/* Body layout */
+.planner-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+}
+
+/* Backlog sidebar */
+.planner-backlog {
+  background: var(--p-surface);
+  border: 1px solid var(--p-border);
+  border-radius: 6px;
+  padding: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.planner-backlog__title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--p-text);
+}
+.planner-backlog__item {
+  padding: 8px 10px;
+  background: var(--p-bg);
+  border: 1px solid var(--p-border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  cursor: grab;
+  font-size: 13px;
+  transition: all .12s;
+}
+.planner-backlog__item:hover {
+  border-color: var(--p-accent);
+  background: #eff6ff;
+}
+.planner-backlog__item[draggable="true"]:active { cursor: grabbing; }
+
+/* Grid */
+.planner-grid {
+  background: var(--p-surface);
+  border: 1px solid var(--p-border);
+  border-radius: 6px;
+  overflow: auto;
+}
+.planner-grid__row {
+  display: grid;
+  grid-template-columns: 140px repeat(7, 1fr);
+  border-bottom: 1px solid var(--p-border);
+  min-height: 80px;
+}
+.planner-grid__row:last-child { border-bottom: none; }
+.planner-grid__line-label {
+  padding: 8px;
+  font-weight: 600;
+  background: var(--p-bg);
+  border-right: 1px solid var(--p-border);
+  display: flex;
+  align-items: center;
+}
+.planner-cell {
+  border-right: 1px solid var(--p-border);
+  padding: 4px;
+  min-height: 80px;
+  transition: background .12s;
+}
+.planner-cell--drag-over {
+  background: #dbeafe;
+  outline: 2px dashed var(--p-accent);
+  outline-offset: -2px;
+}
+
+/* WO card */
+.planner-card {
+  background: var(--p-pending);
+  color: var(--p-pending-t);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  cursor: grab;
+  border: 1px solid var(--p-border-h);
+  transition: all .12s;
+}
+.planner-card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,.1); }
+.planner-card--in-progress { background: var(--p-progress); color: var(--p-progress-t); border-color: var(--p-progress); }
+.planner-card--done { background: var(--p-done); color: var(--p-done-t); border-color: var(--p-done); text-decoration: line-through; }
+.planner-card--overdue { background: var(--p-surface); color: var(--p-overdue); border: 2px solid var(--p-overdue); font-weight: 600; }
+
+/* Container override for planner full-width */
+.container--planner { max-width: 1600px; padding: 0; }
