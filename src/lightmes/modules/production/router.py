@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -560,3 +560,51 @@ def station_enter(
         request, "production/station_view.html",
         {"view": view, "work_station_id": work_station_id},
     )
+
+
+# ---- Shifts (Planner V1) ----
+
+@router.get("/production/shifts", response_class=HTMLResponse)
+def shifts_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.shift_service import ShiftService
+    from lightmes.modules.masterdata.repository import LineRepository
+    shifts = ShiftService(db).list_all()
+    lines = LineRepository(db).list_all()
+    return templates.TemplateResponse(
+        request, "production/shifts.html",
+        {"shifts": shifts, "lines": lines},
+    )
+
+
+@router.post("/production/shifts", response_class=HTMLResponse)
+def shift_create(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    start_time: str = Form(...),
+    end_time: str = Form(...),
+    days_of_week: str = Form(""),  # "1,2,3,4,5"
+    line_id: int | None = Form(None),
+    sort_order: int = Form(0),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None or not _can_skip(user):  # 复用 admin/supervisor 守卫
+        return HTMLResponse("权限不足", status_code=403)
+    from lightmes.modules.production.shift_service import ShiftService
+    from lightmes.modules.production.schemas import ShiftCreate
+    dows = (
+        [int(x) for x in days_of_week.replace("，", ",").split(",") if x.strip().isdigit()]
+        if days_of_week else None
+    )
+    try:
+        ShiftService(db).create(ShiftCreate(
+            code=code, name=name, start_time=start_time, end_time=end_time,
+            days_of_week=dows, line_id=line_id, sort_order=sort_order))
+        db.commit()
+    except Exception as e:
+        return HTMLResponse(f"创建失败: {e}", status_code=400)
+    return RedirectResponse(url="/production/shifts", status_code=303)

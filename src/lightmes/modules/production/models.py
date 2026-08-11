@@ -373,7 +373,9 @@ class Shift(Base, TimestampMixin):
     name: Mapped[str] = mapped_column()
     start_time: Mapped[str] = mapped_column()  # "HH:MM"
     end_time: Mapped[str] = mapped_column()    # "HH:MM"（end < start 表示跨夜）
-    days_of_week: Mapped[list | None] = mapped_column(JSON, default=None)
+    # JSON(none_as_null=True): Python None → SQL NULL（满足 ck_shift_days_of_week_array_or_null
+    # 约束）。默认 JSON 把 None 序列化为 JSON literal 'null'，违反 IS NULL 分支。
+    days_of_week: Mapped[list | None] = mapped_column(JSON(none_as_null=True), default=None)
     line_id: Mapped[int | None] = mapped_column(
         ForeignKey("lines.id"), default=None)  # NULL = 全局班次
     is_active: Mapped[bool] = mapped_column(default=True)
