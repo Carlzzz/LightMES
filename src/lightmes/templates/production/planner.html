@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}生产计划{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/planner.css">
+{% endblock %}
+{% block container_class %}--planner{% endblock %}
+{% block content %}
+<h1 class="page-title">生产计划 <small>Planner</small></h1>
+
+<div class="planner-root">
+  <div class="planner-toolbar">
+    <a href="/production/planner?week={{ prev_week }}" class="planner-nav-btn">◀</a>
+    <strong>{{ week_start.strftime("%Y-%m-%d") }} 周</strong>
+    <a href="/production/planner?week={{ next_week }}" class="planner-nav-btn">▶</a>
+    <a href="/production/planner/daily?date={{ week_start.isoformat() }}" class="planner-view-btn">日视图</a>
+    <a href="/production/shifts" class="planner-view-btn">班次</a>
+    <button id="planner-changes-btn" type="button" class="planner-view-btn">最近变更</button>
+  </div>
+  <div class="planner-body">
+    <aside class="planner-backlog">
+      <div class="planner-backlog__title">未排程 ({{ backlog_wos|length }})</div>
+      {% for wo in backlog_wos %}
+      <div class="planner-backlog__item" draggable="true" data-wo-id="{{ wo.id }}">
+        <strong>{{ wo.code }}</strong>
+        <div>{{ wo.qty }} 件 / 优先 {{ wo.priority }}</div>
+      </div>
+      {% else %}
+      <div class="planner-backlog__empty">无未排程工单</div>
+      {% endfor %}
+    </aside>
+    <div class="planner-grid">
+      {% for line in lines %}
+      <div class="planner-grid__row">
+        <div class="planner-grid__line-label">{{ line.code }} {{ line.name }}</div>
+        {% for day in week_days %}
+        <div class="planner-cell"
+             data-line-id="{{ line.id }}"
+             data-date="{{ day.isoformat() }}">
+          {% for wo in scheduled_wos %}
+            {% if wo.line_id == line.id and wo.planned_start.date() == day %}
+            <div class="planner-card planner-card--{{ wo_card_status(wo) }}"
+                 data-wo-id="{{ wo.id }}">
+              <strong>{{ wo.code }}</strong>
+              <div>{{ wo.produced_qty }}/{{ wo.qty }}</div>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="planner-grid__empty">暂无产线，请先在主数据中创建产线</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<aside class="planner-changes" id="planner-changes-panel" style="display:none">
+  <div class="planner-changes__title">最近变更 <button onclick="document.getElementById('planner-changes-panel').style.display='none'">×</button></div>
+  <div id="planner-changes-list" class="planner-changes__list">加载中...</div>
+</aside>
+<script src="/static/js/planner.js"></script>
+{% endblock %}

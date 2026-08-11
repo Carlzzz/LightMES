@@ -420,3 +420,35 @@ class TestDataRecordRead(BaseModel):
     test_started_at: datetime | None
     test_completed_at: datetime | None
     remark: str | None
+
+
+# ========== Shift Schemas (Planner V1) ==========
+
+class ShiftBase(BaseModel):
+    code: str
+    name: str
+    start_time: str  # "HH:MM"
+    end_time: str    # "HH:MM"（end < start 表示跨夜）
+    days_of_week: list[int] | None = None
+    line_id: int | None = None
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class ShiftCreate(ShiftBase):
+    pass
+
+
+class ShiftUpdate(BaseModel):
+    name: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    days_of_week: list[int] | None = None
+    line_id: int | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
+class ShiftRead(ShiftBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}班次管理{% endblock %}
+{% block content %}
+<h1 class="page-title">班次管理 <small>Planner</small></h1>
+
+<div class="card">
+  <div class="card__title">新建班次</div>
+  <form method="post" action="/production/shifts" class="form-row">
+    <div class="field"><label>编码</label><input name="code" required></div>
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field"><label>开始 (HH:MM)</label><input name="start_time" placeholder="06:00" required></div>
+    <div class="field"><label>结束 (HH:MM)</label><input name="end_time" placeholder="14:00" required></div>
+    <div class="field"><label>星期 (1-7 逗号分隔)</label><input name="days_of_week" placeholder="1,2,3,4,5"></div>
+    <div class="field"><label>产线</label>
+      <select name="line_id">
+        <option value="">全局</option>
+        {% for l in lines %}
+        <option value="{{ l.id }}">{{ l.code }} {{ l.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>排序</label><input name="sort_order" type="number" value="0"></div>
+    <button type="submit">创建</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">现有班次</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>时间</th><th>星期</th><th>产线</th><th>状态</th></tr></thead>
+    <tbody>
+      {% for s in shifts %}
+      <tr>
+        <td>{{ s.id }}</td>
+        <td>{{ s.code }}</td>
+        <td>{{ s.name }}</td>
+        <td>{{ s.start_time }} - {{ s.end_time }}{% if s.end_time < s.start_time %} <span class="badge">跨夜</span>{% endif %}</td>
+        <td>{{ s.days_of_week or '每天' }}</td>
+        <td>{% if s.line_id %}#{{ s.line_id }}{% else %}全局{% endif %}</td>
+        <td>{% if s.is_active %}<span class="badge badge--ok">启用</span>{% else %}<span class="badge">停用</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

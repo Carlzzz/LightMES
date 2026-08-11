@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,24 @@ router = APIRouter()
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
 )
+
+
+def _wo_card_status(wo) -> str:
+    """工单卡片状态：用于 planner.html 的 CSS class。
+
+    返回 "done" | "in-progress" | "overdue" | "pending"。
+    """
+    from datetime import datetime
+    if wo.produced_qty >= wo.qty:
+        return "done"
+    if wo.produced_qty > 0:
+        return "in-progress"
+    if wo.planned_end is not None and wo.planned_end < datetime.now():
+        return "overdue"
+    return "pending"
+
+
+templates.env.globals["wo_card_status"] = _wo_card_status
 
 
 def _can_skip(user: User | None) -> bool:
@@ -560,3 +578,255 @@ def station_enter(
         request, "production/station_view.html",
         {"view": view, "work_station_id": work_station_id},
     )
+
+
+# ---- Shifts (Planner V1) ----
+
+@router.get("/production/shifts", response_class=HTMLResponse)
+def shifts_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.shift_service import ShiftService
+    from lightmes.modules.masterdata.repository import LineRepository
+    shifts = ShiftService(db).list_all()
+    lines = LineRepository(db).list_all()
+    return templates.TemplateResponse(
+        request, "production/shifts.html",
+        {"shifts": shifts, "lines": lines},
+    )
+
+
+@router.post("/production/shifts", response_class=HTMLResponse)
+def shift_create(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    start_time: str = Form(...),
+    end_time: str = Form(...),
+    days_of_week: str = Form(""),  # "1,2,3,4,5"
+    line_id: int | None = Form(None),
+    sort_order: int = Form(0),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None or not _can_skip(user):  # 复用 admin/supervisor 守卫
+        return HTMLResponse("权限不足", status_code=403)
+    from lightmes.modules.production.shift_service import ShiftService
+    from lightmes.modules.production.schemas import ShiftCreate
+    dows = (
+        [int(x) for x in days_of_week.replace("，", ",").split(",") if x.strip().isdigit()]
+        if days_of_week else None
+    )
+    try:
+        ShiftService(db).create(ShiftCreate(
+            code=code, name=name, start_time=start_time, end_time=end_time,
+            days_of_week=dows, line_id=line_id, sort_order=sort_order))
+        db.commit()
+    except Exception as e:
+        return HTMLResponse(f"创建失败: {e}", status_code=400)
+    return RedirectResponse(url="/production/shifts", status_code=303)
+
+
+# ---- Planner weekly view ----
+
+@router.get("/production/planner", response_class=HTMLResponse)
+def planner_weekly(
+    request: Request,
+    week: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """周视图：7 天 × 产线 网格 + 未排程侧栏。
+
+    week 为 ISO 日期 (YYYY-MM-DD)，一般传周一；缺省/非法 → 本周周一。
+    """
+    from datetime import date, datetime, timedelta
+
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.modules.masterdata.repository import LineRepository
+
+    today = date.today()
+    try:
+        week_start = date.fromisoformat(week) if week else today - timedelta(
+            days=today.weekday())
+    except ValueError:
+        week_start = today - timedelta(days=today.weekday())
+
+    week_days = [week_start + timedelta(days=i) for i in range(7)]
+    range_start = datetime.combine(week_days[0], datetime.min.time())
+    range_end = datetime.combine(week_days[6] + timedelta(days=1), datetime.min.time())
+
+    lines = LineRepository(db).list_all()
+    line_ids = [l.id for l in lines]
+    planner = PlannerService(db)
+    scheduled = planner.list_scheduled_in_range(line_ids, range_start, range_end) if line_ids else []
+    backlog = planner.list_backlog()
+
+    return templates.TemplateResponse(
+        request, "production/planner.html",
+        {
+            "week_start": week_start,
+            "week_days": week_days,
+            "prev_week": (week_start - timedelta(weeks=1)).isoformat(),
+            "next_week": (week_start + timedelta(weeks=1)).isoformat(),
+            "lines": lines,
+            "scheduled_wos": scheduled,
+            "backlog_wos": backlog,
+            "view_mode": "weekly",
+        },
+    )
+
+
+# ---- Planner daily view (Gantt) ----
+
+@router.get("/production/planner/daily", response_class=HTMLResponse)
+def planner_daily(
+    request: Request,
+    date: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """日视图 Gantt：24 小时 × 产线，按 planned_start/end 摆放工单块。"""
+    from datetime import date as date_cls, datetime, timedelta
+
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.modules.masterdata.repository import LineRepository
+
+    try:
+        d = date_cls.fromisoformat(date) if date else date_cls.today()
+    except ValueError:
+        d = date_cls.today()
+    range_start = datetime.combine(d, datetime.min.time())
+    range_end = range_start + timedelta(days=1)
+
+    lines = LineRepository(db).list_all()
+    line_ids = [l.id for l in lines]
+    scheduled = PlannerService(db).list_scheduled_in_range(
+        line_ids, range_start, range_end) if line_ids else []
+
+    # 按 line_id 分组
+    by_line: dict[int, list] = {}
+    for wo in scheduled:
+        by_line.setdefault(wo.line_id, []).append(wo)
+
+    return templates.TemplateResponse(
+        request, "production/planner_daily.html",
+        {
+            "day": d,
+            "prev_day": (d - timedelta(days=1)).isoformat(),
+            "next_day": (d + timedelta(days=1)).isoformat(),
+            "lines": lines,
+            "by_line": by_line,
+            "hours": list(range(24)),
+            "view_mode": "daily",
+        },
+    )
+
+
+# ---- Planner schedule API (form-encoded for HTMX) ----
+
+@router.post("/production/planner/work-orders/{wo_id}/schedule")
+def planner_schedule(
+    request: Request,
+    wo_id: int,
+    line_id: int = Form(...),
+    planned_start: str = Form(...),
+    planned_end: str = Form(...),
+    force_conflict: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from datetime import datetime
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.shared.errors import ConflictError, BusinessRuleError, NotFoundError
+    try:
+        start = datetime.fromisoformat(planned_start)
+        end = datetime.fromisoformat(planned_end)
+    except ValueError:
+        return HTMLResponse("时间格式错误（需 YYYY-MM-DDTHH:MM:SS）", status_code=400)
+    force = bool(force_conflict) and _can_skip(user)  # 仅 supervisor/admin 可 force
+    try:
+        PlannerService(db).schedule(
+            wo_id, line_id, start, end, user_id=user.id, force=force)
+        db.commit()
+    except ConflictError as e:
+        return HTMLResponse(str(e), status_code=409)
+    except BusinessRuleError as e:
+        return HTMLResponse(str(e), status_code=400)
+    except NotFoundError as e:
+        return HTMLResponse(str(e), status_code=404)
+    return RedirectResponse(url="/production/planner", status_code=303)
+
+
+@router.post("/production/planner/work-orders/{wo_id}/unschedule")
+def planner_unschedule(
+    request: Request,
+    wo_id: int,
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.shared.errors import NotFoundError
+    try:
+        PlannerService(db).unschedule(wo_id, user_id=user.id)
+        db.commit()
+    except NotFoundError as e:
+        return HTMLResponse(str(e), status_code=404)
+    return RedirectResponse(url="/production/planner", status_code=303)
+
+
+# ---- Task 9: Recent changes list + undo API ----
+
+@router.get("/production/planner/changes")
+def planner_changes_list(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return JSONResponse({"error": "请先登录"}, status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    changes = PlannerService(db).list_recent_changes(limit=50)
+    return JSONResponse({"changes": [
+        {
+            "id": c.id,
+            "work_order_id": c.work_order_id,
+            "action": c.action,
+            "before": c.before,
+            "after": c.after,
+            "user_id": c.user_id,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "undone_at": c.undone_at.isoformat() if c.undone_at else None,
+        }
+        for c in changes
+    ]})
+
+
+@router.post("/production/planner/changes/{log_id}/undo")
+def planner_change_undo(
+    request: Request,
+    log_id: int,
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    if not _can_skip(user):
+        return HTMLResponse("权限不足（需 supervisor/admin）", status_code=403)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.shared.errors import BusinessRuleError, ConflictError, NotFoundError
+    try:
+        PlannerService(db).undo_change(log_id, user_id=user.id)
+        db.commit()
+    except (NotFoundError, BusinessRuleError, ConflictError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return RedirectResponse(url="/production/planner", status_code=303)
