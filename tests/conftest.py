@@ -8,17 +8,21 @@ from lightmes.modules.production import models as _production_models  # noqa: F4
 
 @pytest.fixture()
 def db_session():
-    """每个测试用一个事务，结束回滚，保持隔离。
+    """每个测试用外层事务包裹 + SAVEPOINT，结束回滚，保持隔离。
 
-    注意：不显式 connection.begin()。handler 内的 db.rollback()（如 HTMX 扫码页
-    出错回滚）会回滚并解绑 connection 上的事务，若先 begin 外层事务，收尾时
-    trans.rollback() 会触发 "transaction already deassociated" 警告。绑定后由
-    Session.close() 负责回滚 pending 事务，保持隔离即可。
+    支持 service 内显式 `db.commit()`（如 operation_pass_service 5c failed 分支
+    要保留 defect + quarantined SN）：通过 SAVEPOINT 拦截 session.commit()，
+    让其退化为 RELEASE SAVEPOINT，外层事务始终不被提交，测试间互不影响。
+
+    兼容 service 内 `db.rollback()`：sqlalchemy 在 SAVEPOINT 模式下，rollback
+    会回滚到上一个 savepoint（而非整事务），不会解绑 connection 上的外层事务。
     """
     connection = engine.connect()
-    session = SessionLocal(bind=connection)
+    trans = connection.begin()
+    session = SessionLocal(bind=connection, join_transaction_mode="create_savepoint")
     try:
         yield session
     finally:
         session.close()
+        trans.rollback()
         connection.close()

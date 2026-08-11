@@ -65,8 +65,11 @@ def on_startup():
     # 初始化默认角色和管理员用户
     from lightmes.database import SessionLocal
     from lightmes.modules.auth.service import AuthService
+    from lightmes.modules.production.defect_service import DefectService
     db = SessionLocal()
     try:
         AuthService(db).ensure_admin_user()
+        DefectService(db).ensure_system_defect_types()
+        db.commit()
     finally:
         db.close()
