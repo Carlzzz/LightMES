@@ -103,3 +103,89 @@ def test_planner_daily_view_renders(client, db_session):
     resp = client.get("/production/planner/daily?date=2026-08-11")
     assert resp.status_code == 200
     assert "PLND" in resp.text
+
+
+# ---- Task 8: schedule/unschedule API ----
+
+def test_schedule_endpoint_success(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="SC1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    db_session.flush()
+    resp = client.post(f"/production/planner/work-orders/{wo.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T08:00:00",
+        "planned_end": "2026-08-11T16:00:00",
+    })
+    assert resp.status_code in (200, 303)
+    db_session.refresh(wo)
+    assert wo.planned_start is not None
+
+
+def test_schedule_endpoint_conflict_returns_409(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    wo1 = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="CF1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    wo2 = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="CF2", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    db_session.flush()
+    # 排 wo1
+    client.post(f"/production/planner/work-orders/{wo1.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T08:00:00",
+        "planned_end": "2026-08-11T16:00:00",
+    })
+    # 排 wo2 与 wo1 重叠 → 409
+    resp = client.post(f"/production/planner/work-orders/{wo2.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T12:00:00",
+        "planned_end": "2026-08-11T20:00:00",
+    })
+    assert resp.status_code == 409
+
+
+def test_schedule_endpoint_force_conflict_supervisor(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    wo1 = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="FC1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    wo2 = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="FC2", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    db_session.flush()
+    client.post(f"/production/planner/work-orders/{wo1.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T08:00:00",
+        "planned_end": "2026-08-11T16:00:00",
+    })
+    resp = client.post(f"/production/planner/work-orders/{wo2.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T12:00:00",
+        "planned_end": "2026-08-11T20:00:00",
+        "force_conflict": "true",
+    })
+    assert resp.status_code in (200, 303)
+
+
+def test_unschedule_endpoint_success(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="US1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    db_session.flush()
+    client.post(f"/production/planner/work-orders/{wo.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T08:00:00",
+        "planned_end": "2026-08-11T16:00:00",
+    })
+    resp = client.post(f"/production/planner/work-orders/{wo.id}/unschedule")
+    assert resp.status_code in (200, 303)
+    db_session.refresh(wo)
+    assert wo.planned_start is None

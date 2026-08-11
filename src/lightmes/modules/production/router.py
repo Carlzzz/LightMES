@@ -726,3 +726,59 @@ def planner_daily(
             "view_mode": "daily",
         },
     )
+
+
+# ---- Planner schedule API (form-encoded for HTMX) ----
+
+@router.post("/production/planner/work-orders/{wo_id}/schedule")
+def planner_schedule(
+    request: Request,
+    wo_id: int,
+    line_id: int = Form(...),
+    planned_start: str = Form(...),
+    planned_end: str = Form(...),
+    force_conflict: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from datetime import datetime
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.shared.errors import ConflictError, BusinessRuleError, NotFoundError
+    try:
+        start = datetime.fromisoformat(planned_start)
+        end = datetime.fromisoformat(planned_end)
+    except ValueError:
+        return HTMLResponse("时间格式错误（需 YYYY-MM-DDTHH:MM:SS）", status_code=400)
+    force = bool(force_conflict) and _can_skip(user)  # 仅 supervisor/admin 可 force
+    try:
+        PlannerService(db).schedule(
+            wo_id, line_id, start, end, user_id=user.id, force=force)
+        db.commit()
+    except ConflictError as e:
+        return HTMLResponse(str(e), status_code=409)
+    except BusinessRuleError as e:
+        return HTMLResponse(str(e), status_code=400)
+    except NotFoundError as e:
+        return HTMLResponse(str(e), status_code=404)
+    return RedirectResponse(url="/production/planner", status_code=303)
+
+
+@router.post("/production/planner/work-orders/{wo_id}/unschedule")
+def planner_unschedule(
+    request: Request,
+    wo_id: int,
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.shared.errors import NotFoundError
+    try:
+        PlannerService(db).unschedule(wo_id, user_id=user.id)
+        db.commit()
+    except NotFoundError as e:
+        return HTMLResponse(str(e), status_code=404)
+    return RedirectResponse(url="/production/planner", status_code=303)
