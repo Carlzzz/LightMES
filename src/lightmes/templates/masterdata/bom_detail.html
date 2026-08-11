@@ -11,7 +11,7 @@
   <table class="data-table" id="bom-items-table">
     <thead><tr><th>组件</th><th>track_mode</th><th>qty</th><th>消耗工序</th><th></th></tr></thead>
     <tbody>
-      {% for item in bom.items %}
+      {% for item in bom['items'] %}
       <tr data-item-id="{{ item.id }}">
         <td>{{ item.component_code }} {{ item.component_name }}</td>
         <td>{{ item.track_mode }}</td>

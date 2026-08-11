@@ -274,6 +274,7 @@ def bom_detail_page(
     request: Request,
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     svc = MasterDataService(db)
     query = MasterDataQueryService(db)
     bom = svc.boms.get(bom_id)

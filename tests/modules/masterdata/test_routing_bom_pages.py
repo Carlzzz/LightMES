@@ -228,3 +228,27 @@ def test_patch_bom_item_consume_op_clears_with_null(db_session, client):
     db_session.expire_all()
     refreshed = db_session.get(type(item), item.id)
     assert refreshed.consume_at_operation_seq is None
+
+
+def test_bom_detail_page_requires_login(client, db_session):
+    """未登录访问 /masterdata/boms/{id} 返回 401。"""
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="BDTF", name="成品", type="finished"))
+    c1 = md.create_product(ProductCreate(code="BDTC", name="件", type="component", track_mode="serial"))
+    bom = md.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c1.id, qty=1)]))
+    db_session.flush()
+    resp = client.get(f"/masterdata/boms/{bom.id}")
+    assert resp.status_code == 401
+
+
+def test_bom_detail_page_accessible_when_logged_in(client, db_session):
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="BDTG", name="成品", type="finished"))
+    c1 = md.create_product(ProductCreate(code="BDTH", name="件", type="component", track_mode="serial"))
+    bom = md.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c1.id, qty=1)]))
+    db_session.flush()
+    _login(client, db_session)
+    resp = client.get(f"/masterdata/boms/{bom.id}")
+    assert resp.status_code == 200
