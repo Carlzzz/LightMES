@@ -38,6 +38,24 @@ templates = Jinja2Templates(
 )
 
 
+def _wo_card_status(wo) -> str:
+    """工单卡片状态：用于 planner.html 的 CSS class。
+
+    返回 "done" | "in-progress" | "overdue" | "pending"。
+    """
+    from datetime import datetime
+    if wo.produced_qty >= wo.qty:
+        return "done"
+    if wo.produced_qty > 0:
+        return "in-progress"
+    if wo.planned_end is not None and wo.planned_end < datetime.now():
+        return "overdue"
+    return "pending"
+
+
+templates.env.globals["wo_card_status"] = _wo_card_status
+
+
 def _can_skip(user: User | None) -> bool:
     """跳站权限：仅 supervisor/admin。"""
     if user is None:
@@ -608,3 +626,55 @@ def shift_create(
     except Exception as e:
         return HTMLResponse(f"创建失败: {e}", status_code=400)
     return RedirectResponse(url="/production/shifts", status_code=303)
+
+
+# ---- Planner weekly view ----
+
+@router.get("/production/planner", response_class=HTMLResponse)
+def planner_weekly(
+    request: Request,
+    week: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """周视图：7 天 × 产线 网格 + 未排程侧栏。
+
+    week 为 ISO 日期 (YYYY-MM-DD)，一般传周一；缺省/非法 → 本周周一。
+    """
+    from datetime import date, datetime, timedelta
+
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.modules.masterdata.repository import LineRepository
+
+    today = date.today()
+    try:
+        week_start = date.fromisoformat(week) if week else today - timedelta(
+            days=today.weekday())
+    except ValueError:
+        week_start = today - timedelta(days=today.weekday())
+
+    week_days = [week_start + timedelta(days=i) for i in range(7)]
+    range_start = datetime.combine(week_days[0], datetime.min.time())
+    range_end = datetime.combine(week_days[6] + timedelta(days=1), datetime.min.time())
+
+    lines = LineRepository(db).list_all()
+    line_ids = [l.id for l in lines]
+    planner = PlannerService(db)
+    scheduled = planner.list_scheduled_in_range(line_ids, range_start, range_end) if line_ids else []
+    backlog = planner.list_backlog()
+
+    return templates.TemplateResponse(
+        request, "production/planner.html",
+        {
+            "week_start": week_start,
+            "week_days": week_days,
+            "prev_week": (week_start - timedelta(weeks=1)).isoformat(),
+            "next_week": (week_start + timedelta(weeks=1)).isoformat(),
+            "lines": lines,
+            "scheduled_wos": scheduled,
+            "backlog_wos": backlog,
+            "view_mode": "weekly",
+        },
+    )
