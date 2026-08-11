@@ -805,6 +805,7 @@ git commit -m "feat(production): per-operation material check (immediate + final
 
 ```python
 from pydantic import BaseModel
+from sqlalchemy import select
 
 
 class BomItemConsumeOpUpdate(BaseModel):
@@ -827,14 +828,18 @@ def update_bom_item_consume_op(
         raise HTTPException(status_code=404, detail=f"BOM 行不存在: {item_id}")
     if data.consume_at_operation_seq is not None:
         bom = db.get(Bom, item.bom_id)
-        routing = db.query(Routing).filter(
-            Routing.product_id == bom.product_id, Routing.status == "active"
-        ).first()
+        routing = db.execute(
+            select(Routing).where(
+                Routing.product_id == bom.product_id,
+                Routing.status == "active",
+            )
+        ).scalar_one_or_none()
         if routing is None:
             raise HTTPException(
                 status_code=400, detail="该成品无 active Routing，无法指定消耗工序")
-        valid_seqs = {op.seq for op in db.query(Operation).filter(
-            Operation.routing_id == routing.id).all()}
+        valid_seqs = {op.seq for op in db.execute(
+            select(Operation).where(Operation.routing_id == routing.id)
+        ).scalars().all()}
         if data.consume_at_operation_seq not in valid_seqs:
             raise HTTPException(
                 status_code=400,
@@ -1008,7 +1013,14 @@ function updateConsumeOp(itemId, seqStr) {
 
 - [ ] **Step 4: 加 page 路由渲染 bom_detail**
 
-在 `src/lightmes/modules/masterdata/page_router.py`（如不存在则在 `api_router.py` 顶部加 HTML 路由）追加：
+`page_router.py` 已 import `MasterDataService`、`MasterDataQueryService`、`templates`。需在顶部追加 import：
+
+```python
+from sqlalchemy import select
+from lightmes.modules.masterdata.models import Bom, Operation, Routing
+```
+
+在 `src/lightmes/modules/masterdata/page_router.py` 末尾追加（紧接现有 `/masterdata/boms` 列表路由）：
 
 ```python
 @router.get("/masterdata/boms/{bom_id}", response_class=HTMLResponse)
@@ -1016,23 +1028,23 @@ def bom_detail_page(
     bom_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_login),
 ) -> HTMLResponse:
     svc = MasterDataService(db)
     query = MasterDataQueryService(db)
     bom = svc.boms.get(bom_id)
     if bom is None:
-        raise HTTPException(404, f"BOM 不存在: {bom_id}")
+        return HTMLResponse(f"BOM 不存在: {bom_id}", status_code=404)
     items = svc.boms.items_of(bom.id)
     product = query.get_product(bom.product_id)
-    # active routing
-    routing = db.query(Routing).filter(
-        Routing.product_id == bom.product_id, Routing.status == "active"
-    ).first()
+    routing = db.execute(
+        select(Routing).where(
+            Routing.product_id == bom.product_id,
+            Routing.status == "active",
+        )
+    ).scalar_one_or_none()
     operations = []
     if routing is not None:
         operations = query.get_operations(routing.id)
-    # 渲染（带 component code/name 拼装）
     item_views = []
     for it in items:
         comp = query.get_product(it.component_product_id)
@@ -1194,11 +1206,12 @@ Expected: 全部 PASS（pre-existing 失败标注为非本期引入）。
 
 - [ ] **Step 8: Commit**
 
+Memory 文件在仓库外（`~/.claude/projects/.../memory/`），不能 `git add`。仅编辑该文件，git 提交仅含仓库内变更：
+
 ```bash
 git add src/lightmes/modules/production/station_service.py \
         src/lightmes/templates/production/station_view.html \
-        tests/modules/production/test_operation_pass.py \
-        C:/Users/zhaocao/.claude/projects/C--Users-zhaocao-Documents-GitHub-LightMES/memory/project_p2_shopfloor.md
+        tests/modules/production/test_operation_pass.py
 git commit -m "feat(station): filter components to current op + P2i memory update"
 ```
 
