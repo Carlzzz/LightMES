@@ -68,3 +68,101 @@
     });
   });
 })();
+
+// ===== Daily Gantt drag + resize + snap =====
+(function () {
+  var SNAP_MIN = 15;
+  var tracks = document.querySelectorAll('.planner-gantt__track');
+  if (!tracks.length) return;
+
+  function snap(minutes) { return Math.round(minutes / SNAP_MIN) * SNAP_MIN; }
+
+  function updateWoSchedule(woId, lineId, date, startMin, endMin) {
+    var hhmm = function (m) {
+      var h = Math.floor(m / 60), mm = m % 60;
+      return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm + ':00';
+    };
+    fetch('/production/planner/work-orders/' + woId + '/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'line_id=' + encodeURIComponent(lineId)
+            + '&planned_start=' + encodeURIComponent(date + 'T' + hhmm(startMin))
+            + '&planned_end=' + encodeURIComponent(date + 'T' + hhmm(endMin))
+    }).then(function (r) {
+      if (r.ok) window.location.reload();
+      else return r.text().then(function (t) {
+        if (window.showErrorModal) window.showErrorModal(t || '调度失败');
+        else alert(t || '调度失败');
+      });
+    }).catch(function (e) {
+      if (window.showErrorModal) window.showErrorModal('网络错误: ' + e);
+      else alert('网络错误: ' + e);
+    });
+  }
+
+  tracks.forEach(function (track) {
+    var lineId = track.dataset.lineId;
+    var date = track.dataset.date;
+    var blocks = track.querySelectorAll('.planner-gantt__block');
+    blocks.forEach(function (block) {
+      var woId = block.dataset.woId;
+
+      // 整块拖动（改 start，保持 duration）
+      var dragStart = null;
+      block.addEventListener('mousedown', function (e) {
+        if (e.target.classList.contains('planner-gantt__resize-handle')) return;  // resize 接管
+        dragStart = {
+          x: e.clientX,
+          origLeft: parseInt(block.style.left, 10) || 0,
+          origWidth: parseInt(block.style.width, 10) || 60
+        };
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', function (e) {
+        if (!dragStart) return;
+        var dx = e.clientX - dragStart.x;
+        var newLeft = Math.max(0, Math.min(24 * 60 - dragStart.origWidth, dragStart.origLeft + dx));
+        block.style.left = newLeft + 'px';
+      });
+      document.addEventListener('mouseup', function () {
+        if (!dragStart) return;
+        var leftMin = snap(parseInt(block.style.left, 10) || 0);
+        var widthMin = snap(dragStart.origWidth);
+        block.style.left = leftMin + 'px';
+        block.style.width = widthMin + 'px';
+        dragStart = null;
+        updateWoSchedule(woId, lineId, date, leftMin, leftMin + widthMin);
+      });
+
+      // resize handle（改 duration，保持 start）
+      var handle = block.querySelector('.planner-gantt__resize-handle');
+      if (handle) {
+        var resizeStart = null;
+        handle.addEventListener('mousedown', function (e) {
+          resizeStart = {
+            x: e.clientX,
+            origWidth: parseInt(block.style.width, 10) || 60,
+            origLeft: parseInt(block.style.left, 10) || 0
+          };
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        document.addEventListener('mousemove', function (e) {
+          if (!resizeStart) return;
+          var dx = e.clientX - resizeStart.x;
+          var newWidth = Math.max(30, resizeStart.origWidth + dx);
+          block.style.width = newWidth + 'px';
+        });
+        document.addEventListener('mouseup', function () {
+          if (!resizeStart) return;
+          var leftMin = snap(resizeStart.origLeft);
+          var widthMin = snap(parseInt(block.style.width, 10) || 30);
+          if (leftMin + widthMin > 24 * 60) widthMin = 24 * 60 - leftMin;
+          block.style.width = widthMin + 'px';
+          resizeStart = null;
+          updateWoSchedule(woId, lineId, date, leftMin, leftMin + widthMin);
+        });
+      }
+    });
+  });
+})();

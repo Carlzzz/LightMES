@@ -166,3 +166,78 @@
 
 /* Container override for planner full-width */
 .container--planner { max-width: 1600px; padding: 0; }
+
+/* Daily Gantt */
+.planner-gantt {
+  background: var(--p-surface);
+  border: 1px solid var(--p-border);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.planner-gantt__header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--p-border);
+  background: var(--p-bg);
+  height: 32px;
+}
+.planner-gantt__line-col {
+  width: 120px;
+  flex-shrink: 0;
+  padding: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  border-right: 1px solid var(--p-border);
+}
+.planner-gantt__hour {
+  width: 60px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--p-text-soft);
+  border-right: 1px solid var(--p-border);
+}
+.planner-gantt__row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--p-border);
+  height: 60px;
+}
+.planner-gantt__track {
+  position: relative;
+  flex: 1;
+  background-image: linear-gradient(to right, var(--p-border) 1px, transparent 1px);
+  background-size: 60px 100%;
+}
+.planner-gantt__block {
+  position: absolute;
+  top: 6px;
+  height: 48px;
+  background: var(--p-progress);
+  color: white;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  min-width: 30px;
+  user-select: none;
+}
+.planner-gantt__block--done { background: var(--p-done); }
+.planner-gantt__block--overdue { background: var(--p-overdue); }
+.planner-gantt__block--pending { background: var(--p-pending); color: var(--p-pending-t); }
+.planner-gantt__block-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.planner-gantt__resize-handle {
+  width: 6px;
+  cursor: ew-resize;
+  background: rgba(255,255,255,.3);
+  border-radius: 0 4px 4px 0;
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+}

@@ -678,3 +678,51 @@ def planner_weekly(
             "view_mode": "weekly",
         },
     )
+
+
+# ---- Planner daily view (Gantt) ----
+
+@router.get("/production/planner/daily", response_class=HTMLResponse)
+def planner_daily(
+    request: Request,
+    date: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """日视图 Gantt：24 小时 × 产线，按 planned_start/end 摆放工单块。"""
+    from datetime import date as date_cls, datetime, timedelta
+
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.modules.masterdata.repository import LineRepository
+
+    try:
+        d = date_cls.fromisoformat(date) if date else date_cls.today()
+    except ValueError:
+        d = date_cls.today()
+    range_start = datetime.combine(d, datetime.min.time())
+    range_end = range_start + timedelta(days=1)
+
+    lines = LineRepository(db).list_all()
+    line_ids = [l.id for l in lines]
+    scheduled = PlannerService(db).list_scheduled_in_range(
+        line_ids, range_start, range_end) if line_ids else []
+
+    # 按 line_id 分组
+    by_line: dict[int, list] = {}
+    for wo in scheduled:
+        by_line.setdefault(wo.line_id, []).append(wo)
+
+    return templates.TemplateResponse(
+        request, "production/planner_daily.html",
+        {
+            "day": d,
+            "prev_day": (d - timedelta(days=1)).isoformat(),
+            "next_day": (d + timedelta(days=1)).isoformat(),
+            "lines": lines,
+            "by_line": by_line,
+            "hours": list(range(24)),
+            "view_mode": "daily",
+        },
+    )

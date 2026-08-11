@@ -88,3 +88,18 @@ def test_planner_default_week_is_current_when_no_param(client, db_session):
     _env(db_session)
     resp = client.get("/production/planner")
     assert resp.status_code == 200
+
+
+def test_planner_daily_view_renders(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    from datetime import datetime
+    wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="PLND", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    wo.planned_start = datetime(2026, 8, 11, 10, 0)
+    wo.planned_end = datetime(2026, 8, 11, 14, 0)
+    db_session.flush()
+    resp = client.get("/production/planner/daily?date=2026-08-11")
+    assert resp.status_code == 200
+    assert "PLND" in resp.text

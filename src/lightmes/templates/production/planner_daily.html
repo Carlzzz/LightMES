@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}日视图 {{ day }}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/planner.css">
+{% endblock %}
+{% block container_class %}--planner{% endblock %}
+{% block content %}
+<div class="planner-root">
+  <div class="planner-toolbar">
+    <a href="/production/planner/daily?date={{ prev_day }}" class="planner-nav-btn">◀</a>
+    <strong>{{ day.strftime("%Y-%m-%d (%a)") }}</strong>
+    <a href="/production/planner/daily?date={{ next_day }}" class="planner-nav-btn">▶</a>
+    <a href="/production/planner" class="planner-view-btn">周视图</a>
+  </div>
+  <div class="planner-gantt">
+    <div class="planner-gantt__header">
+      <div class="planner-gantt__line-col"></div>
+      {% for h in hours %}
+      <div class="planner-gantt__hour">{{ "%02d" % h }}</div>
+      {% endfor %}
+    </div>
+    {% for line in lines %}
+    <div class="planner-gantt__row">
+      <div class="planner-gantt__line-col">{{ line.code }}<br>{{ line.name }}</div>
+      <div class="planner-gantt__track" data-line-id="{{ line.id }}" data-date="{{ day.isoformat() }}">
+        {% for wo in by_line.get(line.id, []) %}
+          {% set start_min = (wo.planned_start.hour * 60 + wo.planned_start.minute) %}
+          {% set end_min = (wo.planned_end.hour * 60 + wo.planned_end.minute) %}
+          {% set left_px = start_min %}
+          {% set width_px = end_min - start_min %}
+          <div class="planner-gantt__block planner-gantt__block--{{ wo_card_status(wo) }}"
+               data-wo-id="{{ wo.id }}"
+               style="left: {{ left_px }}px; width: {{ width_px }}px;">
+            <div class="planner-gantt__block-label">{{ wo.code }} ({{ wo.produced_qty }}/{{ wo.qty }})</div>
+            <div class="planner-gantt__resize-handle"></div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="planner-grid__empty">暂无产线，请先在主数据中创建产线</div>
+    {% endfor %}
+  </div>
+</div>
+<script src="/static/js/planner.js"></script>
+{% endblock %}
