@@ -123,22 +123,31 @@ def test_pass_fi_needs_passed_data_proceeds(db_session):
 
 
 def test_pass_fi_needs_failed_data_blocks(db_session):
-    """needs=True + 提交不合格首检 → 拒绝。"""
+    """needs=True + 提交不合格首检 → 拒绝 + SN 隔离 + 缺陷记录创建。"""
     db, ws, user, wo, config, op1 = _setup_with_fi(db_session, [
         (1, "外观", "boolean", True),
     ])
     item_id = _check_item_id(db, config)
-    with pytest.raises(BusinessRuleError, match="首检不合格"):
+    su = SerialUnitRepository(db).list_by_work_order(wo.id)[0]
+    with pytest.raises(BusinessRuleError, match="首检不合格.*缺陷记录 #"):
         OperationPassService(db).pass_operation(OperationPassInput(
             work_station_id=ws.id, work_order_code="FIWO2", operator_id=user.id,
             first_inspection=FirstInspectionInput(check_results=[
                 FirstInspectionCheckResultInput(
                     check_item_id=item_id, result_type="boolean", boolean_value=False)
             ])))
-    # 验证未写过站记录
+    # 验证未写过站记录（5c 在步骤 6 之前）
     op_count = db.execute(select(OperationRecord).where(
         OperationRecord.work_order_id == wo.id)).scalars().all()
     assert len(op_count) == 0
+    # 新：SN 被隔离 + 缺陷记录创建
+    db.refresh(su)
+    assert su.status == "quarantined"
+    from lightmes.modules.production.models import DefectRecord
+    defects = db.execute(select(DefectRecord).where(
+        DefectRecord.serial_unit_id == su.id)).scalars().all()
+    assert len(defects) == 1
+    assert defects[0].defect_type_code == "FIRST_INSPECTION_FAIL"
 
 
 def test_skip_operation_does_not_trigger_fi(db_session):

@@ -15,6 +15,7 @@ from lightmes.modules.production.repository import (
 from lightmes.modules.production.schemas import (
     OperationPassInput, OperationPassResult, OperationSkipInput, OperationSkipResult, OpInfo,
 )
+from lightmes.modules.production.defect_service import DefectService
 from lightmes.modules.production.events import OperationPassed, OperationSkipped, SerialUnitFinished
 from lightmes.modules.production.quality_service import FirstInspectionService
 from lightmes.modules.trace.genealogy_service import GenealogyService
@@ -124,8 +125,14 @@ class OperationPassService:
                     check_results=data.first_inspection.check_results,
                     remark=data.first_inspection.remark)
                 if fi_record.status == "failed":
+                    defect = DefectService(self.db).log_defect_from_inspection(
+                        fi_record=fi_record, sn=su.sn,
+                        discovered_by=data.operator_id,
+                        remark=f"首检不合格（触发：{reason}）")
+                    self.db.commit()  # 保留 fi_record + defect + quarantined SN
                     raise BusinessRuleError(
-                        f"首检不合格，不可过站（记录 #{fi_record.id}）")
+                        f"首检不合格，SN 已隔离，缺陷记录 #{defect.id}。"
+                        f"请前往 /quality/defects/{defect.id} 处理。")
 
         # 5d. 物料绑定必扫校验（仅最终工序检查累积绑定）：仅在最终工序强制校验
         #      检查累积已绑（之前工序扫的）+ 本次扫的 = BOM 需求
