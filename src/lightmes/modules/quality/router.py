@@ -670,10 +670,10 @@ def defect_detail_page(request: Request, record_id: int, db: Session = Depends(g
     # 工序列表（用于返工 target_seq 下拉）
     operations = MasterDataQueryService(db).get_operations(wo.routing_id) if wo else []
     user = current_user_or_none(request, db)
-    can_concede = user is not None and user.role_obj is not None and user.role_obj.name in ("admin", "supervisor")
+    can_handle = user is not None and user.role_obj is not None and user.role_obj.name in ("admin", "supervisor")
     return templates.TemplateResponse(
         request, "quality/defect_detail.html",
-        {"record": record, "su": su, "operations": operations, "can_concede": can_concede})
+        {"record": record, "su": su, "operations": operations, "can_handle": can_handle})
 
 
 @router.get("/quality/defects/{record_id}/rework-stations", response_class=HTMLResponse)
@@ -710,9 +710,8 @@ def defect_handle_rework(
     expected_repass_station_id: int = Form(...),
     remark: str = Form(""),
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
-    user = current_user_or_none(request, db)
     try:
         DefectService(db).handle_rework(
             record_id=record_id, handled_by=user.id,
@@ -734,9 +733,8 @@ def defect_handle_scrap(
     request: Request, record_id: int,
     remark: str = Form(""),
     db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
-    user = current_user_or_none(request, db)
     try:
         DefectService(db).handle_scrap(
             record_id=record_id, handled_by=user.id, remark=remark or None)

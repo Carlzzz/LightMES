@@ -25,6 +25,7 @@
 <div class="card">
   <div class="card__title">处理决策</div>
 
+  {% if can_handle %}
   <details>
     <summary><strong>返工</strong>（SN 回到 target_seq 工序重做）</summary>
     <form hx-post="/quality/defects/{{ record.id }}/handle-rework" class="form-row" style="margin-top:12px"
@@ -57,7 +58,6 @@
     </form>
   </details>
 
-  {% if can_concede %}
   <details>
     <summary><strong>让步接收</strong>（supervisor 授权，SN 回 in_process 继续生产）</summary>
     <form method="post" action="/quality/defects/{{ record.id }}/handle-concession" class="form-row" style="margin-top:12px"
@@ -67,7 +67,7 @@
     </form>
   </details>
   {% else %}
-  <p class="nav-card__desc">让步接收需 supervisor/admin 角色</p>
+  <p class="nav-card__desc">处理决策（返工/报废/让步）需 supervisor/admin 角色</p>
   {% endif %}
 </div>
 {% else %}
