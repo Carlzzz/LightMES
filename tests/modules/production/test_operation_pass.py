@@ -133,7 +133,7 @@ def test_pass_ok_when_required_part_scanned_this_op(db_session):
         work_station_id=ws[1].id, sn=r1.sn,
         components=[ComponentInput(
             component_product_id=c_op2.id, component_sn="SN-OP2-1",
-            component_batch=None, qty=1)]))
+            component_batch_no=None, qty=1)]))
     assert r2.passed_op.seq == 2
 
 
@@ -151,7 +151,7 @@ def test_pass_blocks_when_scanning_part_for_future_op(db_session):
             work_station_id=ws[1].id, sn=r1.sn,
             components=[ComponentInput(
                 component_product_id=c_op3.id, component_sn="SN-OP3-early",
-                component_batch=None, qty=1)]))
+                component_batch_no=None, qty=1)]))
     assert "工序 3" in str(exc.value)
 
 

@@ -325,10 +325,15 @@ class MasterDataService:
         if existing is not None:
             if product.id != existing.product_id:
                 raise ValueError(f"BOM {data.erp_ref} 的成品与已存在记录不一致")
+            # preserve admin-configured consume_at_operation_seq before deleting
+            old_items = self.boms.items_of(existing.id)
+            preserved_consume_op: dict[int, int | None] = {
+                i.component_product_id: i.consume_at_operation_seq for i in old_items}
             self.boms.delete_items(existing.id)
             for comp, qty in resolved:
                 self.db.add(BomItem(bom_id=existing.id,
-                    component_product_id=comp.id, qty=qty, track_mode=comp.track_mode))
+                    component_product_id=comp.id, qty=qty, track_mode=comp.track_mode,
+                    consume_at_operation_seq=preserved_consume_op.get(comp.id)))
             existing.synced_at = datetime.now(timezone.utc)
             self.db.flush()
             return existing, "updated"

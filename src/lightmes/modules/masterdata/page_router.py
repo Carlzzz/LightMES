@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.repository import UserRepository
-from lightmes.modules.masterdata.models import Bom, Operation, Routing
+from lightmes.modules.masterdata.models import Routing
 from lightmes.modules.masterdata.schemas import (
     LineCreate, OperationCreate, ProductCreate,
     RoutingCreate, SkillCreate, WorkStationCreate,
