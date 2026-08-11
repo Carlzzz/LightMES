@@ -29,6 +29,15 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('code', name='uq_shift_code'),
+        sa.CheckConstraint(
+            "start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'",
+            name='ck_shift_start_time_hhmm'),
+        sa.CheckConstraint(
+            "end_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'",
+            name='ck_shift_end_time_hhmm'),
+        sa.CheckConstraint(
+            "json_typeof(days_of_week) = 'array' OR days_of_week IS NULL",
+            name='ck_shift_days_of_week_array_or_null'),
         sa.ForeignKeyConstraint(['line_id'], ['lines.id']),
     )
     op.create_table('schedule_change_logs',
@@ -45,6 +54,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['work_order_id'], ['work_orders.id']),
         sa.ForeignKeyConstraint(['user_id'], ['users.id']),
+        sa.CheckConstraint(
+            "action IN ('schedule', 'unschedule', 'move', 'undo')",
+            name='ck_schedule_change_log_action'),
     )
     op.create_index('ix_schedule_change_logs_work_order_id',
                     'schedule_change_logs', ['work_order_id'])

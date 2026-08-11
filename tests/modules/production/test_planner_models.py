@@ -1,4 +1,7 @@
 from datetime import datetime
+
+import pytest
+
 from lightmes.modules.production.models import Shift, ScheduleChangeLog, WorkOrder
 
 
@@ -73,3 +76,45 @@ def test_work_order_has_priority_default_5(db_session):
     db_session.flush()
     db_session.refresh(wo)
     assert wo.priority == 5
+
+
+def test_shift_db_rejects_bad_time_format(db_session):
+    """DB-level CheckConstraint rejects malformed start_time."""
+    from sqlalchemy.exc import IntegrityError
+    from lightmes.modules.production.models import Shift
+    bad = Shift(code="BADT", name="x", start_time="25:99", end_time="14:00")
+    db_session.add(bad)
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_schedule_change_log_db_rejects_bad_action(db_session):
+    """DB-level CheckConstraint rejects action outside the enum."""
+    from sqlalchemy.exc import IntegrityError
+    from lightmes.modules.production.models import ScheduleChangeLog
+    # Need a valid WorkOrder for FK
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
+    )
+    from lightmes.modules.production.service import ProductionService
+    from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
+    md = MasterDataService(db_session)
+    p = md.create_product(ProductCreate(code="DBP", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="DBL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="DBW", name="站", line_id=line.id, seq=1))
+    r = md.create_routing(RoutingCreate(
+        code="DBR", name="路线", product_id=p.id,
+        operations=[OperationCreate(seq=1, code="OP1", name="装配",
+                                    default_work_station_id=w.id, allowed_work_station_ids=[w.id])]))
+    rule = ProductionService(db_session).create_sn_rule(
+        SnRuleCreate(code="DBRR", name="r", pattern="DB{SEQ:4}"))
+    wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="DBWO", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=5, sn_rule_id=rule.id))
+    db_session.flush()
+    bad = ScheduleChangeLog(work_order_id=wo.id, action="bogus_action")
+    db_session.add(bad)
+    with pytest.raises(IntegrityError):
+        db_session.flush()

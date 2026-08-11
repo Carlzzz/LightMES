@@ -1,5 +1,15 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, UniqueConstraint, func, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    JSON,
+    Numeric,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -344,6 +354,18 @@ class Shift(Base, TimestampMixin):
     __tablename__ = "shifts"
     __table_args__ = (
         UniqueConstraint("code", name="uq_shift_code"),
+        CheckConstraint(
+            "start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'",
+            name="ck_shift_start_time_hhmm",
+        ),
+        CheckConstraint(
+            "end_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'",
+            name="ck_shift_end_time_hhmm",
+        ),
+        CheckConstraint(
+            "json_typeof(days_of_week) = 'array' OR days_of_week IS NULL",
+            name="ck_shift_days_of_week_array_or_null",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -360,6 +382,12 @@ class Shift(Base, TimestampMixin):
 
 class ScheduleChangeLog(Base, TimestampMixin):
     __tablename__ = "schedule_change_logs"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('schedule', 'unschedule', 'move', 'undo')",
+            name="ck_schedule_change_log_action",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     work_order_id: Mapped[int] = mapped_column(
