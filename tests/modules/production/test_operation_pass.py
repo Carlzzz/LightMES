@@ -81,3 +81,96 @@ def test_unknown_work_order_rejected(db_session):
     svc = OperationPassService(db_session)
     with pytest.raises(NotFoundError):
         svc.pass_operation(OperationPassInput(work_station_id=ws[0].id, work_order_code="NOPE"))
+
+
+def _line_with_op_bom(db_session, n_ops=3):
+    """构造带 consume_at_operation_seq 的 BOM 测试环境。
+
+    c_op2 声明在 op2 装配，c_op3 声明在 op3 装配。
+    """
+    from lightmes.modules.masterdata.schemas import BomCreate, BomItemCreate
+    p, line, ws, wo = _line(db_session, n_ops=n_ops)
+    md = MasterDataService(db_session)
+    c_op2 = md.create_product(ProductCreate(code="COP2", name="op2件",
+                                            type="component", track_mode="serial"))
+    c_op3 = md.create_product(ProductCreate(code="COP3", name="op3件",
+                                            type="component", track_mode="serial"))
+    md.create_bom(BomCreate(product_id=p.id, items=[
+        BomItemCreate(component_product_id=c_op2.id, qty=1,
+                      consume_at_operation_seq=2),
+        BomItemCreate(component_product_id=c_op3.id, qty=1,
+                      consume_at_operation_seq=3),
+    ]))
+    return p, line, ws, wo, c_op2, c_op3
+
+
+def test_pass_blocks_when_required_part_for_op_not_scanned(db_session):
+    """op2 应装 c_op2 但未扫 → 即时校验拦截。"""
+    from lightmes.modules.production.schemas import OperationPassInput
+    p, line, ws, wo, c_op2, c_op3 = _line_with_op_bom(db_session, n_ops=3)
+    svc = OperationPassService(db_session)
+    # 首检不涉及，op1 无应装件，过 op1
+    r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
+                                                work_order_code="PXWO"))
+    # op2 应装 c_op2 但未扫
+    with pytest.raises(BusinessRuleError) as exc:
+        svc.pass_operation(OperationPassInput(
+            work_station_id=ws[1].id, sn=r1.sn))
+    assert "op2件" in str(exc.value)
+
+
+def test_pass_ok_when_required_part_scanned_this_op(db_session):
+    """op2 应装 c_op2，扫了 → 通过。"""
+    from lightmes.modules.production.schemas import (
+        OperationPassInput, ComponentInput,
+    )
+    p, line, ws, wo, c_op2, c_op3 = _line_with_op_bom(db_session, n_ops=3)
+    svc = OperationPassService(db_session)
+    r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
+                                                work_order_code="PXWO"))
+    r2 = svc.pass_operation(OperationPassInput(
+        work_station_id=ws[1].id, sn=r1.sn,
+        components=[ComponentInput(
+            component_product_id=c_op2.id, component_sn="SN-OP2-1",
+            component_batch=None, qty=1)]))
+    assert r2.passed_op.seq == 2
+
+
+def test_pass_blocks_when_scanning_part_for_future_op(db_session):
+    """op2 扫了 op3 的件 → 扫错件拦截（在 bind_components）。"""
+    from lightmes.modules.production.schemas import (
+        OperationPassInput, ComponentInput,
+    )
+    p, line, ws, wo, c_op2, c_op3 = _line_with_op_bom(db_session, n_ops=3)
+    svc = OperationPassService(db_session)
+    r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
+                                                work_order_code="PXWO"))
+    with pytest.raises(BusinessRuleError) as exc:
+        svc.pass_operation(OperationPassInput(
+            work_station_id=ws[1].id, sn=r1.sn,
+            components=[ComponentInput(
+                component_product_id=c_op3.id, component_sn="SN-OP3-early",
+                component_batch=None, qty=1)]))
+    assert "工序 3" in str(exc.value)
+
+
+def test_final_op_cumulative_check_still_blocks_missing(db_session):
+    """NULL-seq BOM（老数据）漏检到最终工序 → 最终累积兜底拦截。
+
+    注：consume_at_operation_seq == NULL 的 BOM 行不参与 5d-① 即时校验，
+    只在 5d-③ 最终工序累积校验里强制（兼容老数据）。
+    """
+    from lightmes.modules.production.schemas import OperationPassInput
+    from lightmes.modules.masterdata.schemas import BomCreate, BomItemCreate
+    p2, line2, ws2, wo2 = _line(db_session, n_ops=2)
+    c_null = MasterDataService(db_session).create_product(
+        ProductCreate(code="CNULL", name="老件", type="component", track_mode="serial"))
+    MasterDataService(db_session).create_bom(BomCreate(product_id=p2.id, items=[
+        BomItemCreate(component_product_id=c_null.id, qty=1)]))  # NULL seq
+    svc = OperationPassService(db_session)
+    r_a = svc.pass_operation(OperationPassInput(work_station_id=ws2[0].id,
+                                                 work_order_code=wo2.code))
+    with pytest.raises(BusinessRuleError) as exc:
+        svc.pass_operation(OperationPassInput(work_station_id=ws2[1].id, sn=r_a.sn))
+    assert "老件" in str(exc.value)
+
