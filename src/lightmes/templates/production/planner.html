@@ -14,6 +14,7 @@
     <a href="/production/planner?week={{ next_week }}" class="planner-nav-btn">▶</a>
     <a href="/production/planner/daily?date={{ week_start.isoformat() }}" class="planner-view-btn">日视图</a>
     <a href="/production/shifts" class="planner-view-btn">班次</a>
+    <button id="planner-changes-btn" type="button" class="planner-view-btn">最近变更</button>
   </div>
   <div class="planner-body">
     <aside class="planner-backlog">
@@ -53,5 +54,9 @@
     </div>
   </div>
 </div>
+<aside class="planner-changes" id="planner-changes-panel" style="display:none">
+  <div class="planner-changes__title">最近变更 <button onclick="document.getElementById('planner-changes-panel').style.display='none'">×</button></div>
+  <div id="planner-changes-list" class="planner-changes__list">加载中...</div>
+</aside>
 <script src="/static/js/planner.js"></script>
 {% endblock %}

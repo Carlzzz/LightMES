@@ -189,3 +189,45 @@ def test_unschedule_endpoint_success(client, db_session):
     assert resp.status_code in (200, 303)
     db_session.refresh(wo)
     assert wo.planned_start is None
+
+
+# ---- Task 9: recent changes drawer + undo API ----
+
+def test_changes_list_returns_json(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="CH1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    db_session.flush()
+    client.post(f"/production/planner/work-orders/{wo.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T08:00:00",
+        "planned_end": "2026-08-11T16:00:00",
+    })
+    resp = client.get("/production/planner/changes")
+    assert resp.status_code == 200
+    import json
+    data = resp.json()
+    assert "changes" in data
+    assert any(c["work_order_id"] == wo.id for c in data["changes"])
+
+
+def test_undo_endpoint_restores_state(client, db_session):
+    _login_admin(client, db_session)
+    p, line, r, rule = _env(db_session)
+    wo = ProductionService(db_session).create_work_order(WorkOrderCreate(
+        code="UE1", product_id=p.id, routing_id=r.id, line_id=line.id,
+        qty=10, sn_rule_id=rule.id))
+    db_session.flush()
+    client.post(f"/production/planner/work-orders/{wo.id}/schedule", data={
+        "line_id": str(line.id),
+        "planned_start": "2026-08-11T08:00:00",
+        "planned_end": "2026-08-11T16:00:00",
+    })
+    changes = client.get("/production/planner/changes").json()["changes"]
+    log_id = changes[0]["id"]
+    resp = client.post(f"/production/planner/changes/{log_id}/undo")
+    assert resp.status_code in (200, 303)
+    db_session.refresh(wo)
+    assert wo.planned_start is None

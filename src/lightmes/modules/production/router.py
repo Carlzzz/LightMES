@@ -782,3 +782,51 @@ def planner_unschedule(
     except NotFoundError as e:
         return HTMLResponse(str(e), status_code=404)
     return RedirectResponse(url="/production/planner", status_code=303)
+
+
+# ---- Task 9: Recent changes list + undo API ----
+
+@router.get("/production/planner/changes")
+def planner_changes_list(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return JSONResponse({"error": "请先登录"}, status_code=401)
+    from lightmes.modules.production.planner_service import PlannerService
+    changes = PlannerService(db).list_recent_changes(limit=50)
+    return JSONResponse({"changes": [
+        {
+            "id": c.id,
+            "work_order_id": c.work_order_id,
+            "action": c.action,
+            "before": c.before,
+            "after": c.after,
+            "user_id": c.user_id,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "undone_at": c.undone_at.isoformat() if c.undone_at else None,
+        }
+        for c in changes
+    ]})
+
+
+@router.post("/production/planner/changes/{log_id}/undo")
+def planner_change_undo(
+    request: Request,
+    log_id: int,
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    if not _can_skip(user):
+        return HTMLResponse("权限不足（需 supervisor/admin）", status_code=403)
+    from lightmes.modules.production.planner_service import PlannerService
+    from lightmes.shared.errors import BusinessRuleError, ConflictError, NotFoundError
+    try:
+        PlannerService(db).undo_change(log_id, user_id=user.id)
+        db.commit()
+    except (NotFoundError, BusinessRuleError, ConflictError) as e:
+        return HTMLResponse(str(e), status_code=400)
+    return RedirectResponse(url="/production/planner", status_code=303)

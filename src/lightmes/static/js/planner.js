@@ -166,3 +166,48 @@
     });
   });
 })();
+
+// ===== Recent changes drawer =====
+(function () {
+  var btn = document.getElementById('planner-changes-btn');
+  var panel = document.getElementById('planner-changes-panel');
+  var list = document.getElementById('planner-changes-list');
+  if (!btn || !panel || !list) return;
+
+  function load() {
+    fetch('/production/planner/changes').then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.changes || !data.changes.length) {
+        list.innerHTML = '<div style="color:#6b7280;padding:8px">暂无变更</div>';
+        return;
+      }
+      list.innerHTML = data.changes.map(function (c) {
+        var undone = c.undone_at ? 'planner-changes__item--undone' : '';
+        var undoBtn = c.undone_at ? '' : '<button class="planner-changes__undo-btn" onclick="undoChange(' + c.id + ')">Undo</button>';
+        var time = c.created_at ? new Date(c.created_at).toLocaleString('zh-CN') : '';
+        return '<div class="planner-changes__item ' + undone + '">'
+          + '<div><strong>#' + c.work_order_id + '</strong> ' + c.action + ' · ' + time + '</div>'
+          + '<div style="color:#6b7280">' + (c.before ? JSON.stringify(c.before) : 'null') + ' → ' + (c.after ? JSON.stringify(c.after) : 'null') + '</div>'
+          + undoBtn
+          + '</div>';
+      }).join('');
+    }).catch(function (e) {
+      list.innerHTML = '<div style="color:#dc2626">加载失败: ' + e + '</div>';
+    });
+  }
+
+  window.undoChange = function (logId) {
+    if (!confirm('确认 undo 此变更？')) return;
+    fetch('/production/planner/changes/' + logId + '/undo', { method: 'POST' })
+      .then(function (r) {
+        if (r.ok) window.location.reload();
+        else return r.text().then(function (t) {
+          if (window.showErrorModal) window.showErrorModal(t || 'undo 失败'); else alert(t || 'undo 失败');
+        });
+      });
+  };
+
+  btn.addEventListener('click', function () {
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    if (panel.style.display === 'flex') load();
+  });
+})();
