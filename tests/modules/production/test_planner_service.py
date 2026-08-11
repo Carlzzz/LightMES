@@ -147,3 +147,79 @@ def test_unschedule_clears_planned_times(db_session):
 def test_unschedule_unknown_raises(db_session):
     with pytest.raises(NotFoundError):
         PlannerService(db_session).unschedule(99999, user_id=None)
+
+
+def test_list_recent_changes_returns_latest(db_session):
+    p, lines, r, rule = _env(db_session)
+    wo = _mk_wo(db_session, lines[0], p, r, rule, code="LC1")
+    svc = PlannerService(db_session)
+    svc.schedule(wo.id, lines[0].id,
+                 datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 16, 0),
+                 user_id=None)
+    changes = svc.list_recent_changes(limit=10)
+    assert len(changes) >= 1
+    assert changes[0].action == "schedule"
+    assert changes[0].work_order_id == wo.id
+
+
+def test_undo_change_restores_before_state(db_session):
+    p, lines, r, rule = _env(db_session)
+    wo = _mk_wo(db_session, lines[0], p, r, rule, code="UN1")
+    svc = PlannerService(db_session)
+    svc.schedule(wo.id, lines[0].id,
+                 datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 16, 0),
+                 user_id=None)
+    db_session.flush()
+    changes = svc.list_recent_changes(limit=1)
+    log_id = changes[0].id
+    svc.undo_change(log_id, user_id=None)
+    db_session.refresh(wo)
+    assert wo.planned_start is None  # before 状态是未排程
+    assert wo.planned_end is None
+
+
+def test_undo_change_blocks_when_before_window_taken(db_session):
+    """undo 时若 before 时间窗已被其他 WO 占用 → ConflictError。"""
+    from datetime import datetime
+    from lightmes.shared.errors import ConflictError
+    p, lines, r, rule = _env(db_session)
+    # wo1 排到 8-12
+    wo1 = _mk_wo(db_session, lines[0], p, r, rule, code="UB1")
+    PlannerService(db_session).schedule(
+        wo1.id, lines[0].id,
+        datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 12, 0),
+        user_id=None)
+    log1 = PlannerService(db_session).list_recent_changes(limit=1)[0]
+    # wo2 排到 8-12（force）— 占用 8-12
+    wo2 = _mk_wo(db_session, lines[0], p, r, rule, code="UB2")
+    PlannerService(db_session).schedule(
+        wo2.id, lines[0].id,
+        datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 12, 0),
+        user_id=None, force=True)
+    # wo1 移到 13-17（before=8-12）。再排 wo3 到 8-12（force）
+    wo3 = _mk_wo(db_session, lines[0], p, r, rule, code="UB3")
+    PlannerService(db_session).schedule(
+        wo3.id, lines[0].id,
+        datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 12, 0),
+        user_id=None, force=True)
+    PlannerService(db_session).schedule(
+        wo1.id, lines[0].id,
+        datetime(2026, 8, 11, 13, 0), datetime(2026, 8, 11, 17, 0),
+        user_id=None)
+    # 现在 undo wo1 的最后一次 schedule：before 是 8-12，已被 wo3 占用 → 冲突
+    last_log = PlannerService(db_session).list_recent_changes(limit=1)[0]
+    with pytest.raises(ConflictError):
+        PlannerService(db_session).undo_change(last_log.id, user_id=None)
+
+
+def test_undo_already_undone_raises(db_session):
+    p, lines, r, rule = _env(db_session)
+    wo = _mk_wo(db_session, lines[0], p, r, rule, code="UD1")
+    svc = PlannerService(db_session)
+    svc.schedule(wo.id, lines[0].id,
+                 datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 16, 0),
+                 user_id=None)
+    log_id = svc.list_recent_changes(limit=1)[0].id
+    svc.undo_change(log_id, user_id=None)
+    with pytest.raises(BusinessRuleError):
+        svc.undo_change(log_id, user_id=None)  # 重复 undo

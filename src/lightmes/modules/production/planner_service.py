@@ -122,3 +122,54 @@ class PlannerService:
             before=before, after=after,
         ))
         self.db.flush()
+
+    def list_recent_changes(self, limit: int = 50) -> list[ScheduleChangeLog]:
+        """返回最近的排程变更日志（最新优先）。"""
+        return list(self.db.execute(
+            select(ScheduleChangeLog).order_by(
+                ScheduleChangeLog.id.desc()
+            ).limit(limit)
+        ).scalars().all())
+
+    def undo_change(self, log_id: int, user_id: int | None) -> ScheduleChangeLog:
+        """撤销一条排程变更：把 log.before 写回工单，并写一条 action=undo 的新日志。"""
+        log = self.db.get(ScheduleChangeLog, log_id)
+        if log is None:
+            raise NotFoundError(f"变更日志不存在: {log_id}")
+        if log.undone_at is not None:
+            raise BusinessRuleError(f"该变更已撤销: {log_id}")
+        wo = self.db.get(WorkOrder, log.work_order_id)
+        if wo is None:
+            raise NotFoundError(f"工单不存在: {log.work_order_id}")
+        before = log.before or {}
+        current = self._snapshot(wo)
+        new_line_id = before.get("line_id")
+        new_start = self._parse_iso(before.get("planned_start"))
+        new_end = self._parse_iso(before.get("planned_end"))
+        # 若 before 含时间窗，校验是否与（除自身外的）其他工单冲突
+        if new_line_id is not None and new_start is not None and new_end is not None:
+            conflict = self.detect_conflict(
+                new_line_id, new_start, new_end, exclude_wo_id=wo.id)
+            if conflict is not None:
+                raise ConflictError(
+                    f"撤销失败：原时段 {new_start.isoformat()} ~ {new_end.isoformat()} "
+                    f"已被工单 {conflict.code} 占用")
+        wo.line_id = new_line_id
+        wo.planned_start = new_start
+        wo.planned_end = new_end
+        self.db.flush()
+        # 标记原日志为已撤销，并写一条 action=undo 的新日志
+        log.undone_at = datetime.now()
+        after = self._snapshot(wo)
+        new_log = ScheduleChangeLog(
+            work_order_id=wo.id, user_id=user_id, action="undo",
+            before=current, after=after, undone_from_log_id=log.id)
+        self.db.add(new_log)
+        self.db.flush()
+        return new_log
+
+    @staticmethod
+    def _parse_iso(s: str | None) -> datetime | None:
+        if s is None:
+            return None
+        return datetime.fromisoformat(s)
