@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -36,6 +36,7 @@ class WorkOrder(Base, TimestampMixin):
     produced_qty: Mapped[int] = mapped_column(default=0)
     planned_start: Mapped[datetime | None] = mapped_column(default=None)
     planned_end: Mapped[datetime | None] = mapped_column(default=None)
+    priority: Mapped[int] = mapped_column(default=5)
 
 
 class SerialUnit(Base, TimestampMixin):
@@ -337,3 +338,37 @@ class DefectRecord(Base, TimestampMixin):
         DateTime(timezone=True), default=None)
     handling_remark: Mapped[str | None] = mapped_column(default=None)
     remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class Shift(Base, TimestampMixin):
+    __tablename__ = "shifts"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_shift_code"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column()
+    name: Mapped[str] = mapped_column()
+    start_time: Mapped[str] = mapped_column()  # "HH:MM"
+    end_time: Mapped[str] = mapped_column()    # "HH:MM"（end < start 表示跨夜）
+    days_of_week: Mapped[list | None] = mapped_column(JSON, default=None)
+    line_id: Mapped[int | None] = mapped_column(
+        ForeignKey("lines.id"), default=None)  # NULL = 全局班次
+    is_active: Mapped[bool] = mapped_column(default=True)
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+
+class ScheduleChangeLog(Base, TimestampMixin):
+    __tablename__ = "schedule_change_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    work_order_id: Mapped[int] = mapped_column(
+        ForeignKey("work_orders.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), default=None)
+    action: Mapped[str] = mapped_column()  # schedule / unschedule / move / undo
+    before: Mapped[dict | None] = mapped_column(JSON, default=None)
+    after: Mapped[dict | None] = mapped_column(JSON, default=None)
+    undone_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None)
+    undone_from_log_id: Mapped[int | None] = mapped_column(default=None)
