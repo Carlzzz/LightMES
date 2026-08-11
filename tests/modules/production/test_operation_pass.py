@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import select
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
     ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
@@ -173,4 +174,35 @@ def test_final_op_cumulative_check_still_blocks_missing(db_session):
     with pytest.raises(BusinessRuleError) as exc:
         svc.pass_operation(OperationPassInput(work_station_id=ws2[1].id, sn=r_a.sn))
     assert "老件" in str(exc.value)
+
+
+def test_station_service_filters_components_to_current_op(db_session):
+    """station_view 只显示 consume_at_operation_seq IS NULL OR == 当前 op 的件。"""
+    from lightmes.modules.masterdata.models import Bom, BomItem
+    from lightmes.modules.production.station_service import StationService
+
+    p, line, ws, wo, c_op2, c_op3 = _line_with_op_bom(db_session, n_ops=3)
+    # 加一个 NULL seq 的件到同一 active BOM（第二份 BOM 会被 create_bom 标记为 inactive）
+    md = MasterDataService(db_session)
+    c_null = md.create_product(ProductCreate(code="CNUL", name="老件",
+                                             type="component", track_mode="serial"))
+    bom = db_session.execute(
+        select(Bom).where(Bom.product_id == p.id, Bom.status == "active")
+    ).scalar_one()
+    db_session.add(BomItem(
+        bom_id=bom.id, component_product_id=c_null.id, qty=1,
+        track_mode="serial", consume_at_operation_seq=None))
+    db_session.flush()
+
+    svc = OperationPassService(db_session)
+    r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
+                                                work_order_code="PXWO"))
+
+    # 进入 op2，应看到 c_op2 + c_null，不应看到 c_op3
+    view = StationService(db_session).load(
+        scan=r1.sn, work_station_id=ws[1].id, operator_id=None)
+    comp_ids = {c.component_product_id for c in view.components}
+    assert c_op2.id in comp_ids
+    assert c_null.id in comp_ids
+    assert c_op3.id not in comp_ids
 

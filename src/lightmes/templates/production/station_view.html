@@ -191,7 +191,13 @@
         {% endif %}
 
         <div class="card">
-          <div class="card__title">当前工序物料追溯 <span class="badge">BOM 匹配</span></div>
+          <div class="card__title">
+            当前工序物料追溯
+            <span class="badge">BOM 匹配</span>
+            <span style="font-size:12px;color:#666;margin-left:8px;">
+              仅显示本工序（seq={{ view.current_op.seq }}）应装件 + 累积件；其余件按工序提示装配
+            </span>
+          </div>
           {% if view.components %}
           <div class="data-table-wrap">
           <table class="data-table" id="component-table">
