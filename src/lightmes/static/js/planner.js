@@ -19,10 +19,6 @@
       e.dataTransfer.effectAllowed = 'move';
       e.stopPropagation();
     });
-    card.addEventListener('click', function () {
-      // 点击卡 → 弹详情浮层（简化：alert + 跳编辑页）
-      window.location.href = '/production/planner/work-orders/' + card.dataset.woId + '/edit';
-    });
   });
 
   document.querySelectorAll('.planner-cell').forEach(function (cell) {
@@ -200,8 +196,9 @@
     fetch('/production/planner/changes/' + logId + '/undo', { method: 'POST' })
       .then(function (r) {
         if (r.ok) window.location.reload();
-        else return r.text().then(function (t) {
-          if (window.showErrorModal) window.showErrorModal(t || 'undo 失败'); else alert(t || 'undo 失败');
+        else return r.json().catch(function () { return { error: 'undo 失败' }; }).then(function (d) {
+          var msg = (d && d.error) || 'undo 失败';
+          if (window.showErrorModal) window.showErrorModal(msg); else alert(msg);
         });
       });
   };

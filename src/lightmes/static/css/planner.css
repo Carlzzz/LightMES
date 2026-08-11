@@ -224,8 +224,9 @@
   min-width: 30px;
   user-select: none;
 }
-.planner-gantt__block--done { background: var(--p-done); }
-.planner-gantt__block--overdue { background: var(--p-overdue); }
+.planner-gantt__block--in-progress { background: var(--p-progress); color: var(--p-progress-t); }
+.planner-gantt__block--done { background: var(--p-done); color: white; }
+.planner-gantt__block--overdue { background: var(--p-overdue); color: white; }
 .planner-gantt__block--pending { background: var(--p-pending); color: var(--p-pending-t); }
 .planner-gantt__block-label {
   flex: 1;

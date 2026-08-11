@@ -828,5 +828,5 @@ def planner_change_undo(
         PlannerService(db).undo_change(log_id, user_id=user.id)
         db.commit()
     except (NotFoundError, BusinessRuleError, ConflictError) as e:
-        return HTMLResponse(str(e), status_code=400)
+        return JSONResponse({"error": str(e)}, status_code=400)
     return RedirectResponse(url="/production/planner", status_code=303)
