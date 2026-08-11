@@ -140,3 +140,136 @@ def test_bind_with_operation_record_id(db_session):
     assert len(binds) == 1
     b = binds[0]
     assert b.operation_record_id == rec.id
+
+
+def test_bind_blocks_when_component_belongs_to_later_op(db_session):
+    """扫的件 BOM 行声明 consume_at_operation_seq=3，但当前 op_seq=2 → 拦截。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, BomCreate, BomItemCreate,
+    )
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="BLOPF", name="成品", type="finished"))
+    c_late = md.create_product(
+        ProductCreate(code="BLC1", name="后装件", type="component", track_mode="serial"))
+    md.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c_late.id, qty=1,
+                      consume_at_operation_seq=3),
+    ]))
+    line = md.create_line(LineCreate(code="BLL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="BLW", name="站", line_id=line.id, seq=1))
+    r = md.create_routing(RoutingCreate(
+        code="BLR", name="路线", product_id=fin.id,
+        operations=[OperationCreate(seq=i, code=f"OP{i}", name=f"工序{i}",
+                                    default_work_station_id=w.id,
+                                    allowed_work_station_ids=[w.id])
+                    for i in range(1, 4)]))
+    wo = ProductionService(db_session).create_work_order(
+        WorkOrderCreate(code="BLWO", product_id=fin.id, routing_id=r.id,
+                        line_id=line.id, qty=10))
+    su = SerialUnitRepository(db_session).add(
+        SerialUnit(sn="BL1", work_order_id=wo.id, product_id=fin.id))
+
+    svc = GenealogyService(db_session)
+    with pytest.raises(BusinessRuleError) as exc:
+        svc.bind_components(su, [
+            ComponentBind(component_product_id=c_late.id, component_sn="X-1"),
+        ], operator_id=None, current_op_seq=2)
+    assert "工序 3" in str(exc.value)
+
+
+def test_bind_blocks_when_component_belongs_to_earlier_op(db_session):
+    """扫的件 BOM 行声明 consume_at_operation_seq=1，但当前 op_seq=3 → 拦截（防回补）。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, BomCreate, BomItemCreate,
+    )
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="BLOEF", name="成品", type="finished"))
+    c_early = md.create_product(
+        ProductCreate(code="BEC1", name="早装件", type="component", track_mode="serial"))
+    md.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c_early.id, qty=1,
+                      consume_at_operation_seq=1),
+    ]))
+    line = md.create_line(LineCreate(code="BEL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="BEW", name="站", line_id=line.id, seq=1))
+    r = md.create_routing(RoutingCreate(
+        code="BER", name="路线", product_id=fin.id,
+        operations=[OperationCreate(seq=i, code=f"OP{i}", name=f"工序{i}",
+                                    default_work_station_id=w.id,
+                                    allowed_work_station_ids=[w.id])
+                    for i in range(1, 4)]))
+    wo = ProductionService(db_session).create_work_order(
+        WorkOrderCreate(code="BEWO", product_id=fin.id, routing_id=r.id,
+                        line_id=line.id, qty=10))
+    su = SerialUnitRepository(db_session).add(
+        SerialUnit(sn="BE1", work_order_id=wo.id, product_id=fin.id))
+
+    svc = GenealogyService(db_session)
+    with pytest.raises(BusinessRuleError):
+        svc.bind_components(su, [
+            ComponentBind(component_product_id=c_early.id, component_sn="Y-1"),
+        ], operator_id=None, current_op_seq=3)
+
+
+def test_bind_allows_when_consume_op_matches_current_op(db_session):
+    """扫的件 BOM 行声明 consume_at_operation_seq=2，当前 op_seq=2 → 通过。"""
+    from lightmes.modules.masterdata.service import MasterDataService
+    from lightmes.modules.masterdata.schemas import (
+        ProductCreate, BomCreate, BomItemCreate,
+    )
+    md = MasterDataService(db_session)
+    fin = md.create_product(ProductCreate(code="BLOKF", name="成品", type="finished"))
+    c_match = md.create_product(
+        ProductCreate(code="BKC1", name="匹配件", type="component", track_mode="serial"))
+    md.create_bom(BomCreate(product_id=fin.id, items=[
+        BomItemCreate(component_product_id=c_match.id, qty=1,
+                      consume_at_operation_seq=2),
+    ]))
+    line = md.create_line(LineCreate(code="BKL", name="线"))
+    w = md.create_work_station(WorkStationCreate(
+        code="BKW", name="站", line_id=line.id, seq=1))
+    r = md.create_routing(RoutingCreate(
+        code="BKR", name="路线", product_id=fin.id,
+        operations=[OperationCreate(seq=i, code=f"OP{i}", name=f"工序{i}",
+                                    default_work_station_id=w.id,
+                                    allowed_work_station_ids=[w.id])
+                    for i in range(1, 4)]))
+    wo = ProductionService(db_session).create_work_order(
+        WorkOrderCreate(code="BKWO", product_id=fin.id, routing_id=r.id,
+                        line_id=line.id, qty=10))
+    su = SerialUnitRepository(db_session).add(
+        SerialUnit(sn="BK1", work_order_id=wo.id, product_id=fin.id))
+
+    svc = GenealogyService(db_session)
+    binds = svc.bind_components(su, [
+        ComponentBind(component_product_id=c_match.id, component_sn="Z-1"),
+    ], operator_id=None, current_op_seq=2)
+    assert len(binds) == 1
+
+
+def test_bind_allows_when_consume_op_is_null(db_session):
+    """扫的件 BOM 行 consume_at_operation_seq = NULL（老数据）→ 任何 op 都放行。"""
+    # 使用文件顶部的 _setup()：c_ser 的 BOM 行没有 consume_at_operation_seq
+    fin, c_ser, c_bat, other, make_su, _ctx = _setup(db_session)
+    su = make_su("NULL1")
+    svc = GenealogyService(db_session)
+    # current_op_seq=99 仍应通过（NULL 兼容）
+    binds = svc.bind_components(su, [
+        ComponentBind(component_product_id=c_ser.id, component_sn="N-1"),
+    ], operator_id=None, current_op_seq=99)
+    assert len(binds) == 1
+
+
+def test_bind_skips_op_check_when_current_op_seq_none(db_session):
+    """current_op_seq = None（向后兼容现有调用方）→ 跳过扫错件校验。"""
+    fin, c_ser, c_bat, other, make_su, _ctx = _setup(db_session)
+    su = make_su("NONE1")
+    svc = GenealogyService(db_session)
+    binds = svc.bind_components(su, [
+        ComponentBind(component_product_id=c_ser.id, component_sn="M-1"),
+    ], operator_id=None, current_op_seq=None)
+    assert len(binds) == 1

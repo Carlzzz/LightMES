@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}BOM 详情 #{{ bom.id }}{% endblock %}
+{% block content %}
+<h1 class="page-title">BOM 详情 <small>#{{ bom.id }}</small></h1>
+<div class="card">
+  <div class="card__title">
+    {{ bom.product_code }} {{ bom.product_name }} — 版本 {{ bom.version }}
+    <span class="badge">{{ bom.status }}</span>
+    {% if bom.source == "erp" %}<span class="badge">ERP</span>{% else %}<span class="badge">本地</span>{% endif %}
+  </div>
+  <table class="data-table" id="bom-items-table">
+    <thead><tr><th>组件</th><th>track_mode</th><th>qty</th><th>消耗工序</th><th></th></tr></thead>
+    <tbody>
+      {% for item in bom['items'] %}
+      <tr data-item-id="{{ item.id }}">
+        <td>{{ item.component_code }} {{ item.component_name }}</td>
+        <td>{{ item.track_mode }}</td>
+        <td>{{ item.qty }}</td>
+        <td>
+          <select name="consume_at_operation_seq"
+                  onchange="updateConsumeOp({{ item.id }}, this.value)">
+            <option value="">仅最终校验（老行为）</option>
+            {% for op in operations %}
+            <option value="{{ op.seq }}"
+                    {% if item.consume_at_operation_seq == op.seq %}selected{% endif %}>
+              工序 {{ op.seq }} — {{ op.code }} {{ op.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </td>
+        <td><span class="badge update-status" style="display:none"></span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p><a href="/masterdata/boms">返回 BOM 列表</a></p>
+<script>
+function updateConsumeOp(itemId, seqStr) {
+  var seq = seqStr ? parseInt(seqStr, 10) : null;
+  var row = document.querySelector('tr[data-item-id="' + itemId + '"]');
+  var status = row.querySelector('.update-status');
+  status.style.display = 'inline-block';
+  status.textContent = '保存中...';
+  fetch('/api/masterdata/bom-items/' + itemId + '/consume-op', {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({consume_at_operation_seq: seq}),
+  }).then(function(r) {
+    if (r.ok) {
+      status.textContent = '已保存';
+      setTimeout(function() { status.style.display = 'none'; }, 1500);
+    } else {
+      return r.json().then(function(d) {
+        status.textContent = '失败：' + (d.detail || r.status);
+        alert('更新失败：' + (d.detail || r.status) + '\n请刷新页面');
+      });
+    }
+  }).catch(function(e) {
+    status.textContent = '网络错误';
+    alert('网络错误：' + e);
+  });
+}
+</script>
+{% endblock %}

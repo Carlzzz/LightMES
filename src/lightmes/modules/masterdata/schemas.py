@@ -83,6 +83,7 @@ class RoutingRead(BaseModel):
 class BomItemCreate(BaseModel):
     component_product_id: int
     qty: float = 1
+    consume_at_operation_seq: int | None = None
 
 
 class BomCreate(BaseModel):
@@ -94,6 +95,7 @@ class BomCreate(BaseModel):
 class BomItemUpsert(BaseModel):
     component_code: str
     qty: float = 1
+    consume_at_operation_seq: int | None = None
 
 
 class BomUpsert(BaseModel):
@@ -108,6 +110,7 @@ class BomItemRead(BaseModel):
     component_product_id: int
     qty: float
     track_mode: str
+    consume_at_operation_seq: int | None
 
 
 class BomRead(BaseModel):

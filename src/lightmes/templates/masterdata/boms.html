@@ -8,7 +8,7 @@
     <thead><tr><th>ID</th><th>成品</th><th>版本</th><th>状态</th><th>来源</th></tr></thead>
     <tbody>
       {% for b in boms %}
-      <tr><td>{{ b.id }}</td>
+      <tr><td><a href="/masterdata/boms/{{ b.id }}">#{{ b.id }}</a></td>
       <td>{% set p = product_map.get(b.product_id) %}{{ p.code if p else b.product_id }} {{ p.name if p else '' }}</td>
       <td>{{ b.version }}</td><td>{{ b.status }}</td>
       <td>{% if b.source=="erp" %}<span class="badge">ERP</span>{% else %}<span class="badge">本地</span>{% endif %}</td></tr>

@@ -46,6 +46,19 @@ class MasterDataQueryService:
             return []
         return self._boms.items_of(bom.id)
 
+    def get_bom_items_by_consume_op(
+        self, product_id: int, op_seq: int,
+    ) -> list[BomItem]:
+        """返回 consume_at_operation_seq == op_seq 的 active BOM 行。
+
+        NULL consume_at_operation_seq 不返回（兼容老数据，仅最终工序累积校验参与）。
+        """
+        bom = self._boms.get_active_by_product(product_id)
+        if bom is None:
+            return []
+        return [i for i in self._boms.items_of(bom.id)
+                if i.consume_at_operation_seq == op_seq]
+
     def get_line(self, line_id: int) -> Line | None:
         return self._lines.get(line_id)
 

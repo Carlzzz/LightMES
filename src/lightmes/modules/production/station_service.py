@@ -127,6 +127,10 @@ class StationService:
                 skill_ok = (operator_skill_level is not None
                             and operator_skill_level >= (required_level or 0))
             for item in self.query.get_active_bom_items(product.id):
+                # 只显示本工序应装件 + NULL 兼容件
+                if (item.consume_at_operation_seq is not None
+                        and item.consume_at_operation_seq != expected.seq):
+                    continue
                 comp = self.query.get_product(item.component_product_id)
                 components.append(StationComponentView(
                     component_product_id=item.component_product_id,

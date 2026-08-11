@@ -84,6 +84,7 @@ class BomItem(Base, TimestampMixin):
     component_product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     qty: Mapped[float] = mapped_column(Numeric(12, 3), default=1)
     track_mode: Mapped[str] = mapped_column()  # denormalized from component product
+    consume_at_operation_seq: Mapped[int | None] = mapped_column(default=None)
 
 
 class Line(Base, TimestampMixin):

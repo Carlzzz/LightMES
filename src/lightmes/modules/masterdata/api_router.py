@@ -1,11 +1,13 @@
 """Masterdata JSON API routes: /api/masterdata/*"""
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import require_role
 from lightmes.modules.auth.models import User
-from lightmes.modules.masterdata.models import Operation
+from lightmes.modules.masterdata.models import Bom, BomItem, Operation, Routing
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.masterdata.schemas import (
     BomCreate, BomItemRead, BomRead,
@@ -16,6 +18,10 @@ from lightmes.modules.masterdata.schemas import (
 from lightmes.modules.masterdata.service import MasterDataService
 
 router = APIRouter(prefix="/api/masterdata", tags=["masterdata-api"])
+
+
+class BomItemConsumeOpUpdate(BaseModel):
+    consume_at_operation_seq: int | None
 
 
 def _operation_read(db: Session, op: Operation) -> OperationRead:
@@ -132,3 +138,42 @@ def get_bom(bom_id: int, db: Session = Depends(get_db)) -> BomRead:
         source=bom.source, erp_ref=bom.erp_ref, synced_at=bom.synced_at,
         items=[BomItemRead.model_validate(i) for i in items],
     )
+
+
+@router.patch("/bom-items/{item_id}/consume-op")
+def update_bom_item_consume_op(
+    item_id: int,
+    data: BomItemConsumeOpUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> dict:
+    """更新单行 BOM 的 consume_at_operation_seq（仅 admin/supervisor）。
+
+    若该 BOM 的 Product 有 active Routing，seq 必须属于该 Routing 的某个 op。
+    """
+    item = db.get(BomItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"BOM 行不存在: {item_id}")
+    if data.consume_at_operation_seq is not None:
+        bom = db.get(Bom, item.bom_id)
+        routing = db.execute(
+            select(Routing).where(
+                Routing.product_id == bom.product_id,
+                Routing.status == "active",
+            )
+        ).scalar_one_or_none()
+        if routing is None:
+            raise HTTPException(
+                status_code=400, detail="该成品无 active Routing，无法指定消耗工序")
+        valid_seqs = {op.seq for op in db.execute(
+            select(Operation).where(Operation.routing_id == routing.id)
+        ).scalars().all()}
+        if data.consume_at_operation_seq not in valid_seqs:
+            raise HTTPException(
+                status_code=400,
+                detail=f"工序 seq {data.consume_at_operation_seq} 不属于该成品 active Routing")
+    item.consume_at_operation_seq = data.consume_at_operation_seq
+    db.flush()
+    db.commit()
+    return {"ok": True, "item_id": item_id,
+            "consume_at_operation_seq": item.consume_at_operation_seq}

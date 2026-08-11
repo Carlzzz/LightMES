@@ -134,8 +134,51 @@ class OperationPassService:
                         f"首检不合格，SN 已隔离，缺陷记录 #{defect.id}。"
                         f"请前往 /quality/defects/{defect.id} 处理。")
 
-        # 5d. 物料绑定必扫校验（仅最终工序检查累积绑定）：仅在最终工序强制校验
-        #      检查累积已绑（之前工序扫的）+ 本次扫的 = BOM 需求
+        # 5d. 物料绑定校验
+        # 5d-① 即时校验：本工序应装的件（consume_at_operation_seq == expected.seq）
+        op_bom_items = self.query.get_bom_items_by_consume_op(
+            wo.product_id, expected.seq)
+        if op_bom_items:
+            # 若本次扫的件存在不属于本工序的（带 consume_at_operation_seq 声明），
+            # 让 bind_components 抛更具体的"工序 N"扫错件错误，跳过本层即时校验
+            all_bom_by_comp = {
+                i.component_product_id: i
+                for i in self.query.get_active_bom_items(wo.product_id)}
+            wrong_op_scanned = any(
+                (all_bom_by_comp.get(c.component_product_id)
+                 and all_bom_by_comp[c.component_product_id].consume_at_operation_seq
+                    is not None
+                 and all_bom_by_comp[c.component_product_id].consume_at_operation_seq
+                    != expected.seq)
+                for c in data.components
+            )
+            if not wrong_op_scanned:
+                from collections import Counter
+                from lightmes.modules.trace.repository import GenealogyBindRepository
+                existing_binds = GenealogyBindRepository(self.db).list_active_by_parent(su.id)
+                provided_counts: Counter[int] = Counter()
+                for b in existing_binds:
+                    provided_counts[b.component_product_id] += 1
+                for c in data.components:
+                    provided_counts[c.component_product_id] += 1
+                missing = []
+                for item in op_bom_items:
+                    if item.track_mode == "none":
+                        continue
+                    comp = self.query.get_product(item.component_product_id)
+                    comp_name = comp.name if comp else f"#{item.component_product_id}"
+                    provided = provided_counts.get(item.component_product_id, 0)
+                    required = int(item.qty) if item.track_mode == "serial" else 1
+                    if provided == 0:
+                        missing.append(f"{comp_name}（{item.track_mode}）")
+                    elif item.track_mode == "serial" and provided < required:
+                        missing.append(
+                            f"{comp_name}（serial，需 {required} 件，已绑 {provided} 件）")
+                if missing:
+                    raise BusinessRuleError(
+                        f"物料绑定不完整，不可过站：{', '.join(missing)}")
+
+        # 5d-③ 最终工序累积兜底（保留现有逻辑）
         bom_items = self.query.get_active_bom_items(wo.product_id)
         is_last_op = False
         if bom_items:
@@ -201,6 +244,7 @@ class OperationPassService:
                     ) for c in data.components],
                     operator_id=data.operator_id,
                     operation_record_id=record.id,
+                    current_op_seq=expected.seq,
                 )
             except Exception:
                 self.db.rollback()
