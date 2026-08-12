@@ -30,3 +30,36 @@ class ApiKeyCreatedResponse(BaseModel):
     scopes: list[str]
     full_key: str  # 仅此一次
     created_at: datetime
+
+
+class WorkOrderReadV1(BaseModel):
+    """WorkOrder for API v1 — no internal fields like process_snapshot."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    product_id: int
+    routing_id: int
+    line_id: int
+    sn_rule_id: int | None
+    qty: int
+    status: str
+    source: str
+    produced_qty: int
+    planned_start: datetime | None
+    planned_end: datetime | None
+    priority: int
+    created_at: datetime
+
+
+class WorkOrderCreateV1(BaseModel):
+    code: str = Field(..., min_length=1, max_length=64, examples=["WO-2026-001"])
+    product_id: int
+    routing_id: int
+    line_id: int
+    sn_rule_id: int | None = None
+    qty: int = Field(..., gt=0)
+    priority: int = Field(default=5, ge=1, le=9)
+
+
+class WorkOrderPriorityPatch(BaseModel):
+    priority: int = Field(..., ge=1, le=9)
