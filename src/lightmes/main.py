@@ -13,6 +13,7 @@ from lightmes.modules import (
     agent_gateway,
     api_v1,
     auth,
+    connectivity,
     integration,
     masterdata,
     production,
@@ -60,6 +61,7 @@ production.register(app)
 trace.register(app)
 integration.register(app)
 quality.register(app)
+connectivity.register(app)
 api_v1.register(app)
 agent_gateway.register(app)
 
