@@ -77,3 +77,24 @@ class SerialUnitReadV1(BaseModel):
     is_counted: bool
     carrier_code: str | None
     created_at: datetime
+
+
+class DefectReadV1(BaseModel):
+    """Defect for API v1."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    defect_type_code: str
+    defect_type_name: str
+    severity: str
+    serial_unit_id: int
+    work_order_id: int
+    operation_id: int | None
+    work_station_id: int | None
+    position: str | None
+    handling_status: str  # pending / rework / scrap / concession
+    discovered_by: int | None
+    discovered_at: datetime
+    handled_by: int | None
+    handled_at: datetime | None
+    handling_remark: str | None
+    remark: str | None

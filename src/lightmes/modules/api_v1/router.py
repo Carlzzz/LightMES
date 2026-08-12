@@ -7,7 +7,8 @@ from lightmes.modules.api_v1.api_key_service import ApiKeyService
 from lightmes.modules.api_v1.dependencies import require_api_key
 from lightmes.modules.api_v1.schemas import (
     ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyRead,
-    SerialUnitReadV1, WorkOrderCreateV1, WorkOrderPriorityPatch, WorkOrderReadV1,
+    DefectReadV1, SerialUnitReadV1,
+    WorkOrderCreateV1, WorkOrderPriorityPatch, WorkOrderReadV1,
 )
 from lightmes.modules.auth.models import User
 from lightmes.shared.errors import NotFoundError
@@ -219,3 +220,54 @@ def get_serial_unit(
     if su is None:
         raise NotFoundError(f"Serial unit 不存在: {su_id}")
     return SerialUnitReadV1.model_validate(su)
+
+
+# ---- Defects ----
+
+_DEF_TAG = "Defects"
+
+
+@router.get("/defects", response_model=list[DefectReadV1], tags=[_DEF_TAG])
+def list_defects(
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=_LIST_MAX_SIZE),
+    handling_status: list[str] = Query(default=[]),
+    severity: list[str] = Query(default=[]),
+    work_order_id: int | None = Query(default=None),
+    user: User = Depends(require_api_key("read")),
+    db: Session = Depends(get_db),
+) -> list[DefectReadV1]:
+    """列出缺陷记录（分页 + 过滤）。
+
+    通过 `X-Total-Count` / `X-Page` / `X-Size` 响应头返回分页信息。
+    """
+    from sqlalchemy import select, func
+    from lightmes.modules.production.models import DefectRecord
+    q = select(DefectRecord).order_by(DefectRecord.id.desc())
+    if handling_status:
+        q = q.where(DefectRecord.handling_status.in_(handling_status))
+    if severity:
+        q = q.where(DefectRecord.severity.in_(severity))
+    if work_order_id is not None:
+        q = q.where(DefectRecord.work_order_id == work_order_id)
+    total = db.execute(select(func.count()).select_from(q.subquery())).scalar_one()
+    rows = list(db.execute(q.offset((page - 1) * size).limit(size)).scalars().all())
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Page"] = str(page)
+    response.headers["X-Size"] = str(size)
+    return [DefectReadV1.model_validate(r) for r in rows]
+
+
+@router.get("/defects/{defect_id}", response_model=DefectReadV1, tags=[_DEF_TAG])
+def get_defect(
+    defect_id: int,
+    user: User = Depends(require_api_key("read")),
+    db: Session = Depends(get_db),
+) -> DefectReadV1:
+    """按 id 获取缺陷记录。"""
+    from lightmes.modules.production.models import DefectRecord
+    d = db.get(DefectRecord, defect_id)
+    if d is None:
+        raise NotFoundError(f"缺陷不存在: {defect_id}")
+    return DefectReadV1.model_validate(d)
