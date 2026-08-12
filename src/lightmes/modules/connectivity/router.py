@@ -127,7 +127,7 @@ def connection_detail(
     # 组装 all_mappings：dict[topic -> list[TopicMapping]]
     # （Jinja 不能用 ORM 对象做 dict key；改成 list[tuple(topic, mappings)] 形式）
     all_mappings = [
-        (t, svc.list_mappings(t.id)) for t in topics
+        (t, svc.list_mappings(conn_id, t.id)) for t in topics
     ]
     return templates.TemplateResponse(
         request,
@@ -216,7 +216,7 @@ def mapping_add(
     svc = ConnectivityService(db)
     try:
         svc.add_mapping(
-            topic_id=topic_id, action_type=action_type,
+            conn_id=conn_id, topic_id=topic_id, action_type=action_type,
             action_params=action_params or None,
             field_path=field_path or None,
             condition_expr=condition_expr or None,
@@ -241,7 +241,7 @@ def mapping_toggle(
     user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
     svc = ConnectivityService(db)
-    svc.toggle_mapping(topic_id, mid)
+    svc.toggle_mapping(conn_id, topic_id, mid)
     db.commit()
     return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
 
@@ -258,6 +258,6 @@ def mapping_delete(
     user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
     svc = ConnectivityService(db)
-    svc.delete_mapping(topic_id, mid)
+    svc.delete_mapping(conn_id, topic_id, mid)
     db.commit()
     return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)

@@ -3,8 +3,11 @@
 Each action handler is independent: failures are caught and recorded per-mapping.
 Actions commit their own writes; ActionExecutor does not manage transactions.
 """
+import ipaddress
 import json
 import logging
+import socket
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -13,6 +16,40 @@ from sqlalchemy.orm import Session
 from lightmes.modules.connectivity.parser import MqttMessageParser
 
 logger = logging.getLogger(__name__)
+
+
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _validate_webhook_url(url: str) -> None:
+    """Block SSRF targets (private IPs, metadata, link-local)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"webhook URL 必须是 http/https: {url}")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"webhook URL 无效: {url}")
+    try:
+        # Resolve hostname → check IP
+        ips = socket.getaddrinfo(hostname, None)
+        for ip_tuple in ips:
+            ip = ipaddress.ip_address(ip_tuple[4][0])
+            for blocked in _BLOCKED_NETWORKS:
+                if ip in blocked:
+                    raise ValueError(
+                        f"webhook URL 指向内网地址 {ip}（已拦截 SSRF）")
+    except socket.gaierror:
+        pass  # DNS 解析失败 → 让 httpx 报错
 
 
 class ActionExecutor:
@@ -184,6 +221,7 @@ class ActionExecutor:
         method = params.get("method", "POST")
         if not url:
             raise ValueError("缺少 webhook url")
+        _validate_webhook_url(url)
         timeout = float(params.get("timeout", 10.0))
         headers = params.get("headers") or {"Content-Type": "application/json"}
         body = data

@@ -172,3 +172,17 @@ def test_execute_all_multiple(db_session):
     assert len(results) == 2
     assert results[0]["status"] == "ok"       # log_event (priority 100 first)
     assert results[1]["status"] == "error"    # bogus_action
+
+
+def test_webhook_url_validation_blocks_internal():
+    """SSRF: webhook to internal IP → ValueError."""
+    from lightmes.modules.connectivity.action_executor import _validate_webhook_url
+    with pytest.raises(ValueError, match="内网"):
+        _validate_webhook_url("http://127.0.0.1:8000/admin")
+    with pytest.raises(ValueError, match="内网"):
+        _validate_webhook_url("http://169.254.169.254/latest/meta-data/")
+    # Non-http schemes rejected
+    with pytest.raises(ValueError, match="http/https"):
+        _validate_webhook_url("file:///etc/passwd")
+    # Public URL should not raise (example.com resolves to public IPs)
+    _validate_webhook_url("https://example.com/webhook")

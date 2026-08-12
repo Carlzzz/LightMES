@@ -175,6 +175,7 @@ class ConnectivityService:
 
     def add_mapping(
         self,
+        conn_id: int,
         topic_id: int,
         action_type: str,
         action_params: dict | str | None = None,
@@ -184,18 +185,30 @@ class ConnectivityService:
         description: str | None = None,
     ) -> TopicMapping:
         t = self.topics.get(topic_id)
-        if t is None:
-            raise NotFoundError(f"topic 不存在: {topic_id}")
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在或不属于连接 {conn_id}: {topic_id}")
         if action_type not in _VALID_ACTION_TYPES:
             raise ValidationError(
                 f"action_type 必须是 {sorted(_VALID_ACTION_TYPES)} 之一: {action_type}"
             )
+        # Priority bounds
+        if not (1 <= priority <= 1000):
+            raise ValidationError(f"priority 必须在 1-1000 之间: {priority}")
+        # Max lengths
+        if field_path and len(field_path) > 255:
+            raise ValidationError("field_path 太长（最多 255 字符）")
+        if condition_expr and len(condition_expr) > 255:
+            raise ValidationError("condition_expr 太长（最多 255 字符）")
+        if description and len(description) > 255:
+            raise ValidationError("description 太长（最多 255 字符）")
         # action_params 可能是 JSON 字符串（表单）或 dict（API）
         if isinstance(action_params, str):
             s = action_params.strip()
             if not s:
                 action_params = None
             else:
+                if len(s) > 5000:
+                    raise ValidationError("action_params 太长（最多 5000 字符）")
                 try:
                     action_params = json.loads(s)
                 except json.JSONDecodeError:
@@ -210,7 +223,10 @@ class ConnectivityService:
             condition_expr=condition_expr or None, priority=priority,
             description=description, is_active=True))
 
-    def toggle_mapping(self, topic_id: int, mapping_id: int) -> TopicMapping:
+    def toggle_mapping(self, conn_id: int, topic_id: int, mapping_id: int) -> TopicMapping:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在或不属于连接 {conn_id}: {topic_id}")
         m = self.mappings.get(mapping_id)
         if m is None or m.machine_topic_id != topic_id:
             raise NotFoundError(f"mapping 不存在: {mapping_id}")
@@ -218,14 +234,18 @@ class ConnectivityService:
         self.db.flush()
         return m
 
-    def delete_mapping(self, topic_id: int, mapping_id: int) -> None:
+    def delete_mapping(self, conn_id: int, topic_id: int, mapping_id: int) -> None:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在或不属于连接 {conn_id}: {topic_id}")
         m = self.mappings.get(mapping_id)
         if m is None or m.machine_topic_id != topic_id:
             raise NotFoundError(f"mapping 不存在: {mapping_id}")
         self.mappings.delete(mapping_id)
 
-    def list_mappings(self, topic_id: int) -> list[TopicMapping]:
-        # topic 不存在时返回 []（避免级联删除后页面报错）
-        if self.topics.get(topic_id) is None:
+    def list_mappings(self, conn_id: int, topic_id: int) -> list[TopicMapping]:
+        # topic 不存在或不属于该连接时返回 []（避免级联删除后页面报错 + IDOR）
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
             return []
         return self.mappings.list_for_topic(topic_id)
