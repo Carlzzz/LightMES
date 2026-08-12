@@ -9,7 +9,16 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
 from lightmes.database import get_db
-from lightmes.modules import api_v1, auth, integration, masterdata, production, trace, quality
+from lightmes.modules import (
+    agent_gateway,
+    api_v1,
+    auth,
+    integration,
+    masterdata,
+    production,
+    trace,
+    quality,
+)
 from lightmes.database import engine
 from lightmes.shared.base import Base
 from lightmes.modules.auth.dependencies import current_user_or_none
@@ -20,19 +29,22 @@ from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMidd
 settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",  # 升级到 0.3.0（D 层 Agent Gateway 上线）
     description=(
         "LightMES — 轻量级制造执行系统（笔记本壳装配专线）。\n\n"
-        "**API v1**：本接口为 AI Agent / ERP / BI 等外部系统集成设计。\n"
-        "**认证**：`Authorization: Bearer lmk_live_xxx`（API Key，通过 `/system/api-keys` 创建）。\n"
-        "**错误格式**：RFC 7807 Problem Details (`application/problem+json`)。\n"
-        "**分页**：`?page=1&size=20`，响应头 `X-Total-Count` / `X-Page` / `X-Size`。\n\n"
+        "**API v1** (`/api/v1/*`)：JSON REST，为 ERP / BI / AI Agent 集成设计。"
+        "Bearer token (`Authorization: Bearer lmk_live_xxx`)。\n\n"
+        "**Agent Gateway** (`/mcp`)：MCP (Model Context Protocol) HTTP 端点，"
+        "为 AI Agent (Claude Desktop / 自研 Agent) 提供 17 个工具。"
+        "认证同 API v1 Bearer token。Agent 通过 `tools/list` 自动发现工具。\n\n"
+        "**错误格式**：API v1 用 RFC 7807 Problem Details；MCP 用标准 JSON-RPC error。\n\n"
         "操作员 UI 见各模块 HTML 路由（不在本 OpenAPI 中）。"
     ),
     openapi_tags=[
         {"name": "Work Orders", "description": "工单 CRUD + 优先级"},
-        {"name": "Serial Units", "description": "序列号单元查询（含 SN 业务键查询）"},
+        {"name": "Serial Units", "description": "序列号单元查询"},
         {"name": "Defects", "description": "缺陷记录查询"},
+        {"name": "Defect Types", "description": "缺陷类型字典"},
         {"name": "API Keys", "description": "API Key 管理（admin only）"},
     ],
 )
@@ -49,6 +61,7 @@ trace.register(app)
 integration.register(app)
 quality.register(app)
 api_v1.register(app)
+agent_gateway.register(app)
 
 # Middleware（顺序：后加的在外层；先加 ApiCallLog，再加 TraceId → TraceId 在最外层，先注入 trace_id）
 app.add_middleware(ApiCallLogMiddleware)
