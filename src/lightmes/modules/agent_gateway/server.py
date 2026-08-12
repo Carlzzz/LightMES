@@ -171,6 +171,12 @@ def mount_mcp(app: FastAPI) -> None:
     # 延迟导入避免循环依赖（main.py → agent_gateway.register → mount_mcp → auth）
     from lightmes.modules.agent_gateway.auth import verify_bearer
 
+    # 触发 tool 模块导入 —— `@mcp.tool()` 装饰器在 import 时执行注册。
+    # 必须在 `mcp.http_app()` 之前完成，否则 tools/list 为空。
+    from lightmes.modules.agent_gateway.tools import (  # noqa: F401
+        api_keys, defects, serial_units, work_orders,
+    )
+
     # FastMCP http_app 返回 StarletteWithLifespan（ASGI app）。
     # path='/' 让 FastMCP 内部把单条 MCP 路由注册到根 `/`，然后我们用
     # `app.mount("/mcp", ...)` 把它挂到 `/mcp` 上 —— 这样 mcp_app 只接管
