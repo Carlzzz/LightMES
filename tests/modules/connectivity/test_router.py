@@ -273,3 +273,23 @@ def test_mapping_add_invalid_json_params_rejected(client, db_session):
             "action_type": "log_event",
             "action_params": "{not valid json"})
     assert resp.status_code == 400
+
+
+def test_connectivity_dashboard_renders(client, db_session):
+    """Dashboard route renders overview for admin."""
+    _login_admin(client, db_session, "dash1")
+    c = _make_conn(db_session, "dash-conn")
+    # 加一条消息用于显示
+    from datetime import datetime, timezone
+    from lightmes.modules.connectivity.models import MachineMessage
+    db_session.add(MachineMessage(
+        machine_connection_id=c.id, topic="t/x", raw_payload='{"k":1}',
+        received_at=datetime.now(timezone.utc), processing_status="ok",
+        parsed_data={"k": 1}))
+    db_session.commit()
+    resp = client.get("/connectivity/dashboard")
+    assert resp.status_code == 200
+    assert "数采看板" in resp.text
+    assert "dash-conn" in resp.text
+    assert "协议分布" in resp.text
+    assert "连接状态汇总" in resp.text

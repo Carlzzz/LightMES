@@ -3,11 +3,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import require_role
 from lightmes.modules.auth.models import User
+from lightmes.modules.connectivity.models import MachineConnection, MachineMessage
 from lightmes.modules.connectivity.service import ConnectivityService
 from lightmes.shared.errors import DomainError
 
@@ -20,6 +22,105 @@ templates = Jinja2Templates(
 @router.get("/connectivity", response_class=HTMLResponse)
 def connectivity_index(request: Request) -> HTMLResponse:
     return RedirectResponse(url="/connectivity/connections", status_code=303)
+
+
+@router.get("/connectivity/dashboard", response_class=HTMLResponse)
+def connectivity_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> HTMLResponse:
+    """数采看板：总览所有连接 + 最近 20 条消息 + 最近 10 条错误。"""
+    # 1. 协议分布（按 protocol 统计 active 连接数）
+    proto_rows = db.execute(
+        select(MachineConnection.protocol, func.count(MachineConnection.id))
+        .where(MachineConnection.is_active.is_(True))
+        .group_by(MachineConnection.protocol)
+    ).all()
+    protocol_counts = {row[0]: row[1] for row in proto_rows}
+    protocol_views = [
+        {"protocol": "mqtt", "label": "MQTT",
+         "active": protocol_counts.get("mqtt", 0)},
+        {"protocol": "opcua", "label": "OPC-UA",
+         "active": protocol_counts.get("opcua", 0)},
+        {"protocol": "modbus", "label": "Modbus TCP",
+         "active": protocol_counts.get("modbus", 0)},
+    ]
+
+    # 2. 状态汇总（所有连接）
+    status_rows = db.execute(
+        select(MachineConnection.status, func.count(MachineConnection.id))
+        .group_by(MachineConnection.status)
+    ).all()
+    status_counts = {row[0]: row[1] for row in status_rows}
+    status_views = [
+        {"key": "connected", "label": "已连接",
+         "count": status_counts.get("connected", 0), "badge_class": "badge--ok"},
+        {"key": "connecting", "label": "连接中",
+         "count": status_counts.get("connecting", 0), "badge_class": "badge--warn"},
+        {"key": "disconnected", "label": "未连接",
+         "count": status_counts.get("disconnected", 0), "badge_class": ""},
+        {"key": "error", "label": "错误",
+         "count": status_counts.get("error", 0), "badge_class": "badge--danger"},
+    ]
+
+    # 3. 最近 20 条消息（所有连接） + connection 名字
+    recent_msgs = db.execute(
+        select(MachineMessage, MachineConnection.name)
+        .join(
+            MachineConnection,
+            MachineConnection.id == MachineMessage.machine_connection_id,
+        )
+        .order_by(MachineMessage.received_at.desc())
+        .limit(20)
+    ).all()
+    recent_views = [
+        {
+            "id": msg.id,
+            "connection_name": conn_name,
+            "topic": msg.topic,
+            "received_at": msg.received_at,
+            "processing_status": msg.processing_status,
+            "parsed_data": msg.parsed_data,
+            "actions_triggered": msg.actions_triggered or [],
+            "raw_payload": msg.raw_payload,
+        }
+        for msg, conn_name in recent_msgs
+    ]
+
+    # 4. 最近 10 条错误消息
+    error_msgs = db.execute(
+        select(MachineMessage, MachineConnection.name)
+        .join(
+            MachineConnection,
+            MachineConnection.id == MachineMessage.machine_connection_id,
+        )
+        .where(MachineMessage.processing_status == "error")
+        .order_by(MachineMessage.received_at.desc())
+        .limit(10)
+    ).all()
+    error_views = [
+        {
+            "id": msg.id,
+            "connection_name": conn_name,
+            "topic": msg.topic,
+            "received_at": msg.received_at,
+            "processing_error": msg.processing_error,
+        }
+        for msg, conn_name in error_msgs
+    ]
+
+    return templates.TemplateResponse(
+        request,
+        "connectivity/dashboard.html",
+        {
+            "protocol_views": protocol_views,
+            "status_views": status_views,
+            "total_connections": sum(status_counts.values()),
+            "recent_messages": recent_views,
+            "error_messages": error_views,
+        },
+    )
 
 
 @router.get("/connectivity/connections", response_class=HTMLResponse)

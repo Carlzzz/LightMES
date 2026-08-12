@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}数采看板{% endblock %}
+{% block content %}
+<h1 class="page-title">数采看板 <small>所有连接总览</small></h1>
+
+<div class="card">
+  <div class="card__title">协议分布（启用中的连接）</div>
+  <table class="data-table">
+    <thead><tr><th>协议</th><th>启用连接数</th></tr></thead>
+    <tbody>
+      {% for p in protocol_views %}
+      <tr>
+        <td><span class="badge">{{ p.label }}</span></td>
+        <td>{{ p.active }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="2" style="color:#6b7280;text-align:center">暂无启用连接</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card__title">连接状态汇总（共 {{ total_connections }} 个连接）</div>
+  <table class="data-table">
+    <thead><tr><th>状态</th><th>数量</th></tr></thead>
+    <tbody>
+      {% for s in status_views %}
+      <tr>
+        <td>
+          {% if s.badge_class %}<span class="badge {{ s.badge_class }}">{{ s.label }}</span>
+          {% else %}<span class="badge">{{ s.label }}</span>{% endif %}
+        </td>
+        <td>{{ s.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card__title">最近消息（{{ recent_messages|length }}/20，所有连接）</div>
+  <table class="data-table">
+    <thead>
+      <tr><th>时间</th><th>连接</th><th>Topic</th><th>状态</th><th>Parsed</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for m in recent_messages %}
+      <tr>
+        <td>{{ m.received_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ m.connection_name }}</td>
+        <td><code style="word-break:break-all">{{ m.topic }}</code></td>
+        <td>
+          {% if m.processing_status == 'ok' %}<span class="badge badge--ok">ok</span>
+          {% elif m.processing_status == 'skipped' %}<span class="badge">skipped</span>
+          {% elif m.processing_status == 'error' %}<span class="badge badge--danger">error</span>
+          {% else %}<span class="badge">{{ m.processing_status }}</span>{% endif %}
+        </td>
+        <td>
+          {% if m.parsed_data %}
+            <code style="font-size:11px;word-break:break-all">{{ m.parsed_data }}</code>
+          {% else %}<span style="color:#6b7280">—</span>{% endif %}
+        </td>
+        <td>
+          {% if m.actions_triggered %}
+            {% for a in m.actions_triggered %}
+              {% if a.status == 'ok' %}<span class="badge badge--ok">{{ a.action_type }}</span>
+              {% elif a.status == 'error' %}<span class="badge badge--danger">{{ a.action_type }}</span>
+              {% else %}<span class="badge">{{ a.action_type }}</span>{% endif %}
+            {% endfor %}
+          {% else %}<span style="color:#6b7280">—</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="color:#6b7280;text-align:center">暂无消息</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card__title">最近错误（{{ error_messages|length }}/10）</div>
+  <table class="data-table">
+    <thead><tr><th>时间</th><th>连接</th><th>Topic</th><th>错误信息</th></tr></thead>
+    <tbody>
+      {% for m in error_messages %}
+      <tr>
+        <td>{{ m.received_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ m.connection_name }}</td>
+        <td><code style="word-break:break-all">{{ m.topic }}</code></td>
+        <td><code style="font-size:11px;word-break:break-all">{{ m.processing_error or '—' }}</code></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="color:#6b7280;text-align:center">暂无错误</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p style="margin-top:12px">
+  <a href="/connectivity/connections">→ 管理连接列表</a>
+</p>
+{% endblock %}
