@@ -9,6 +9,8 @@ from lightmes.modules.connectivity.models import MachineConnection, MachineTopic
 def _config(conn_id=1, host="x", port=1883, topics=None):
     return ResolvedConnectionConfig(
         connection_id=conn_id,
+        protocol="mqtt",
+        topics=topics or [],
         broker_host=host,
         broker_port=port,
         client_id="c1",
@@ -20,7 +22,6 @@ def _config(conn_id=1, host="x", port=1883, topics=None):
         clean_session=True,
         connect_timeout_seconds=10,
         reconnect_delay_seconds=5,
-        topics=topics or [],
     )
 
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ conn.name }} — 数采连接{% endblock %}
 {% block content %}
-<h1 class="page-title">{{ conn.name }} <small>{{ conn.broker_host }}:{{ conn.broker_port }}</small></h1>
+<h1 class="page-title">{{ conn.name }} <small>{{ conn.protocol|upper }} · {{ conn.endpoint }}</small></h1>
 
 <div class="card">
   <div class="card__title">基本信息</div>
@@ -12,12 +12,24 @@
       {% elif conn.status == 'error' %}<span class="badge badge--danger">error: {{ conn.status_message }}</span>
       {% else %}<span class="badge">disconnected</span>{% endif %}
     </td></tr>
+    <tr><th>协议</th><td>{{ conn.protocol|upper }}</td></tr>
+    <tr><th>端点</th><td><code>{{ conn.endpoint }}</code></td></tr>
     <tr><th>启用状态</th><td>{{ '启用' if conn.is_active else '停用' }}</td></tr>
     <tr><th>消息数</th><td>{{ conn.messages_received }}</td></tr>
     <tr><th>最后连接</th><td>{{ conn.last_connected_at.strftime('%Y-%m-%d %H:%M:%S') if conn.last_connected_at else '—' }}</td></tr>
+    {% if conn.protocol == 'mqtt' %}
     <tr><th>Username</th><td>{{ conn.username or '—' }}</td></tr>
     <tr><th>TLS</th><td>{{ '是' if conn.use_tls else '否' }}</td></tr>
     <tr><th>QoS</th><td>{{ conn.qos_default }}</td></tr>
+    <tr><th>KeepAlive</th><td>{{ conn.keep_alive_seconds }}s</td></tr>
+    {% elif conn.protocol == 'opcua' %}
+    <tr><th>Security Mode</th><td>{{ conn.security_mode or '—' }}</td></tr>
+    <tr><th>Username</th><td>{{ conn.username or '—' }}</td></tr>
+    <tr><th>Poll Interval</th><td>{{ conn.poll_interval_seconds if conn.poll_interval_seconds is not none else '—' }}s</td></tr>
+    {% elif conn.protocol == 'modbus' %}
+    <tr><th>Slave ID</th><td>{{ conn.slave_id if conn.slave_id is not none else '—' }}</td></tr>
+    <tr><th>Poll Interval</th><td>{{ conn.poll_interval_seconds if conn.poll_interval_seconds is not none else '—' }}s</td></tr>
+    {% endif %}
     <tr><th>描述</th><td>{{ conn.description or '—' }}</td></tr>
   </table>
   <p style="margin-top:12px">
@@ -35,10 +47,20 @@
 </div>
 
 <div class="card">
-  <div class="card__title">订阅主题（{{ topics|length }}）</div>
+  <div class="card__title">
+    {% if conn.protocol == 'opcua' %}订阅 Node（{{ topics|length }}）
+    {% elif conn.protocol == 'modbus' %}轮询寄存器组（{{ topics|length }}）
+    {% else %}订阅主题（{{ topics|length }}）{% endif %}
+  </div>
   <form method="post" action="/connectivity/connections/{{ conn.id }}/topics" class="form-row">
-    <div class="field" style="flex:2"><label>Topic 模式</label>
-      <input name="topic_pattern" placeholder="machine/line1/+/count" required></div>
+    <div class="field" style="flex:2"><label>
+      {% if conn.protocol == 'opcua' %}Node ID
+      {% elif conn.protocol == 'modbus' %}寄存器规格
+      {% else %}Topic 模式{% endif %}
+    </label>
+      <input name="topic_pattern"
+             placeholder="{% if conn.protocol == 'opcua' %}ns=2;s=Temperature{% elif conn.protocol == 'modbus' %}holding_register:0:10{% else %}machine/line1/+/count{% endif %}"
+             required></div>
     <div class="field"><label>格式</label>
       <select name="payload_format">
         <option value="json">json</option>
@@ -51,7 +73,7 @@
     <button type="submit">添加</button>
   </form>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>模式</th><th>格式</th><th>描述</th><th>状态</th><th>操作</th></tr></thead>
+    <thead><tr><th>ID</th><th>{% if conn.protocol == 'opcua' %}Node{% elif conn.protocol == 'modbus' %}寄存器{% else %}模式{% endif %}</th><th>格式</th><th>描述</th><th>状态</th><th>操作</th></tr></thead>
     <tbody>
       {% for t in topics %}
       <tr id="topic-{{ t.id }}">
@@ -65,13 +87,17 @@
             <button type="submit">{% if t.is_active %}停用{% else %}启用{% endif %}</button>
           </form>
           <form method="post" action="/connectivity/connections/{{ conn.id }}/topics/{{ t.id }}/delete" style="display:inline"
-                onsubmit="return confirm('确认删除 topic {{ t.topic_pattern }}？')">
+                onsubmit="return confirm('确认删除 {{ t.topic_pattern }}？')">
             <button type="submit" class="btn-danger">删除</button>
           </form>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" style="color:#6b7280;text-align:center">暂无 topic</td></tr>
+      <tr><td colspan="6" style="color:#6b7280;text-align:center">
+        {% if conn.protocol == 'opcua' %}暂无 node
+        {% elif conn.protocol == 'modbus' %}暂无寄存器
+        {% else %}暂无 topic{% endif %}
+      </td></tr>
       {% endfor %}
     </tbody>
   </table>

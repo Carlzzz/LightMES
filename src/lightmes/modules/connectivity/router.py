@@ -30,18 +30,28 @@ def connections_list(
 ) -> HTMLResponse:
     svc = ConnectivityService(db)
     connections = svc.list_connections()
-    # 附加 mqtt 信息
     conn_views = []
     for c in connections:
         mqtt = svc.get_mqtt_for_connection(c.id)
+        opcua = svc.get_opcua_for_connection(c.id)
+        modbus = svc.get_modbus_for_connection(c.id)
+        # 协议特定的展示端点
+        if c.protocol == "mqtt" and mqtt:
+            endpoint = f"{mqtt.broker_host}:{mqtt.broker_port}"
+        elif c.protocol == "opcua" and opcua:
+            endpoint = opcua.server_url
+        elif c.protocol == "modbus" and modbus:
+            endpoint = f"{modbus.host}:{modbus.port}"
+        else:
+            endpoint = "—"
         conn_views.append({
             "id": c.id, "name": c.name, "description": c.description,
+            "protocol": c.protocol,
             "is_active": c.is_active, "status": c.status,
             "status_message": c.status_message,
             "messages_received": c.messages_received,
             "last_connected_at": c.last_connected_at,
-            "broker_host": mqtt.broker_host if mqtt else "—",
-            "broker_port": mqtt.broker_port if mqtt else "—",
+            "endpoint": endpoint,
         })
     return templates.TemplateResponse(
         request, "connectivity/connections_list.html", {"connections": conn_views}
@@ -52,20 +62,48 @@ def connections_list(
 def connections_create(
     request: Request,
     name: str = Form(...),
-    broker_host: str = Form(...),
+    protocol: str = Form("mqtt"),
+    description: str | None = Form(None),
+    # MQTT fields
+    broker_host: str | None = Form(None),
     broker_port: int = Form(1883),
     username: str | None = Form(None),
     password: str | None = Form(None),
     use_tls: bool = Form(False),
+    keep_alive_seconds: int = Form(60),
+    qos_default: int = Form(0),
+    clean_session: bool = Form(True),
+    # OPC-UA fields
+    server_url: str | None = Form(None),
+    security_mode: str = Form("none"),
+    # Modbus fields
+    host: str | None = Form(None),
+    port: int = Form(502),
+    slave_id: int = Form(1),
+    # Shared fields
+    poll_interval_seconds: int = Form(5),
+    connect_timeout_seconds: int = Form(10),
+    reconnect_delay_seconds: int = Form(5),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "supervisor")),
 ) -> HTMLResponse:
     svc = ConnectivityService(db)
     try:
         svc.create_connection(
-            name=name, broker_host=broker_host, broker_port=broker_port,
+            name=name, protocol=protocol, description=description or None,
+            broker_host=broker_host or None, broker_port=broker_port,
             username=username or None, password=password or None,
-            use_tls=bool(use_tls))
+            use_tls=bool(use_tls),
+            keep_alive_seconds=keep_alive_seconds,
+            qos_default=qos_default,
+            clean_session=bool(clean_session),
+            server_url=server_url or None,
+            security_mode=security_mode,
+            host=host or None, port=port, slave_id=slave_id,
+            poll_interval_seconds=poll_interval_seconds,
+            connect_timeout_seconds=connect_timeout_seconds,
+            reconnect_delay_seconds=reconnect_delay_seconds,
+        )
         db.commit()
     except DomainError as e:
         return HTMLResponse(f"创建失败: {e.detail}", status_code=400)
@@ -122,28 +160,48 @@ def connection_detail(
     except NotFoundError:
         return HTMLResponse("连接不存在", status_code=404)
     mqtt = svc.get_mqtt_for_connection(conn_id)
+    opcua = svc.get_opcua_for_connection(conn_id)
+    modbus = svc.get_modbus_for_connection(conn_id)
     topics = svc.list_topics(conn_id)
     messages = svc.list_recent_messages(conn_id, limit=100)
-    # 组装 all_mappings：dict[topic -> list[TopicMapping]]
-    # （Jinja 不能用 ORM 对象做 dict key；改成 list[tuple(topic, mappings)] 形式）
     all_mappings = [
         (t, svc.list_mappings(conn_id, t.id)) for t in topics
     ]
+    # 协议特定端点展示
+    if conn.protocol == "mqtt" and mqtt:
+        endpoint = f"{mqtt.broker_host}:{mqtt.broker_port}"
+    elif conn.protocol == "opcua" and opcua:
+        endpoint = opcua.server_url
+    elif conn.protocol == "modbus" and modbus:
+        endpoint = f"{modbus.host}:{modbus.port}"
+    else:
+        endpoint = "—"
     return templates.TemplateResponse(
         request,
         "connectivity/connection_detail.html",
         {
             "conn": {
                 "id": conn.id, "name": conn.name, "description": conn.description,
+                "protocol": conn.protocol,
                 "is_active": conn.is_active, "status": conn.status,
                 "status_message": conn.status_message,
                 "messages_received": conn.messages_received,
                 "last_connected_at": conn.last_connected_at,
-                "broker_host": mqtt.broker_host if mqtt else "—",
-                "broker_port": mqtt.broker_port if mqtt else "—",
+                "endpoint": endpoint,
+                # MQTT 字段
                 "username": mqtt.username if mqtt else None,
                 "use_tls": mqtt.use_tls if mqtt else False,
                 "qos_default": mqtt.qos_default if mqtt else 0,
+                "keep_alive_seconds": mqtt.keep_alive_seconds if mqtt else 60,
+                "clean_session": mqtt.clean_session if mqtt else True,
+                # OPC-UA 字段
+                "security_mode": opcua.security_mode if opcua else None,
+                "poll_interval_seconds": (
+                    opcua.poll_interval_seconds if opcua
+                    else modbus.poll_interval_seconds if modbus else None
+                ),
+                # Modbus 字段
+                "slave_id": modbus.slave_id if modbus else None,
             },
             "topics": topics,
             "all_mappings": all_mappings,

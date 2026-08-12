@@ -1,8 +1,9 @@
 """CLI entry: ``python -m lightmes.modules.connectivity.mqtt_listener``
 
-Long-running supervisor process. Reads active MQTT connections from DB every
-``RECONCILE_SECONDS`` seconds, spawns one ``run_client_with_reconnect`` task
-per connection, cancels them on deactivation/delete, restarts on config change.
+Long-running supervisor process. Reads active connections (any protocol:
+MQTT / OPC-UA / Modbus) from DB every ``RECONCILE_SECONDS`` seconds, spawns one
+client task per connection, cancels them on deactivation/delete, restarts on
+config change. Protocol dispatch happens in ``spawn()``.
 
 Signals: SIGTERM/SIGINT → graceful shutdown (cancel all client tasks).
 
@@ -54,14 +55,27 @@ async def main() -> int:
         existing = managed.get(config.connection_id)
         if existing is not None and not existing.done():
             existing.cancel()
-        # Lazy import — 避免仅 --help 时也加载 aiomqtt
-        from lightmes.modules.connectivity.mqtt_listener.client import (
-            run_client_with_reconnect,
-        )
+        # Lazy import + dispatch by protocol
+        if config.protocol == "opcua":
+            from lightmes.modules.connectivity.mqtt_listener.opcua_client import (
+                run_opcua_client as runner,
+            )
+            task_name = f"opcua-client-{config.connection_id}"
+        elif config.protocol == "modbus":
+            from lightmes.modules.connectivity.mqtt_listener.modbus_client import (
+                run_modbus_client as runner,
+            )
+            task_name = f"modbus-client-{config.connection_id}"
+        else:
+            # mqtt (default) — 避免 --help 时也加载 aiomqtt
+            from lightmes.modules.connectivity.mqtt_listener.client import (
+                run_client_with_reconnect as runner,
+            )
+            task_name = f"mqtt-client-{config.connection_id}"
 
         task = asyncio.create_task(
-            run_client_with_reconnect(config, stop_event),
-            name=f"mqtt-client-{config.connection_id}",
+            runner(config, stop_event),
+            name=task_name,
         )
         managed[config.connection_id] = task
 

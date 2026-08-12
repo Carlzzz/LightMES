@@ -44,6 +44,41 @@ class MqttConnection(Base, TimestampMixin):
     reconnect_delay_seconds: Mapped[int] = mapped_column(Integer, default=5)
 
 
+class OpcuaConnection(Base, TimestampMixin):
+    __tablename__ = "opcua_connections"
+    __table_args__ = (
+        UniqueConstraint("machine_connection_id", name="uq_opcua_per_mc"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    machine_connection_id: Mapped[int] = mapped_column(
+        ForeignKey("machine_connections.id", ondelete="CASCADE"), index=True)
+    server_url: Mapped[str] = mapped_column(String(500))  # opc.tcp://192.168.1.10:4840
+    security_mode: Mapped[str] = mapped_column(String(20), default="none")  # none/sign/sign_encrypt
+    username: Mapped[str | None] = mapped_column(String(100), default=None)
+    password_encrypted: Mapped[str | None] = mapped_column(String(500), default=None)
+    poll_interval_seconds: Mapped[int] = mapped_column(Integer, default=5)
+    connect_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    reconnect_delay_seconds: Mapped[int] = mapped_column(Integer, default=5)
+
+
+class ModbusConnection(Base, TimestampMixin):
+    __tablename__ = "modbus_connections"
+    __table_args__ = (
+        UniqueConstraint("machine_connection_id", name="uq_modbus_per_mc"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    machine_connection_id: Mapped[int] = mapped_column(
+        ForeignKey("machine_connections.id", ondelete="CASCADE"), index=True)
+    host: Mapped[str] = mapped_column(String(255))
+    port: Mapped[int] = mapped_column(Integer, default=502)
+    slave_id: Mapped[int] = mapped_column(Integer, default=1)
+    poll_interval_seconds: Mapped[int] = mapped_column(Integer, default=5)
+    connect_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    reconnect_delay_seconds: Mapped[int] = mapped_column(Integer, default=5)
+
+
 class MachineTopic(Base, TimestampMixin):
     __tablename__ = "machine_topics"
 

@@ -25,7 +25,9 @@ from lightmes.modules.connectivity.crypto import decrypt_password
 from lightmes.modules.connectivity.models import (
     MachineConnection,
     MachineTopic,
+    ModbusConnection,
     MqttConnection,
+    OpcuaConnection,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,81 +37,162 @@ RECONCILE_SECONDS = 5
 
 @dataclass
 class ResolvedConnectionConfig:
-    """Decrypted, ready-to-use MQTT config for one connection."""
+    """Decrypted, ready-to-use config for one connection (any protocol).
+
+    MQTT-specific fields are populated only when protocol == "mqtt";
+    OPC-UA fields when protocol == "opcua"; Modbus fields when protocol == "modbus".
+    """
 
     connection_id: int
-    broker_host: str
-    broker_port: int
-    client_id: str
-    username: str | None
-    password: str | None
-    use_tls: bool
-    keep_alive_seconds: int
-    qos_default: int
-    clean_session: bool
-    connect_timeout_seconds: int
-    reconnect_delay_seconds: int
+    protocol: str
     topics: list[MachineTopic]
+    # MQTT
+    broker_host: str | None = None
+    broker_port: int | None = None
+    client_id: str | None = None
+    username: str | None = None
+    password: str | None = None
+    use_tls: bool = False
+    keep_alive_seconds: int = 60
+    qos_default: int = 0
+    clean_session: bool = True
+    # OPC-UA
+    server_url: str | None = None
+    security_mode: str = "none"
+    # Modbus
+    host: str | None = None
+    port: int | None = None
+    slave_id: int = 1
+    # shared
+    poll_interval_seconds: int = 5
+    connect_timeout_seconds: int = 10
+    reconnect_delay_seconds: int = 5
 
 
-def resolve_config(db: Session, conn: MachineConnection) -> ResolvedConnectionConfig | None:
-    """Resolve a MachineConnection + its MqttConnection into a usable config.
-
-    Returns None if the connection has no mqtt_connections row (data inconsistency).
-    """
-    mqtt = db.execute(
-        select(MqttConnection).where(MqttConnection.machine_connection_id == conn.id)
-    ).scalar_one_or_none()
-    if mqtt is None:
-        return None
-    topics = list(
+def _fetch_active_topics(db: Session, conn_id: int) -> list[MachineTopic]:
+    return list(
         db.execute(
             select(MachineTopic).where(
-                MachineTopic.machine_connection_id == conn.id,
+                MachineTopic.machine_connection_id == conn_id,
                 MachineTopic.is_active.is_(True),
             )
         ).scalars().all()
     )
-    # 自动生成 client_id if 不设
-    client_id = mqtt.client_id or f"lightmes-{conn.id}-{hashlib.md5(f'{conn.id}'.encode()).hexdigest()[:8]}"
-    return ResolvedConnectionConfig(
-        connection_id=conn.id,
-        broker_host=mqtt.broker_host,
-        broker_port=mqtt.broker_port,
-        client_id=client_id,
-        username=mqtt.username,
-        password=decrypt_password(mqtt.password_encrypted),
-        use_tls=mqtt.use_tls,
-        keep_alive_seconds=mqtt.keep_alive_seconds,
-        qos_default=mqtt.qos_default,
-        clean_session=mqtt.clean_session,
-        connect_timeout_seconds=mqtt.connect_timeout_seconds,
-        reconnect_delay_seconds=mqtt.reconnect_delay_seconds,
-        topics=topics,
-    )
+
+
+def resolve_config(db: Session, conn: MachineConnection) -> ResolvedConnectionConfig | None:
+    """Resolve a MachineConnection into a usable config based on its protocol.
+
+    Returns None if the protocol-specific sub-row is missing (data inconsistency).
+    """
+    topics = _fetch_active_topics(db, conn.id)
+
+    if conn.protocol == "mqtt":
+        mqtt = db.execute(
+            select(MqttConnection).where(MqttConnection.machine_connection_id == conn.id)
+        ).scalar_one_or_none()
+        if mqtt is None:
+            return None
+        client_id = mqtt.client_id or f"lightmes-{conn.id}-{hashlib.md5(f'{conn.id}'.encode()).hexdigest()[:8]}"
+        return ResolvedConnectionConfig(
+            connection_id=conn.id,
+            protocol="mqtt",
+            topics=topics,
+            broker_host=mqtt.broker_host,
+            broker_port=mqtt.broker_port,
+            client_id=client_id,
+            username=mqtt.username,
+            password=decrypt_password(mqtt.password_encrypted),
+            use_tls=mqtt.use_tls,
+            keep_alive_seconds=mqtt.keep_alive_seconds,
+            qos_default=mqtt.qos_default,
+            clean_session=mqtt.clean_session,
+            connect_timeout_seconds=mqtt.connect_timeout_seconds,
+            reconnect_delay_seconds=mqtt.reconnect_delay_seconds,
+        )
+
+    if conn.protocol == "opcua":
+        opcua = db.execute(
+            select(OpcuaConnection).where(OpcuaConnection.machine_connection_id == conn.id)
+        ).scalar_one_or_none()
+        if opcua is None:
+            return None
+        return ResolvedConnectionConfig(
+            connection_id=conn.id,
+            protocol="opcua",
+            topics=topics,
+            server_url=opcua.server_url,
+            security_mode=opcua.security_mode,
+            username=opcua.username,
+            password=decrypt_password(opcua.password_encrypted),
+            poll_interval_seconds=opcua.poll_interval_seconds,
+            connect_timeout_seconds=opcua.connect_timeout_seconds,
+            reconnect_delay_seconds=opcua.reconnect_delay_seconds,
+        )
+
+    if conn.protocol == "modbus":
+        modbus = db.execute(
+            select(ModbusConnection).where(ModbusConnection.machine_connection_id == conn.id)
+        ).scalar_one_or_none()
+        if modbus is None:
+            return None
+        return ResolvedConnectionConfig(
+            connection_id=conn.id,
+            protocol="modbus",
+            topics=topics,
+            host=modbus.host,
+            port=modbus.port,
+            slave_id=modbus.slave_id,
+            poll_interval_seconds=modbus.poll_interval_seconds,
+            connect_timeout_seconds=modbus.connect_timeout_seconds,
+            reconnect_delay_seconds=modbus.reconnect_delay_seconds,
+        )
+
+    logger.warning("resolve_config: 未知 protocol %s (conn %s)", conn.protocol, conn.id)
+    return None
 
 
 def compute_config_signature(config: ResolvedConnectionConfig) -> str:
-    """Hash the connection-affecting fields. Change in sig → reconnect needed."""
+    """Hash the connection-affecting fields. Change in sig → reconnect needed.
+
+    Includes protocol-specific fields so that protocol-affecting changes trigger
+    a reconnect (e.g. server_url, host/port, slave_id, poll_interval).
+    """
+    topic_part = "|".join(sorted(t.topic_pattern for t in config.topics))
     payload = (
-        f"{config.broker_host}:{config.broker_port}|"
-        f"{config.username}|{config.use_tls}|{config.qos_default}|"
-        f"{config.keep_alive_seconds}|{config.clean_session}|"
-        f"{config.client_id}|"
-        f"{'|'.join(sorted(t.topic_pattern for t in config.topics))}"
+        f"proto={config.protocol}|"
+        f"to={config.connect_timeout_seconds}|"
+        f"rc={config.reconnect_delay_seconds}|"
+        f"topics={topic_part}|"
     )
+    if config.protocol == "mqtt":
+        payload += (
+            f"mqtt={config.broker_host}:{config.broker_port}|"
+            f"u={config.username}|tls={config.use_tls}|qos={config.qos_default}|"
+            f"ka={config.keep_alive_seconds}|cs={config.clean_session}|"
+            f"cid={config.client_id}"
+        )
+    elif config.protocol == "opcua":
+        payload += (
+            f"opcua={config.server_url}|sec={config.security_mode}|"
+            f"u={config.username}|poll={config.poll_interval_seconds}"
+        )
+    elif config.protocol == "modbus":
+        payload += (
+            f"modbus={config.host}:{config.port}|slave={config.slave_id}|"
+            f"poll={config.poll_interval_seconds}"
+        )
     return hashlib.md5(payload.encode()).hexdigest()
 
 
 def fetch_active_configs(
     db: Session,
 ) -> list[tuple[MachineConnection, ResolvedConnectionConfig | None]]:
-    """Fetch all active MQTT connections with their resolved configs."""
+    """Fetch all active connections (any protocol) with their resolved configs."""
     conns = list(
         db.execute(
             select(MachineConnection).where(
                 MachineConnection.is_active.is_(True),
-                MachineConnection.protocol == "mqtt",
             )
         ).scalars().all()
     )

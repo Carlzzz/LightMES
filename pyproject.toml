@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aiomqtt>=2.3.0,<3.0",
     "alembic>=1.18.5",
+    "asyncua>=1.9.0",
     "cryptography>=45.0.0",
     "fastapi>=0.141.1",
     "fastmcp>=2.0,<3.0",
@@ -19,6 +20,7 @@ dependencies = [
     "pwdlib[argon2,bcrypt]>=0.3.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
+    "pymodbus>=3.7.0",
     "python-multipart>=0.0.32",
     "sqlalchemy>=2.0.51",
     "uvicorn[standard]>=0.52.0",

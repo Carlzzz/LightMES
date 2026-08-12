@@ -2,7 +2,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.modules.connectivity.models import (
-    MachineConnection, MachineMessage, MachineTopic, MqttConnection, TopicMapping,
+    MachineConnection, MachineMessage, MachineTopic, ModbusConnection,
+    MqttConnection, OpcuaConnection, TopicMapping,
 )
 
 
@@ -31,7 +32,6 @@ class MachineConnectionRepository:
         return list(self.db.execute(
             select(MachineConnection).where(
                 MachineConnection.is_active.is_(True),
-                MachineConnection.protocol == "mqtt",
             )
         ).scalars().all())
 
@@ -53,6 +53,34 @@ class MqttConnectionRepository:
     def get_by_machine_connection(self, machine_conn_id: int) -> MqttConnection | None:
         return self.db.execute(
             select(MqttConnection).where(MqttConnection.machine_connection_id == machine_conn_id)
+        ).scalar_one_or_none()
+
+
+class OpcuaConnectionRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, opcua: OpcuaConnection) -> OpcuaConnection:
+        self.db.add(opcua); self.db.flush()
+        return opcua
+
+    def get_by_machine_connection(self, machine_conn_id: int) -> OpcuaConnection | None:
+        return self.db.execute(
+            select(OpcuaConnection).where(OpcuaConnection.machine_connection_id == machine_conn_id)
+        ).scalar_one_or_none()
+
+
+class ModbusConnectionRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, modbus: ModbusConnection) -> ModbusConnection:
+        self.db.add(modbus); self.db.flush()
+        return modbus
+
+    def get_by_machine_connection(self, machine_conn_id: int) -> ModbusConnection | None:
+        return self.db.execute(
+            select(ModbusConnection).where(ModbusConnection.machine_connection_id == machine_conn_id)
         ).scalar_one_or_none()
 
 
