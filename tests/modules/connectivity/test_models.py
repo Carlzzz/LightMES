@@ -1,6 +1,6 @@
 from lightmes.modules.connectivity.models import (
     MachineConnection, MqttConnection, MachineTopic, MachineMessage,
-    TopicMapping,
+    TopicMapping, OpcuaConnection, ModbusConnection,
 )
 
 
@@ -83,3 +83,35 @@ def test_machine_message_new_fields(db_session):
     db_session.add(msg); db_session.flush()
     assert msg.parsed_data == {"count": 1}
     assert msg.actions_triggered == [{"status": "ok"}]
+
+
+def test_opcua_connection_basic_fields(db_session):
+    c = MachineConnection(name="opcua-test", protocol="opcua")
+    db_session.add(c); db_session.flush()
+    o = OpcuaConnection(
+        machine_connection_id=c.id,
+        server_url="opc.tcp://192.168.1.10:4840",
+        security_mode="none",
+    )
+    db_session.add(o); db_session.flush()
+    assert o.id is not None
+    assert o.server_url == "opc.tcp://192.168.1.10:4840"
+    assert o.security_mode == "none"
+    assert o.poll_interval_seconds == 5
+    assert o.connect_timeout_seconds == 10
+    assert o.reconnect_delay_seconds == 5
+
+
+def test_modbus_connection_basic_fields(db_session):
+    c = MachineConnection(name="modbus-test", protocol="modbus")
+    db_session.add(c); db_session.flush()
+    m = ModbusConnection(
+        machine_connection_id=c.id,
+        host="192.168.1.20",
+    )
+    db_session.add(m); db_session.flush()
+    assert m.id is not None
+    assert m.host == "192.168.1.20"
+    assert m.port == 502
+    assert m.slave_id == 1
+    assert m.poll_interval_seconds == 5
