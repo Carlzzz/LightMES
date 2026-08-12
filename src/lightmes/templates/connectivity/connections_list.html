@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}数采连接{% endblock %}
+{% block content %}
+<h1 class="page-title">数采连接 <small>MQTT</small></h1>
+
+<div class="card">
+  <div class="card__title">新建 MQTT 连接</div>
+  <form method="post" action="/connectivity/connections" class="form-row">
+    <div class="field"><label>名称</label><input name="name" required></div>
+    <div class="field"><label>Broker Host</label><input name="broker_host" placeholder="192.168.1.10" required></div>
+    <div class="field" style="max-width:100px"><label>Port</label><input name="broker_port" type="number" value="1883"></div>
+    <div class="field"><label>Username</label><input name="username"></div>
+    <div class="field"><label>Password</label><input name="password" type="password"></div>
+    <div class="field"><label>Use TLS</label><input type="checkbox" name="use_tls" value="true"></div>
+    <button type="submit">创建</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">连接列表</div>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>名称</th><th>Broker</th><th>状态</th><th>消息数</th><th>最后连接</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for c in connections %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td><a href="/connectivity/connections/{{ c.id }}">{{ c.name }}</a></td>
+        <td><code>{{ c.broker_host }}:{{ c.broker_port }}</code></td>
+        <td>
+          {% if c.status == 'connected' %}<span class="badge badge--ok">已连接</span>
+          {% elif c.status == 'connecting' %}<span class="badge badge--warn">连接中</span>
+          {% elif c.status == 'error' %}<span class="badge badge--danger" title="{{ c.status_message }}">错误</span>
+          {% else %}<span class="badge">未连接</span>{% endif %}
+          {% if c.is_active %}<span class="badge badge--ok">启用</span>{% else %}<span class="badge">停用</span>{% endif %}
+        </td>
+        <td>{{ c.messages_received }}</td>
+        <td>{{ c.last_connected_at.strftime('%Y-%m-%d %H:%M') if c.last_connected_at else '—' }}</td>
+        <td>
+          {% if c.is_active %}
+          <form method="post" action="/connectivity/connections/{{ c.id }}/deactivate" style="display:inline">
+            <button type="submit">停用</button>
+          </form>
+          {% else %}
+          <form method="post" action="/connectivity/connections/{{ c.id }}/activate" style="display:inline">
+            <button type="submit">启用</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/connectivity/connections/{{ c.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除连接 {{ c.name }}？相关 topic 和消息会一并删除。')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="color:#6b7280;text-align:center">暂无连接</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
