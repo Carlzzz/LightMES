@@ -1,3 +1,4 @@
+import json
 import re
 import time
 import uuid
@@ -30,6 +31,47 @@ def sanitize_error_detail(detail: str | None) -> str | None:
     return redacted[:200]  # Truncate to column size
 
 
+async def _read_error_detail(response: Response) -> str | None:
+    """Extract 'detail' field from a 4xx/5xx response body (RFC 7807 Problem
+    Details or plain {"detail": ...} JSON).
+
+    FastAPI's JSONResponse stores body as a ``bytes`` attribute synchronously
+    before middleware runs, so we can read it directly. For StreamingResponse
+    (rare for error paths in this app), consume the iterator without breaking
+    downstream consumers.
+    """
+    try:
+        body = getattr(response, "body", None)
+        if isinstance(body, (bytes, bytearray)):
+            data = json.loads(body)
+            detail = data.get("detail") if isinstance(data, dict) else None
+            if detail is None and isinstance(data, dict):
+                # RFC 7807 fallbacks
+                detail = data.get("title") or data.get("type")
+            return str(detail) if detail else None
+        # StreamingResponse fallback
+        if hasattr(response, "body_iterator"):
+            chunks: list[bytes] = []
+            async for chunk in response.body_iterator:  # type: ignore[union-attr]
+                chunks.append(chunk)
+            new_body = b"".join(chunks)
+            response.body_iterator = _as_async_iter([new_body])  # type: ignore[attr-defined]
+            if new_body:
+                data = json.loads(new_body)
+                detail = data.get("detail") if isinstance(data, dict) else None
+                if detail is None and isinstance(data, dict):
+                    detail = data.get("title") or data.get("type")
+                return str(detail) if detail else None
+    except Exception:
+        return None
+    return None
+
+
+async def _as_async_iter(chunks: list[bytes]):
+    for c in chunks:
+        yield c
+
+
 class TraceIdMiddleware(BaseHTTPMiddleware):
     """为每个请求生成 8 字符 trace_id，注入 request.state + X-Trace-Id 响应头。"""
 
@@ -41,7 +83,12 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
 
 
 class ApiCallLogMiddleware(BaseHTTPMiddleware):
-    """选择性记录 /api/v1/* 调用：写操作 + 错误（>=400）；成功 GET 不记录。"""
+    """选择性记录 /api/v1/* 调用：写操作 + 错误（>=400）；成功 GET 不记录。
+
+    Audit writes use an independent ``SessionLocal()`` so they never block the
+    request-scoped transaction. Writes are wrapped in try/except so logging
+    failures never break the response.
+    """
 
     async def dispatch(self, request: Request, call_next):
         if not request.url.path.startswith("/api/v1/"):
@@ -58,28 +105,20 @@ class ApiCallLogMiddleware(BaseHTTPMiddleware):
         if not should_log:
             return response
 
-        # 提取错误详情（仅 4xx/5xx）
         error_detail = None
         if response.status_code >= 400:
-            try:
-                # response.body may have been consumed; Starlette allows re-read via .body
-                body = response.body
-                if body:
-                    import json
-                    data = json.loads(body)
-                    error_detail = str(data.get("detail") or "")
-            except Exception:
-                error_detail = None
+            error_detail = await _read_error_detail(response)
 
         # 脱敏 + 截断（防止泄露 API key、密码、token 等敏感信息）
         error_detail = sanitize_error_detail(error_detail)
 
+        trace_id = getattr(request.state, "trace_id", None)
+        api_key_id = getattr(request.state, "api_key_id", None)
+        user_id = getattr(request.state, "api_key_user_id", None)
+        client_ip = request.client.host if request.client else None
+
         # 异步写 log（独立 session 避免污染请求 session）
         try:
-            trace_id = getattr(request.state, "trace_id", None)
-            api_key_id = getattr(request.state, "api_key_id", None)
-            user_id = getattr(request.state, "api_key_user_id", None)
-            client_ip = request.client.host if request.client else None
             db: Session = SessionLocal()
             try:
                 db.add(ApiCallLog(
