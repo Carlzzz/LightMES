@@ -14,7 +14,8 @@ from lightmes.database import engine
 from lightmes.shared.base import Base
 from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import User
-from lightmes.shared.errors import DomainError
+from lightmes.modules.api_v1.errors import register_problem_details_handler
+from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -32,10 +33,12 @@ integration.register(app)
 quality.register(app)
 api_v1.register(app)
 
+# Middleware（顺序：后加的在外层；先加 ApiCallLog，再加 TraceId → TraceId 在最外层，先注入 trace_id）
+app.add_middleware(ApiCallLogMiddleware)
+app.add_middleware(TraceIdMiddleware)
 
-@app.exception_handler(DomainError)
-def _domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+# 升级 DomainError handler 为 RFC 7807 Problem Details JSON
+register_problem_details_handler(app)
 
 
 _templates = Jinja2Templates(
