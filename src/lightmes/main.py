@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
 from lightmes.database import get_db
-from lightmes.modules import auth, integration, masterdata, production, trace, quality
+from lightmes.modules import api_v1, auth, integration, masterdata, production, trace, quality
 from lightmes.database import engine
 from lightmes.shared.base import Base
 from lightmes.modules.auth.dependencies import current_user_or_none
@@ -30,6 +30,7 @@ production.register(app)
 trace.register(app)
 integration.register(app)
 quality.register(app)
+api_v1.register(app)
 
 
 @app.exception_handler(DomainError)
