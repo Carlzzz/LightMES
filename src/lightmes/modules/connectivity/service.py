@@ -1,0 +1,165 @@
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+
+from lightmes.modules.connectivity.crypto import encrypt_password
+from lightmes.modules.connectivity.models import (
+    MachineConnection, MachineMessage, MachineTopic, MqttConnection,
+)
+from lightmes.modules.connectivity.repository import (
+    MachineConnectionRepository, MachineMessageRepository,
+    MachineTopicRepository, MqttConnectionRepository,
+)
+from lightmes.modules.connectivity.schemas import ConnectionCreate, TopicCreate
+from lightmes.shared.errors import BusinessRuleError, NotFoundError, ValidationError
+
+_VALID_FORMATS = {"json", "plain", "csv", "hex"}
+_VALID_PROTOCOLS = {"mqtt"}  # V1 只支持 mqtt
+
+
+class ConnectivityService:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+        self.conns = MachineConnectionRepository(db)
+        self.mqtts = MqttConnectionRepository(db)
+        self.topics = MachineTopicRepository(db)
+        self.messages = MachineMessageRepository(db)
+
+    # ---- Connection ----
+
+    def create_connection(
+        self,
+        *,
+        name: str,
+        broker_host: str,
+        broker_port: int = 1883,
+        username: str | None = None,
+        password: str | None = None,
+        use_tls: bool = False,
+        keep_alive_seconds: int = 60,
+        qos_default: int = 0,
+        clean_session: bool = True,
+        connect_timeout_seconds: int = 10,
+        reconnect_delay_seconds: int = 5,
+        description: str | None = None,
+        protocol: str = "mqtt",
+    ) -> tuple[MachineConnection, MqttConnection]:
+        # 校验
+        if protocol not in _VALID_PROTOCOLS:
+            raise ValidationError(f"protocol 必须是 {sorted(_VALID_PROTOCOLS)} 之一: {protocol}")
+        if not (1 <= broker_port <= 65535):
+            raise ValidationError(f"broker_port 必须在 1-65535 之间: {broker_port}")
+        if qos_default not in (0, 1, 2):
+            raise ValidationError(f"qos_default 必须是 0/1/2: {qos_default}")
+        # 重名检查
+        if self.conns.get_by_name(name) is not None:
+            raise BusinessRuleError(f"连接名称已存在: {name}")
+        # 创建
+        conn = self.conns.add(MachineConnection(
+            name=name, description=description, protocol=protocol,
+            is_active=False, status="disconnected"))
+        mqtt = self.mqtts.add(MqttConnection(
+            machine_connection_id=conn.id, broker_host=broker_host, broker_port=broker_port,
+            username=username,
+            password_encrypted=encrypt_password(password) if password else None,
+            use_tls=use_tls, keep_alive_seconds=keep_alive_seconds,
+            qos_default=qos_default, clean_session=clean_session,
+            connect_timeout_seconds=connect_timeout_seconds,
+            reconnect_delay_seconds=reconnect_delay_seconds))
+        return conn, mqtt
+
+    def get_connection(self, conn_id: int) -> MachineConnection:
+        c = self.conns.get(conn_id)
+        if c is None:
+            raise NotFoundError(f"连接不存在: {conn_id}")
+        return c
+
+    def get_mqtt_for_connection(self, conn_id: int) -> MqttConnection | None:
+        return self.mqtts.get_by_machine_connection(conn_id)
+
+    def list_connections(self) -> list[MachineConnection]:
+        return self.conns.list_all()
+
+    def list_active_mqtt_connections(self) -> list[MachineConnection]:
+        return self.conns.list_active()
+
+    def activate_connection(self, conn_id: int) -> MachineConnection:
+        c = self.get_connection(conn_id)
+        c.is_active = True
+        self.db.flush()
+        return c
+
+    def deactivate_connection(self, conn_id: int) -> MachineConnection:
+        c = self.get_connection(conn_id)
+        c.is_active = False
+        self.db.flush()
+        return c
+
+    def delete_connection(self, conn_id: int) -> None:
+        c = self.get_connection(conn_id)
+        # 显式删除子行；仅依赖 DB ondelete=CASCADE 时，session identity map 会
+        # 缓存陈旧子对象，导致测试和上层调用方观察到幽灵记录（已删除的
+        # MqttConnection 仍能 get 到）。用 SQL delete() 直接删除并同步驱逐
+        # identity map，避免 ORM delete() 与 DB CASCADE 的双删告警。
+        self.db.execute(
+            delete(MachineMessage).where(MachineMessage.machine_connection_id == conn_id)
+        )
+        self.db.execute(
+            delete(MachineTopic).where(MachineTopic.machine_connection_id == conn_id)
+        )
+        self.db.execute(
+            delete(MqttConnection).where(MqttConnection.machine_connection_id == conn_id)
+        )
+        self.conns.delete(c.id)
+        self.db.flush()
+
+    # ---- Topic ----
+
+    def add_topic(
+        self, conn_id: int, topic_pattern: str,
+        payload_format: str = "json", description: str | None = None,
+    ) -> MachineTopic:
+        # 校验 connection 存在
+        self.get_connection(conn_id)
+        # 校验 format
+        if payload_format not in _VALID_FORMATS:
+            raise ValidationError(
+                f"payload_format 必须是 {sorted(_VALID_FORMATS)} 之一: {payload_format}")
+        # 重 pattern + active 检查
+        if self.topics.find_active_duplicate(conn_id, topic_pattern) is not None:
+            raise BusinessRuleError(
+                f"同连接下已有相同的 active topic: {topic_pattern}（先停用旧的再加新）")
+        return self.topics.add(MachineTopic(
+            machine_connection_id=conn_id, topic_pattern=topic_pattern,
+            payload_format=payload_format, description=description, is_active=True))
+
+    def toggle_topic(self, conn_id: int, topic_id: int) -> MachineTopic:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在: {topic_id}")
+        # 切换前若要激活，检查是否有同 pattern active 冲突
+        if not t.is_active:
+            existing = self.topics.find_active_duplicate(conn_id, t.topic_pattern)
+            if existing is not None and existing.id != t.id:
+                raise BusinessRuleError(
+                    f"已有 active 的相同 pattern topic #{existing.id}，先停用之")
+        t.is_active = not t.is_active
+        self.db.flush()
+        return t
+
+    def delete_topic(self, conn_id: int, topic_id: int) -> None:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在: {topic_id}")
+        self.topics.delete(topic_id)
+
+    def list_topics(self, conn_id: int) -> list[MachineTopic]:
+        # 若连接已删除（级联后），返回空列表；否则校验存在后返回 topic 列表。
+        if self.conns.get(conn_id) is None:
+            return []
+        return self.topics.list_for_connection(conn_id)
+
+    # ---- Messages ----
+
+    def list_recent_messages(self, conn_id: int, limit: int = 100) -> list[MachineMessage]:
+        self.get_connection(conn_id)
+        return self.messages.list_recent_for_connection(conn_id, limit)
