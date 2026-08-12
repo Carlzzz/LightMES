@@ -16,10 +16,48 @@ def test_create_connection_returns_pair_with_encrypted_password(db_session):
     assert mqtt.password_encrypted != "s3cret"  # 加密了
 
 
-def test_create_connection_rejects_non_mqtt_protocol(db_session):
+def test_create_connection_rejects_invalid_protocol(db_session):
     svc = ConnectivityService(db_session)
     with pytest.raises(ValidationError):
-        svc.create_connection(name="bad", broker_host="x", broker_port=1883, protocol="opcua")
+        svc.create_connection(
+            name="bad", broker_host="x", broker_port=1883, protocol="unknown")
+
+
+def test_create_connection_opcua(db_session):
+    svc = ConnectivityService(db_session)
+    conn, sub = svc.create_connection(
+        name="opc-1", protocol="opcua",
+        server_url="opc.tcp://192.168.1.10:4840",
+        username="u", password="p", poll_interval_seconds=10)
+    assert conn.protocol == "opcua"
+    assert sub.server_url == "opc.tcp://192.168.1.10:4840"
+    assert sub.security_mode == "none"
+    assert sub.username == "u"
+    assert sub.password_encrypted is not None
+    assert sub.poll_interval_seconds == 10
+
+
+def test_create_connection_modbus(db_session):
+    svc = ConnectivityService(db_session)
+    conn, sub = svc.create_connection(
+        name="mb-1", protocol="modbus",
+        host="192.168.1.20", port=502, slave_id=2)
+    assert conn.protocol == "modbus"
+    assert sub.host == "192.168.1.20"
+    assert sub.port == 502
+    assert sub.slave_id == 2
+
+
+def test_create_connection_opcua_requires_server_url(db_session):
+    svc = ConnectivityService(db_session)
+    with pytest.raises(ValidationError):
+        svc.create_connection(name="bad-opc", protocol="opcua")
+
+
+def test_create_connection_modbus_requires_host(db_session):
+    svc = ConnectivityService(db_session)
+    with pytest.raises(ValidationError):
+        svc.create_connection(name="bad-mb", protocol="modbus")
 
 
 def test_create_connection_rejects_duplicate_name(db_session):

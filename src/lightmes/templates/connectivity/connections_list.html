@@ -1,17 +1,74 @@
 {% extends "base.html" %}
 {% block title %}数采连接{% endblock %}
 {% block content %}
-<h1 class="page-title">数采连接 <small>MQTT</small></h1>
+<h1 class="page-title">数采连接 <small>MQTT / OPC-UA / Modbus</small></h1>
 
 <div class="card">
-  <div class="card__title">新建 MQTT 连接</div>
-  <form method="post" action="/connectivity/connections" class="form-row">
-    <div class="field"><label>名称</label><input name="name" required></div>
-    <div class="field"><label>Broker Host</label><input name="broker_host" placeholder="192.168.1.10" required></div>
-    <div class="field" style="max-width:100px"><label>Port</label><input name="broker_port" type="number" value="1883"></div>
-    <div class="field"><label>Username</label><input name="username"></div>
-    <div class="field"><label>Password</label><input name="password" type="password"></div>
-    <div class="field"><label>Use TLS</label><input type="checkbox" name="use_tls" value="true"></div>
+  <div class="card__title">新建连接</div>
+  <form method="post" action="/connectivity/connections" class="form" id="conn-form">
+    <div class="form-row">
+      <div class="field"><label>名称</label><input name="name" required></div>
+      <div class="field"><label>描述</label><input name="description"></div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>协议</label>
+        <select name="protocol" id="protocol-select" onchange="toggleProtocolFields()">
+          <option value="mqtt">MQTT</option>
+          <option value="opcua">OPC-UA</option>
+          <option value="modbus">Modbus TCP</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- MQTT 字段 -->
+    <fieldset id="mqtt-fields" class="protocol-fields">
+      <legend>MQTT</legend>
+      <div class="form-row">
+        <div class="field"><label>Broker Host</label><input name="broker_host" placeholder="192.168.1.10"></div>
+        <div class="field" style="max-width:100px"><label>Port</label><input name="broker_port" type="number" value="1883"></div>
+        <div class="field"><label>Username</label><input name="username"></div>
+        <div class="field"><label>Password</label><input name="password" type="password"></div>
+        <div class="field"><label>Use TLS</label><input type="checkbox" name="use_tls" value="true"></div>
+        <div class="field" style="max-width:90px"><label>QoS</label><input name="qos_default" type="number" value="0" min="0" max="2"></div>
+        <div class="field" style="max-width:120px"><label>KeepAlive(s)</label><input name="keep_alive_seconds" type="number" value="60"></div>
+      </div>
+    </fieldset>
+
+    <!-- OPC-UA 字段 -->
+    <fieldset id="opcua-fields" class="protocol-fields" style="display:none">
+      <legend>OPC-UA</legend>
+      <div class="form-row">
+        <div class="field" style="flex:2"><label>Server URL</label><input name="server_url" placeholder="opc.tcp://192.168.1.10:4840"></div>
+        <div class="field"><label>Security</label>
+          <select name="security_mode">
+            <option value="none">none</option>
+            <option value="sign">sign</option>
+            <option value="sign_encrypt">sign_encrypt</option>
+          </select>
+        </div>
+        <div class="field"><label>Username</label><input name="opcua_username"></div>
+        <div class="field"><label>Password</label><input name="opcua_password" type="password"></div>
+        <div class="field" style="max-width:120px"><label>Poll(s)</label><input name="opcua_poll_interval" type="number" value="5"></div>
+      </div>
+    </fieldset>
+
+    <!-- Modbus 字段 -->
+    <fieldset id="modbus-fields" class="protocol-fields" style="display:none">
+      <legend>Modbus TCP</legend>
+      <div class="form-row">
+        <div class="field"><label>Host</label><input name="host" placeholder="192.168.1.20"></div>
+        <div class="field" style="max-width:100px"><label>Port</label><input name="mb_port" type="number" value="502"></div>
+        <div class="field" style="max-width:100px"><label>Slave ID</label><input name="slave_id" type="number" value="1"></div>
+        <div class="field" style="max-width:120px"><label>Poll(s)</label><input name="mb_poll_interval" type="number" value="5"></div>
+      </div>
+    </fieldset>
+
+    <!-- 共享字段 -->
+    <div class="form-row">
+      <div class="field" style="max-width:140px"><label>连接超时(s)</label><input name="connect_timeout_seconds" type="number" value="10"></div>
+      <div class="field" style="max-width:140px"><label>重连延迟(s)</label><input name="reconnect_delay_seconds" type="number" value="5"></div>
+    </div>
     <button type="submit">创建</button>
   </form>
 </div>
@@ -19,13 +76,14 @@
 <div class="card">
   <div class="card__title">连接列表</div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>名称</th><th>Broker</th><th>状态</th><th>消息数</th><th>最后连接</th><th>操作</th></tr></thead>
+    <thead><tr><th>ID</th><th>名称</th><th>协议</th><th>端点</th><th>状态</th><th>消息数</th><th>最后连接</th><th>操作</th></tr></thead>
     <tbody>
       {% for c in connections %}
       <tr>
         <td>{{ c.id }}</td>
         <td><a href="/connectivity/connections/{{ c.id }}">{{ c.name }}</a></td>
-        <td><code>{{ c.broker_host }}:{{ c.broker_port }}</code></td>
+        <td><span class="badge">{{ c.protocol }}</span></td>
+        <td><code>{{ c.endpoint }}</code></td>
         <td>
           {% if c.status == 'connected' %}<span class="badge badge--ok">已连接</span>
           {% elif c.status == 'connecting' %}<span class="badge badge--warn">连接中</span>
@@ -52,9 +110,36 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" style="color:#6b7280;text-align:center">暂无连接</td></tr>
+      <tr><td colspan="8" style="color:#6b7280;text-align:center">暂无连接</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+// 提交前同步 opcua/modbus 字段名到 router 期望的统一字段名
+function syncFieldNames() {
+  var proto = document.getElementById('protocol-select').value;
+  if (proto === 'opcua') {
+    var u = document.querySelector('input[name="opcua_username"]');
+    if (u) u.name = 'username';
+    var p = document.querySelector('input[name="opcua_password"]');
+    if (p) p.name = 'password';
+    var poll = document.querySelector('input[name="opcua_poll_interval"]');
+    if (poll) poll.name = 'poll_interval_seconds';
+  } else if (proto === 'modbus') {
+    var port = document.querySelector('input[name="mb_port"]');
+    if (port) port.name = 'port';
+    var mpoll = document.querySelector('input[name="mb_poll_interval"]');
+    if (mpoll) mpoll.name = 'poll_interval_seconds';
+  }
+}
+function toggleProtocolFields() {
+  var proto = document.getElementById('protocol-select').value;
+  document.getElementById('mqtt-fields').style.display = proto === 'mqtt' ? '' : 'none';
+  document.getElementById('opcua-fields').style.display = proto === 'opcua' ? '' : 'none';
+  document.getElementById('modbus-fields').style.display = proto === 'modbus' ? '' : 'none';
+}
+document.getElementById('conn-form').addEventListener('submit', syncFieldNames);
+</script>
 {% endblock %}

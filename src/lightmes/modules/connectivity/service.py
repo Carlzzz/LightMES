@@ -5,17 +5,19 @@ from sqlalchemy.orm import Session
 
 from lightmes.modules.connectivity.crypto import encrypt_password
 from lightmes.modules.connectivity.models import (
-    MachineConnection, MachineMessage, MachineTopic, MqttConnection, TopicMapping,
+    MachineConnection, MachineMessage, MachineTopic, ModbusConnection,
+    MqttConnection, OpcuaConnection, TopicMapping,
 )
 from lightmes.modules.connectivity.repository import (
     MachineConnectionRepository, MachineMessageRepository,
-    MachineTopicRepository, MqttConnectionRepository, TopicMappingRepository,
+    MachineTopicRepository, ModbusConnectionRepository,
+    MqttConnectionRepository, OpcuaConnectionRepository, TopicMappingRepository,
 )
 from lightmes.modules.connectivity.schemas import ConnectionCreate, TopicCreate
 from lightmes.shared.errors import BusinessRuleError, NotFoundError, ValidationError
 
 _VALID_FORMATS = {"json", "plain", "csv", "hex"}
-_VALID_PROTOCOLS = {"mqtt"}  # V1 只支持 mqtt
+_VALID_PROTOCOLS = {"mqtt", "opcua", "modbus"}
 _VALID_ACTION_TYPES = {
     "log_event", "update_work_order_produced_qty", "set_work_order_status",
     "update_serial_unit_status", "create_defect", "webhook_forward",
@@ -27,6 +29,8 @@ class ConnectivityService:
         self.db = db
         self.conns = MachineConnectionRepository(db)
         self.mqtts = MqttConnectionRepository(db)
+        self.opcuas = OpcuaConnectionRepository(db)
+        self.modbuses = ModbusConnectionRepository(db)
         self.topics = MachineTopicRepository(db)
         self.messages = MachineMessageRepository(db)
         self.mappings = TopicMappingRepository(db)
@@ -37,7 +41,10 @@ class ConnectivityService:
         self,
         *,
         name: str,
-        broker_host: str,
+        protocol: str = "mqtt",
+        description: str | None = None,
+        # MQTT
+        broker_host: str | None = None,
         broker_port: int = 1883,
         username: str | None = None,
         password: str | None = None,
@@ -45,34 +52,70 @@ class ConnectivityService:
         keep_alive_seconds: int = 60,
         qos_default: int = 0,
         clean_session: bool = True,
+        # OPC-UA
+        server_url: str | None = None,
+        security_mode: str = "none",
+        # Modbus
+        host: str | None = None,
+        port: int = 502,
+        slave_id: int = 1,
+        # shared
+        poll_interval_seconds: int = 5,
         connect_timeout_seconds: int = 10,
         reconnect_delay_seconds: int = 5,
-        description: str | None = None,
-        protocol: str = "mqtt",
-    ) -> tuple[MachineConnection, MqttConnection]:
+    ) -> tuple[MachineConnection, MqttConnection | OpcuaConnection | ModbusConnection]:
         # 校验
         if protocol not in _VALID_PROTOCOLS:
-            raise ValidationError(f"protocol 必须是 {sorted(_VALID_PROTOCOLS)} 之一: {protocol}")
-        if not (1 <= broker_port <= 65535):
-            raise ValidationError(f"broker_port 必须在 1-65535 之间: {broker_port}")
-        if qos_default not in (0, 1, 2):
-            raise ValidationError(f"qos_default 必须是 0/1/2: {qos_default}")
+            raise ValidationError(
+                f"protocol 必须是 {sorted(_VALID_PROTOCOLS)} 之一: {protocol}"
+            )
         # 重名检查
         if self.conns.get_by_name(name) is not None:
             raise BusinessRuleError(f"连接名称已存在: {name}")
-        # 创建
+        # 创建父行
         conn = self.conns.add(MachineConnection(
             name=name, description=description, protocol=protocol,
             is_active=False, status="disconnected"))
-        mqtt = self.mqtts.add(MqttConnection(
-            machine_connection_id=conn.id, broker_host=broker_host, broker_port=broker_port,
-            username=username,
-            password_encrypted=encrypt_password(password) if password else None,
-            use_tls=use_tls, keep_alive_seconds=keep_alive_seconds,
-            qos_default=qos_default, clean_session=clean_session,
-            connect_timeout_seconds=connect_timeout_seconds,
-            reconnect_delay_seconds=reconnect_delay_seconds))
-        return conn, mqtt
+
+        if protocol == "mqtt":
+            if not broker_host:
+                raise ValidationError("MQTT 连接必须提供 broker_host")
+            if not (1 <= broker_port <= 65535):
+                raise ValidationError(f"broker_port 必须在 1-65535 之间: {broker_port}")
+            if qos_default not in (0, 1, 2):
+                raise ValidationError(f"qos_default 必须是 0/1/2: {qos_default}")
+            sub = self.mqtts.add(MqttConnection(
+                machine_connection_id=conn.id, broker_host=broker_host,
+                broker_port=broker_port, username=username,
+                password_encrypted=encrypt_password(password) if password else None,
+                use_tls=use_tls, keep_alive_seconds=keep_alive_seconds,
+                qos_default=qos_default, clean_session=clean_session,
+                connect_timeout_seconds=connect_timeout_seconds,
+                reconnect_delay_seconds=reconnect_delay_seconds))
+        elif protocol == "opcua":
+            if not server_url:
+                raise ValidationError("OPC-UA 连接必须提供 server_url")
+            sub = self.opcuas.add(OpcuaConnection(
+                machine_connection_id=conn.id, server_url=server_url,
+                security_mode=security_mode,
+                username=username,
+                password_encrypted=encrypt_password(password) if password else None,
+                poll_interval_seconds=poll_interval_seconds,
+                connect_timeout_seconds=connect_timeout_seconds,
+                reconnect_delay_seconds=reconnect_delay_seconds))
+        elif protocol == "modbus":
+            if not host:
+                raise ValidationError("Modbus 连接必须提供 host")
+            if not (1 <= port <= 65535):
+                raise ValidationError(f"port 必须在 1-65535 之间: {port}")
+            sub = self.modbuses.add(ModbusConnection(
+                machine_connection_id=conn.id, host=host, port=port,
+                slave_id=slave_id, poll_interval_seconds=poll_interval_seconds,
+                connect_timeout_seconds=connect_timeout_seconds,
+                reconnect_delay_seconds=reconnect_delay_seconds))
+        else:  # pragma: no cover — protected by _VALID_PROTOCOLS check above
+            raise ValidationError(f"未支持的 protocol: {protocol}")
+        return conn, sub
 
     def get_connection(self, conn_id: int) -> MachineConnection:
         c = self.conns.get(conn_id)
@@ -82,6 +125,12 @@ class ConnectivityService:
 
     def get_mqtt_for_connection(self, conn_id: int) -> MqttConnection | None:
         return self.mqtts.get_by_machine_connection(conn_id)
+
+    def get_opcua_for_connection(self, conn_id: int) -> OpcuaConnection | None:
+        return self.opcuas.get_by_machine_connection(conn_id)
+
+    def get_modbus_for_connection(self, conn_id: int) -> ModbusConnection | None:
+        return self.modbuses.get_by_machine_connection(conn_id)
 
     def list_connections(self) -> list[MachineConnection]:
         return self.conns.list_all()
@@ -115,6 +164,12 @@ class ConnectivityService:
         )
         self.db.execute(
             delete(MqttConnection).where(MqttConnection.machine_connection_id == conn_id)
+        )
+        self.db.execute(
+            delete(OpcuaConnection).where(OpcuaConnection.machine_connection_id == conn_id)
+        )
+        self.db.execute(
+            delete(ModbusConnection).where(ModbusConnection.machine_connection_id == conn_id)
         )
         self.conns.delete(c.id)
         self.db.flush()
