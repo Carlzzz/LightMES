@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}API Keys - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">API Keys <small>AI Agent 接入凭证</small></h1>
+
+<div class="card">
+  <div class="card__title">创建新 Key</div>
+  <form method="post" action="/system/api-keys" class="form-row"
+        onsubmit="return confirm('创建后完整 key 仅显示一次，确认？')">
+    <div class="field"><label>名称</label><input name="name" required placeholder="ERP Sync"></div>
+    <div class="field">
+      <label>Scopes</label>
+      <label><input type="checkbox" name="scopes" value="read" checked> read</label>
+      <label><input type="checkbox" name="scopes" value="write"> write</label>
+    </div>
+    <button type="submit">创建</button>
+  </form>
+</div>
+
+<div id="new-key-target"></div>
+
+<div class="card">
+  <div class="card__title">现有 Keys</div>
+  <table class="data-table">
+    <thead><tr><th>名称</th><th>前缀</th><th>Scopes</th><th>最后使用</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for k in keys %}
+      <tr>
+        <td>{{ k.name }}</td>
+        <td><code>{{ k.key_prefix }}...</code></td>
+        <td>{{ k.scopes|join(", ") }}</td>
+        <td>{{ k.last_used_at.strftime("%Y-%m-%d %H:%M") if k.last_used_at else "未使用" }}</td>
+        <td>
+          {% if k.is_active and not k.revoked_at %}<span class="badge badge--ok">启用</span>
+          {% else %}<span class="badge badge--danger">已吊销</span>{% endif %}
+        </td>
+        <td>
+          {% if k.is_active and not k.revoked_at %}
+          <form method="post" action="/system/api-keys/{{ k.id }}/revoke" style="display:inline"
+                onsubmit="return confirm('确认吊销此 Key？立即生效。')">
+            <button type="submit" class="btn-danger">吊销</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

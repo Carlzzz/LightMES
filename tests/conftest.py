@@ -4,6 +4,7 @@ from lightmes.database import SessionLocal, engine
 from lightmes.modules.auth import models as _auth_models  # noqa: F401
 from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F401
 from lightmes.modules.production import models as _production_models  # noqa: F401
+from lightmes.modules.api_v1 import models as _api_v1_models  # noqa: F401
 
 
 @pytest.fixture()

@@ -9,15 +9,33 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from lightmes.config import get_settings
 from lightmes.database import get_db
-from lightmes.modules import auth, integration, masterdata, production, trace, quality
+from lightmes.modules import api_v1, auth, integration, masterdata, production, trace, quality
 from lightmes.database import engine
 from lightmes.shared.base import Base
 from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import User
-from lightmes.shared.errors import DomainError
+from lightmes.modules.api_v1.errors import register_problem_details_handler
+from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
 
 settings = get_settings()
-app = FastAPI(title=settings.app_name)
+app = FastAPI(
+    title=settings.app_name,
+    version="0.2.0",
+    description=(
+        "LightMES — 轻量级制造执行系统（笔记本壳装配专线）。\n\n"
+        "**API v1**：本接口为 AI Agent / ERP / BI 等外部系统集成设计。\n"
+        "**认证**：`Authorization: Bearer lmk_live_xxx`（API Key，通过 `/system/api-keys` 创建）。\n"
+        "**错误格式**：RFC 7807 Problem Details (`application/problem+json`)。\n"
+        "**分页**：`?page=1&size=20`，响应头 `X-Total-Count` / `X-Page` / `X-Size`。\n\n"
+        "操作员 UI 见各模块 HTML 路由（不在本 OpenAPI 中）。"
+    ),
+    openapi_tags=[
+        {"name": "Work Orders", "description": "工单 CRUD + 优先级"},
+        {"name": "Serial Units", "description": "序列号单元查询（含 SN 业务键查询）"},
+        {"name": "Defects", "description": "缺陷记录查询"},
+        {"name": "API Keys", "description": "API Key 管理（admin only）"},
+    ],
+)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 app.mount(
     "/static",
@@ -30,11 +48,14 @@ production.register(app)
 trace.register(app)
 integration.register(app)
 quality.register(app)
+api_v1.register(app)
 
+# Middleware（顺序：后加的在外层；先加 ApiCallLog，再加 TraceId → TraceId 在最外层，先注入 trace_id）
+app.add_middleware(ApiCallLogMiddleware)
+app.add_middleware(TraceIdMiddleware)
 
-@app.exception_handler(DomainError)
-def _domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+# 升级 DomainError handler 为 RFC 7807 Problem Details JSON
+register_problem_details_handler(app)
 
 
 _templates = Jinja2Templates(

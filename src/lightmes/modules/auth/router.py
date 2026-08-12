@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,15 @@ def _login_guard(request: Request, db: Session) -> Response | None:
     if current_user_or_none(request, db) is None:
         return Response(status_code=302, headers={"Location": "/login"})
     return None
+
+
+def _is_admin(user) -> bool:
+    """检查用户是否为管理员（兼容新 role_obj 与 legacy role 字段）。"""
+    if user is None:
+        return False
+    if user.role_obj is not None:
+        return user.role_obj.name == "admin"
+    return getattr(user, "role", None) == "admin"
 
 
 @router.post("/api/auth/login", response_model=LoginResponse)
@@ -135,3 +144,65 @@ def roles_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "system/roles.html", {"roles": roles, "permissions": permissions}
     )
+
+
+# ---- API Key 管理（admin only）----
+
+@router.get("/system/api-keys", response_class=HTMLResponse)
+def api_keys_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    if not _is_admin(user):
+        return HTMLResponse("权限不足", status_code=403)
+    from lightmes.modules.api_v1.api_key_service import ApiKeyService
+    keys = ApiKeyService(db).list_for_user(user.id)
+    return templates.TemplateResponse(
+        request, "system/api_keys.html", {"keys": keys, "user": user},
+    )
+
+
+@router.post("/system/api-keys", response_class=HTMLResponse)
+def api_key_create(
+    request: Request,
+    name: str = Form(...),
+    scopes: list[str] = Form([]),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    if not _is_admin(user):
+        return HTMLResponse("权限不足", status_code=403)
+    from lightmes.modules.api_v1.api_key_service import ApiKeyService
+    scopes_resolved = scopes if scopes else ["read"]
+    full_key, record = ApiKeyService(db).create(
+        name=name, user_id=user.id, scopes=scopes_resolved,
+    )
+    db.commit()
+    return templates.TemplateResponse(
+        request, "system/partials/api_key_created.html",
+        {"full_key": full_key, "record": record},
+    )
+
+
+@router.post("/system/api-keys/{key_id}/revoke", response_class=HTMLResponse)
+def api_key_revoke(
+    request: Request,
+    key_id: int,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    user = current_user_or_none(request, db)
+    if user is None:
+        return HTMLResponse("请先登录", status_code=401)
+    if not _is_admin(user):
+        return HTMLResponse("权限不足", status_code=403)
+    from lightmes.modules.api_v1.api_key_service import ApiKeyService
+    from lightmes.modules.auth.models import ApiKey
+    target = db.get(ApiKey, key_id)
+    if target is None or target.user_id != user.id:
+        # IDOR 防护：与 JSON 路由保持一致，不存在与其他用户的不做区分
+        return HTMLResponse("API Key 不存在", status_code=404)
+    ApiKeyService(db).revoke(key_id, revoked_by_user_id=user.id)
+    db.commit()
+    return RedirectResponse(url="/system/api-keys", status_code=303)

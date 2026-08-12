@@ -1,4 +1,5 @@
-from sqlalchemy import ForeignKey, JSON, UniqueConstraint
+from datetime import datetime
+from sqlalchemy import DateTime, ForeignKey, JSON, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -56,3 +57,24 @@ class RolePermission(Base, TimestampMixin):
     permission_id: Mapped[int] = mapped_column(ForeignKey("permissions.id"), index=True)
     # 可选的规则配置（字段级权限、数据范围等）
     rules: Mapped[dict | None] = mapped_column(JSON, default=None)
+
+
+class ApiKey(Base, TimestampMixin):
+    """API 密钥表（Bearer token 凭据）"""
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    scopes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    is_active: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_used_ip: Mapped[str | None] = mapped_column(String(64), default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    revoked_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None)
