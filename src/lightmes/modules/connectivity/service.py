@@ -1,19 +1,25 @@
+import json
+
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from lightmes.modules.connectivity.crypto import encrypt_password
 from lightmes.modules.connectivity.models import (
-    MachineConnection, MachineMessage, MachineTopic, MqttConnection,
+    MachineConnection, MachineMessage, MachineTopic, MqttConnection, TopicMapping,
 )
 from lightmes.modules.connectivity.repository import (
     MachineConnectionRepository, MachineMessageRepository,
-    MachineTopicRepository, MqttConnectionRepository,
+    MachineTopicRepository, MqttConnectionRepository, TopicMappingRepository,
 )
 from lightmes.modules.connectivity.schemas import ConnectionCreate, TopicCreate
 from lightmes.shared.errors import BusinessRuleError, NotFoundError, ValidationError
 
 _VALID_FORMATS = {"json", "plain", "csv", "hex"}
 _VALID_PROTOCOLS = {"mqtt"}  # V1 只支持 mqtt
+_VALID_ACTION_TYPES = {
+    "log_event", "update_work_order_produced_qty", "set_work_order_status",
+    "update_serial_unit_status", "create_defect", "webhook_forward",
+}
 
 
 class ConnectivityService:
@@ -23,6 +29,7 @@ class ConnectivityService:
         self.mqtts = MqttConnectionRepository(db)
         self.topics = MachineTopicRepository(db)
         self.messages = MachineMessageRepository(db)
+        self.mappings = TopicMappingRepository(db)
 
     # ---- Connection ----
 
@@ -163,3 +170,82 @@ class ConnectivityService:
     def list_recent_messages(self, conn_id: int, limit: int = 100) -> list[MachineMessage]:
         self.get_connection(conn_id)
         return self.messages.list_recent_for_connection(conn_id, limit)
+
+    # ---- Topic Mappings ----
+
+    def add_mapping(
+        self,
+        conn_id: int,
+        topic_id: int,
+        action_type: str,
+        action_params: dict | str | None = None,
+        field_path: str | None = None,
+        condition_expr: str | None = None,
+        priority: int = 100,
+        description: str | None = None,
+    ) -> TopicMapping:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在或不属于连接 {conn_id}: {topic_id}")
+        if action_type not in _VALID_ACTION_TYPES:
+            raise ValidationError(
+                f"action_type 必须是 {sorted(_VALID_ACTION_TYPES)} 之一: {action_type}"
+            )
+        # Priority bounds
+        if not (1 <= priority <= 1000):
+            raise ValidationError(f"priority 必须在 1-1000 之间: {priority}")
+        # Max lengths
+        if field_path and len(field_path) > 255:
+            raise ValidationError("field_path 太长（最多 255 字符）")
+        if condition_expr and len(condition_expr) > 255:
+            raise ValidationError("condition_expr 太长（最多 255 字符）")
+        if description and len(description) > 255:
+            raise ValidationError("description 太长（最多 255 字符）")
+        # action_params 可能是 JSON 字符串（表单）或 dict（API）
+        if isinstance(action_params, str):
+            s = action_params.strip()
+            if not s:
+                action_params = None
+            else:
+                if len(s) > 5000:
+                    raise ValidationError("action_params 太长（最多 5000 字符）")
+                try:
+                    action_params = json.loads(s)
+                except json.JSONDecodeError:
+                    raise ValidationError(
+                        f"action_params 不是有效 JSON: {action_params}"
+                    )
+        if isinstance(action_params, dict) and not action_params:
+            action_params = None
+        return self.mappings.add(TopicMapping(
+            machine_topic_id=topic_id, action_type=action_type,
+            action_params=action_params, field_path=field_path or None,
+            condition_expr=condition_expr or None, priority=priority,
+            description=description, is_active=True))
+
+    def toggle_mapping(self, conn_id: int, topic_id: int, mapping_id: int) -> TopicMapping:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在或不属于连接 {conn_id}: {topic_id}")
+        m = self.mappings.get(mapping_id)
+        if m is None or m.machine_topic_id != topic_id:
+            raise NotFoundError(f"mapping 不存在: {mapping_id}")
+        m.is_active = not m.is_active
+        self.db.flush()
+        return m
+
+    def delete_mapping(self, conn_id: int, topic_id: int, mapping_id: int) -> None:
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            raise NotFoundError(f"topic 不存在或不属于连接 {conn_id}: {topic_id}")
+        m = self.mappings.get(mapping_id)
+        if m is None or m.machine_topic_id != topic_id:
+            raise NotFoundError(f"mapping 不存在: {mapping_id}")
+        self.mappings.delete(mapping_id)
+
+    def list_mappings(self, conn_id: int, topic_id: int) -> list[TopicMapping]:
+        # topic 不存在或不属于该连接时返回 []（避免级联删除后页面报错 + IDOR）
+        t = self.topics.get(topic_id)
+        if t is None or t.machine_connection_id != conn_id:
+            return []
+        return self.mappings.list_for_topic(topic_id)

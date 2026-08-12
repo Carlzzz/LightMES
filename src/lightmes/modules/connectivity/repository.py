@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.modules.connectivity.models import (
-    MachineConnection, MachineMessage, MachineTopic, MqttConnection,
+    MachineConnection, MachineMessage, MachineTopic, MqttConnection, TopicMapping,
 )
 
 
@@ -112,3 +112,27 @@ class MachineMessageRepository:
             .order_by(MachineMessage.id.desc())
             .limit(limit)
         ).scalars().all())
+
+
+class TopicMappingRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, m: TopicMapping) -> TopicMapping:
+        self.db.add(m); self.db.flush()
+        return m
+
+    def get(self, mapping_id: int) -> TopicMapping | None:
+        return self.db.get(TopicMapping, mapping_id)
+
+    def list_for_topic(self, topic_id: int) -> list[TopicMapping]:
+        return list(self.db.execute(
+            select(TopicMapping).where(TopicMapping.machine_topic_id == topic_id)
+            .order_by(TopicMapping.priority)
+        ).scalars().all())
+
+    def delete(self, mapping_id: int) -> None:
+        m = self.get(mapping_id)
+        if m is not None:
+            self.db.delete(m)
+            self.db.flush()

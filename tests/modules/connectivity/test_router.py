@@ -163,3 +163,113 @@ def test_topic_delete_via_post(client, db_session):
     resp = client.post(f"/connectivity/connections/{c.id}/topics/{t.id}/delete")
     assert resp.status_code in (200, 303)
     assert db_session.get(MachineTopic, t.id) is None
+
+
+def test_mapping_add_via_post(client, db_session):
+    _login_admin(client, db_session, "m1")
+    c = _make_conn(db_session, "mapping-add")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    resp = client.post(
+        f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
+            "action_type": "log_event", "priority": "50"})
+    assert resp.status_code in (200, 303)
+    from lightmes.modules.connectivity.models import TopicMapping
+    m = db_session.query(TopicMapping).filter(
+        TopicMapping.machine_topic_id == t.id).one()
+    assert m.action_type == "log_event"
+    assert m.priority == 50
+
+
+def test_mapping_delete_via_post(client, db_session):
+    _login_admin(client, db_session, "m2")
+    c = _make_conn(db_session, "mapping-del")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    client.post(f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
+        "action_type": "log_event"})
+    from lightmes.modules.connectivity.models import TopicMapping
+    m = db_session.query(TopicMapping).filter(
+        TopicMapping.machine_topic_id == t.id).one()
+    resp = client.post(
+        f"/connectivity/connections/{c.id}/topics/{t.id}/mappings/{m.id}/delete")
+    assert resp.status_code in (200, 303)
+    assert db_session.get(TopicMapping, m.id) is None
+
+
+def test_mapping_toggle_via_post(client, db_session):
+    _login_admin(client, db_session, "m3")
+    c = _make_conn(db_session, "map-tog")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    client.post(f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
+        "action_type": "log_event"})
+    from lightmes.modules.connectivity.models import TopicMapping
+    m = db_session.query(TopicMapping).filter(
+        TopicMapping.machine_topic_id == t.id).one()
+    assert m.is_active is True
+    resp = client.post(
+        f"/connectivity/connections/{c.id}/topics/{t.id}/mappings/{m.id}/toggle")
+    assert resp.status_code in (200, 303)
+    db_session.refresh(m)
+    assert m.is_active is False
+
+
+def test_connection_detail_shows_mappings(client, db_session):
+    """connection_detail page renders all_mappings section."""
+    _login_admin(client, db_session, "m4")
+    c = _make_conn(db_session, "map-view")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    client.post(f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
+        "action_type": "log_event", "field_path": "$.count"})
+    resp = client.get(f"/connectivity/connections/{c.id}")
+    assert resp.status_code == 200
+    assert "Action Mappings" in resp.text
+    assert "log_event" in resp.text
+
+
+def test_mapping_add_invalid_action_type_rejected(client, db_session):
+    """Invalid action_type → 400, no DB row created."""
+    _login_admin(client, db_session, "m5")
+    c = _make_conn(db_session, "map-invalid")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    resp = client.post(
+        f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
+            "action_type": "nonexistent_action"})
+    assert resp.status_code == 400
+    from lightmes.modules.connectivity.models import TopicMapping
+    assert db_session.query(TopicMapping).filter(
+        TopicMapping.machine_topic_id == t.id).count() == 0
+
+
+def test_mapping_add_invalid_json_params_rejected(client, db_session):
+    """action_params with malformed JSON → 400."""
+    _login_admin(client, db_session, "m6")
+    c = _make_conn(db_session, "map-bad-json")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    resp = client.post(
+        f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
+            "action_type": "log_event",
+            "action_params": "{not valid json"})
+    assert resp.status_code == 400

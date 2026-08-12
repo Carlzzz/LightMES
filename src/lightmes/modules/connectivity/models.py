@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, CheckConstraint, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lightmes.shared.base import Base, TimestampMixin
@@ -75,3 +75,28 @@ class MachineMessage(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now())
+    parsed_data: Mapped[dict | None] = mapped_column(JSON, default=None)
+    actions_triggered: Mapped[list | None] = mapped_column(JSON, default=None)
+    processing_error: Mapped[str | None] = mapped_column(Text, default=None)
+
+
+class TopicMapping(Base, TimestampMixin):
+    __tablename__ = "topic_mappings"
+    __table_args__ = (
+        CheckConstraint(
+            "action_type IN ('log_event', 'update_work_order_produced_qty', "
+            "'set_work_order_status', 'update_serial_unit_status', "
+            "'create_defect', 'webhook_forward')",
+            name="ck_topic_mappings_action_type"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    machine_topic_id: Mapped[int] = mapped_column(
+        ForeignKey("machine_topics.id", ondelete="CASCADE"), index=True)
+    description: Mapped[str | None] = mapped_column(String(255), default=None)
+    field_path: Mapped[str | None] = mapped_column(String(255), default=None)
+    action_type: Mapped[str] = mapped_column(String(30))
+    action_params: Mapped[dict | None] = mapped_column(JSON, default=None)
+    condition_expr: Mapped[str | None] = mapped_column(String(255), default=None)
+    priority: Mapped[int] = mapped_column(Integer, default=100)
+    is_active: Mapped[bool] = mapped_column(default=True)
