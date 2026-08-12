@@ -7,7 +7,7 @@ from lightmes.modules.api_v1.api_key_service import ApiKeyService
 from lightmes.modules.api_v1.dependencies import require_api_key
 from lightmes.modules.api_v1.schemas import (
     ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyRead,
-    WorkOrderCreateV1, WorkOrderPriorityPatch, WorkOrderReadV1,
+    SerialUnitReadV1, WorkOrderCreateV1, WorkOrderPriorityPatch, WorkOrderReadV1,
 )
 from lightmes.modules.auth.models import User
 from lightmes.shared.errors import NotFoundError
@@ -154,3 +154,68 @@ def patch_work_order_priority(
     db.commit()
     db.refresh(wo)
     return WorkOrderReadV1.model_validate(wo)
+
+
+# ---- Serial Units ----
+
+_SU_TAG = "Serial Units"
+
+
+@router.get("/serial-units", response_model=list[SerialUnitReadV1], tags=[_SU_TAG])
+def list_serial_units(
+    response: Response,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=_LIST_MAX_SIZE),
+    work_order_id: int | None = Query(default=None),
+    status: list[str] = Query(default=[]),
+    sn: str | None = Query(default=None),
+    user: User = Depends(require_api_key("read")),
+    db: Session = Depends(get_db),
+) -> list[SerialUnitReadV1]:
+    """列出 serial units（分页 + 过滤）。
+
+    通过 `X-Total-Count` / `X-Page` / `X-Size` 响应头返回分页信息。
+    """
+    from sqlalchemy import select, func
+    from lightmes.modules.production.models import SerialUnit
+    q = select(SerialUnit).order_by(SerialUnit.id.desc())
+    if work_order_id is not None:
+        q = q.where(SerialUnit.work_order_id == work_order_id)
+    if status:
+        q = q.where(SerialUnit.status.in_(status))
+    if sn:
+        q = q.where(SerialUnit.sn.ilike(f"%{sn}%"))
+    total = db.execute(select(func.count()).select_from(q.subquery())).scalar_one()
+    rows = list(db.execute(q.offset((page - 1) * size).limit(size)).scalars().all())
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Page"] = str(page)
+    response.headers["X-Size"] = str(size)
+    return [SerialUnitReadV1.model_validate(r) for r in rows]
+
+
+@router.get("/serial-units/by-sn/{sn}", response_model=SerialUnitReadV1, tags=[_SU_TAG])
+def get_serial_unit_by_sn(
+    sn: str,
+    user: User = Depends(require_api_key("read")),
+    db: Session = Depends(get_db),
+) -> SerialUnitReadV1:
+    """按 SN（业务键）查询 serial unit。"""
+    from lightmes.modules.production.repository import SerialUnitRepository
+    su = SerialUnitRepository(db).get_by_sn(sn)
+    if su is None:
+        raise NotFoundError(f"SN 不存在: {sn}")
+    return SerialUnitReadV1.model_validate(su)
+
+
+@router.get("/serial-units/{su_id}", response_model=SerialUnitReadV1, tags=[_SU_TAG])
+def get_serial_unit(
+    su_id: int,
+    user: User = Depends(require_api_key("read")),
+    db: Session = Depends(get_db),
+) -> SerialUnitReadV1:
+    """按 id 获取 serial unit。"""
+    from lightmes.modules.production.models import SerialUnit
+    su = db.get(SerialUnit, su_id)
+    if su is None:
+        raise NotFoundError(f"Serial unit 不存在: {su_id}")
+    return SerialUnitReadV1.model_validate(su)

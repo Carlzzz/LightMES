@@ -63,3 +63,17 @@ class WorkOrderCreateV1(BaseModel):
 
 class WorkOrderPriorityPatch(BaseModel):
     priority: int = Field(..., ge=1, le=9)
+
+
+class SerialUnitReadV1(BaseModel):
+    """SerialUnit for API v1."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    sn: str
+    work_order_id: int
+    product_id: int
+    status: str
+    current_operation_seq: int
+    is_counted: bool
+    carrier_code: str | None
+    created_at: datetime
