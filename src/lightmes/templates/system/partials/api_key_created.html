@@ -1,0 +1,7 @@
+<div class="card" style="border: 2px solid var(--ok); background: var(--ok-bg);">
+  <div class="card__title">✓ Key 已创建 — 请立即复制保存</div>
+  <p class="nav-card__desc">完整 key 仅此一次显示，关闭后无法再查看。</p>
+  <pre id="new-api-key" style="background: white; padding: 12px; border-radius: 4px; font-family: monospace; word-break: break-all; user-select: all;">{{ full_key }}</pre>
+  <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('new-api-key').textContent).then(() => alert('已复制'))">复制到剪贴板</button>
+  <p style="margin-top: 12px"><a href="/system/api-keys">← 返回列表</a></p>
+</div>
