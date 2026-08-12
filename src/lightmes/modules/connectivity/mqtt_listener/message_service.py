@@ -30,7 +30,10 @@ def persist_message(
     payload: bytes,
     received_at: datetime,
 ) -> MessagePersistResult:
-    """Persist one received MQTT message. Returns result; never raises."""
+    """Persist one received MQTT message with parsing + action execution."""
+    from lightmes.modules.connectivity.models import TopicMapping
+    from lightmes.modules.connectivity.parser import MqttMessageParser
+
     db = database.SessionLocal()
     try:
         # 1. 校验 connection 存在
@@ -52,19 +55,69 @@ def persist_message(
         matched = next(
             (t for t in topics if matches_topic(t.topic_pattern, topic)), None
         )
-        # 4. 入库
-        # PostgreSQL TEXT 拒绝 NUL 字节，先用 replace 解码再剔除
+
+        # 4. 匹配则解析 + 执行 actions
+        parsed_data = None
+        actions_triggered = None
+        processing_status = "skipped"
+        processing_error = None
+
+        if matched:
+            parser = MqttMessageParser()
+            # PostgreSQL TEXT 拒绝 NUL 字节，先 replace 解码再剔除
+            raw_payload = payload.decode("utf-8", errors="replace").replace("\x00", "")
+            parsed_data = parser.parse(raw_payload, matched.payload_format)
+
+            # 查 active mappings
+            mappings = list(
+                db.execute(
+                    select(TopicMapping)
+                    .where(
+                        TopicMapping.machine_topic_id == matched.id,
+                        TopicMapping.is_active.is_(True),
+                    )
+                    .order_by(TopicMapping.priority)
+                ).scalars().all()
+            )
+
+            if mappings:
+                from lightmes.modules.connectivity.action_executor import ActionExecutor
+
+                executor = ActionExecutor(db)
+                actions_triggered = executor.execute_all(mappings, parsed_data)
+                has_error = any(r["status"] == "error" for r in actions_triggered)
+                has_ok = any(r["status"] == "ok" for r in actions_triggered)
+                # 全部 skipped → skipped；有 ok → ok；仅 error → error
+                if has_ok:
+                    processing_status = "ok"
+                elif has_error:
+                    processing_status = "error"
+                else:
+                    processing_status = "skipped"
+                if has_error:
+                    processing_error = "; ".join(
+                        r.get("message") or ""
+                        for r in actions_triggered
+                        if r["status"] == "error"
+                    )[:500]
+            else:
+                processing_status = "ok"
+
+        # 5. 入库
         raw_payload = payload.decode("utf-8", errors="replace").replace("\x00", "")
         msg = MachineMessage(
             machine_connection_id=connection_id,
             topic=topic,
             raw_payload=raw_payload,
             matched_topic_id=matched.id if matched else None,
-            processing_status="ok" if matched else "skipped",
+            parsed_data=parsed_data if parsed_data else None,
+            actions_triggered=actions_triggered,
+            processing_status=processing_status,
+            processing_error=processing_error,
             received_at=received_at,
         )
         db.add(msg)
-        # 5. 递增计数器（UPDATE，避免 race condition）
+        # 6. 递增计数器（UPDATE，避免 race condition）
         db.execute(
             update(MachineConnection)
             .where(MachineConnection.id == connection_id)
@@ -72,7 +125,7 @@ def persist_message(
         )
         db.commit()
         return MessagePersistResult(
-            status="ok" if matched else "skipped",
+            status=processing_status,
             matched_topic_id=matched.id if matched else None,
         )
     except Exception as e:
