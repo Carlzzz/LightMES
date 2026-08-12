@@ -1,7 +1,7 @@
-"""Task 3: 12 thin wrapper MCP tools integration tests.
+"""Task 3 + Task 4: 13 thin wrapper MCP tools integration tests.
 
 Verifies:
-1. tools/list 包含 12 个 thin wrapper（4 work_orders / 3 serial_units / 2 defects / 3 api_keys）。
+1. tools/list 包含 13 个 thin wrapper（4 work_orders / 3 serial_units / 2 defects / 1 defect_types / 3 api_keys）。
 2. list_work_orders 返回真实数据。
 3. get_serial_unit_by_sn 按业务键查询。
 4. create_work_order 在 write scope + admin 角色下成功创建。
@@ -109,8 +109,8 @@ def _mcp_call(client, key, method, params=None, _session_headers=None):
     )
 
 
-def test_mcp_tools_list_contains_12_thin_wrappers(client, db_session):
-    """tools/list 包含 12 个 thin wrapper 工具。"""
+def test_mcp_tools_list_contains_13_thin_wrappers(client, db_session):
+    """tools/list 包含 13 个 thin wrapper 工具。"""
     _, key = _admin_with_key(db_session)
     headers = _mcp_session(client, key)
     # 列工具
@@ -125,6 +125,7 @@ def test_mcp_tools_list_contains_12_thin_wrappers(client, db_session):
         "create_work_order", "patch_work_order_priority",
         "list_serial_units", "get_serial_unit", "get_serial_unit_by_sn",
         "list_defects", "get_defect",
+        "list_defect_types",
         "list_api_keys", "create_api_key", "revoke_api_key",
     }
     missing = expected - tool_names

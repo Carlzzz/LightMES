@@ -7,7 +7,7 @@ from lightmes.modules.api_v1.api_key_service import ApiKeyService
 from lightmes.modules.api_v1.dependencies import require_api_key
 from lightmes.modules.api_v1.schemas import (
     ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyRead,
-    DefectReadV1, SerialUnitReadV1,
+    DefectReadV1, DefectTypeReadV1, SerialUnitReadV1,
     WorkOrderCreateV1, WorkOrderPriorityPatch, WorkOrderReadV1,
 )
 from lightmes.modules.auth.models import User
@@ -268,3 +268,33 @@ def get_defect(
     if d is None:
         raise NotFoundError(f"缺陷不存在: {defect_id}")
     return DefectReadV1.model_validate(d)
+
+
+# ---- Defect Types ----
+
+_DT_TAG = "Defect Types"
+
+
+@router.get("/defect-types", response_model=list[DefectTypeReadV1], tags=[_DT_TAG])
+def list_defect_types(
+    response: Response,
+    is_active: bool | None = Query(default=None),
+    category: list[str] = Query(default=[], max_length=20),
+    user: User = Depends(require_api_key("read")),
+    db: Session = Depends(get_db),
+) -> list[DefectTypeReadV1]:
+    """列出缺陷类型。可按 is_active / category 过滤。
+
+    通过 `X-Total-Count` 响应头返回总数。字典表数据量小，不分页。
+    """
+    from sqlalchemy import select, func
+    from lightmes.modules.production.models import DefectType
+    q = select(DefectType).order_by(DefectType.id.desc())
+    if is_active is not None:
+        q = q.where(DefectType.is_active == is_active)
+    if category:
+        q = q.where(DefectType.category.in_(category))
+    total = db.execute(select(func.count()).select_from(q.subquery())).scalar_one()
+    rows = list(db.execute(q).scalars().all())  # 无分页（数量小）
+    response.headers["X-Total-Count"] = str(total)
+    return [DefectTypeReadV1.model_validate(r) for r in rows]

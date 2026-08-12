@@ -5,8 +5,7 @@
 """
 from lightmes.modules.api_v1.schemas import (
     ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyRead,
-    DefectReadV1,
-    SerialUnitReadV1,
+    DefectReadV1, DefectTypeReadV1, SerialUnitReadV1,
     WorkOrderCreateV1, WorkOrderPriorityPatch, WorkOrderReadV1,
 )
 
@@ -15,6 +14,7 @@ __all__ = [
     "ApiKeyCreatedResponse",
     "ApiKeyRead",
     "DefectReadV1",
+    "DefectTypeReadV1",
     "SerialUnitReadV1",
     "WorkOrderCreateV1",
     "WorkOrderPriorityPatch",

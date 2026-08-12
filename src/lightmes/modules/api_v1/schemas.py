@@ -98,3 +98,15 @@ class DefectReadV1(BaseModel):
     handled_at: datetime | None
     handling_remark: str | None
     remark: str | None
+
+
+class DefectTypeReadV1(BaseModel):
+    """Defect type for API v1."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    category: str | None
+    severity: str
+    description: str | None
+    is_active: bool
