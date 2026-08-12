@@ -17,7 +17,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes import database
@@ -159,20 +159,40 @@ def reconcile(
         cancel_fn(cid)
 
 
-def mark_status(connection_id: int, status: str, message: str | None = None) -> None:
-    """Update MachineConnection.status via independent SessionLocal. Never raises."""
+def mark_status(
+    connection_id: int,
+    status: str,
+    message: str | None = None,
+    last_connected_at=None,
+) -> None:
+    """Update MachineConnection.status. Independent session. Never raises.
+
+    - status="connected": 清空 status_message，记录 last_connected_at=now
+        （caller 显式传 last_connected_at 时用 caller 的值）
+    - 其他 status: 写 status_message（截断 500 字符）
+    """
+    from datetime import datetime
+
     try:
         db = database.SessionLocal()
         try:
-            db.execute(
-                update(MachineConnection)
-                .where(MachineConnection.id == connection_id)
-                .values(status=status, status_message=message)
-            )
+            conn = db.get(MachineConnection, connection_id)
+            if conn is None:
+                return
+            conn.status = status
+            if message is not None:
+                conn.status_message = message[:500]
+            elif status == "connected":
+                conn.status_message = None  # 成功时清空
+            if last_connected_at is not None:
+                conn.last_connected_at = last_connected_at
+            elif status == "connected":
+                conn.last_connected_at = datetime.now()
             db.commit()
         finally:
             db.close()
     except Exception as e:  # noqa: BLE001
         logger.warning(
-            "mark_status failed for connection %s: %s", connection_id, e
+            "mark_status failed for connection %s status=%s: %s",
+            connection_id, status, e,
         )
