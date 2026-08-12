@@ -160,3 +160,15 @@ def test_work_orders_patch_priority(client, db_session):
                         json={"priority": 9})
     assert resp.status_code == 200
     assert resp.json()["priority"] == 9
+
+
+def test_work_orders_list_status_filter_max_length(client, db_session):
+    """Excess status values (>20) trigger 422 via FastAPI Query validation."""
+    p, line, r, rule = _env(db_session)
+    key = _admin_key(db_session)
+    # Build 21 status values
+    statuses = [f"status{i}" for i in range(21)]
+    query = "&".join(f"status={s}" for s in statuses)
+    resp = client.get(f"/api/v1/work-orders?{query}",
+                      headers={"Authorization": f"Bearer {key}"})
+    assert resp.status_code == 422
