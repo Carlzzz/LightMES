@@ -8,7 +8,9 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "aiomqtt>=2.3.0,<3.0",
     "alembic>=1.18.5",
+    "cryptography>=45.0.0",
     "fastapi>=0.141.1",
     "fastmcp>=2.0,<3.0",
     "itsdangerous>=2.2.0",
@@ -30,9 +32,11 @@ build-backend = "uv_build"
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 filterwarnings = [
     "ignore::starlette.exceptions.StarletteDeprecationWarning",
 ]

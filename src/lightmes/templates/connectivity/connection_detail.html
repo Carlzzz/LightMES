@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ conn.name }} — 数采连接{% endblock %}
+{% block content %}
+<h1 class="page-title">{{ conn.name }} <small>{{ conn.broker_host }}:{{ conn.broker_port }}</small></h1>
+
+<div class="card">
+  <div class="card__title">基本信息</div>
+  <table class="data-table">
+    <tr><th>状态</th><td>
+      {% if conn.status == 'connected' %}<span class="badge badge--ok">connected</span>
+      {% elif conn.status == 'connecting' %}<span class="badge">connecting</span>
+      {% elif conn.status == 'error' %}<span class="badge badge--danger">error: {{ conn.status_message }}</span>
+      {% else %}<span class="badge">disconnected</span>{% endif %}
+    </td></tr>
+    <tr><th>启用状态</th><td>{{ '启用' if conn.is_active else '停用' }}</td></tr>
+    <tr><th>消息数</th><td>{{ conn.messages_received }}</td></tr>
+    <tr><th>最后连接</th><td>{{ conn.last_connected_at.strftime('%Y-%m-%d %H:%M:%S') if conn.last_connected_at else '—' }}</td></tr>
+    <tr><th>Username</th><td>{{ conn.username or '—' }}</td></tr>
+    <tr><th>TLS</th><td>{{ '是' if conn.use_tls else '否' }}</td></tr>
+    <tr><th>QoS</th><td>{{ conn.qos_default }}</td></tr>
+    <tr><th>描述</th><td>{{ conn.description or '—' }}</td></tr>
+  </table>
+  <p style="margin-top:12px">
+    <a href="/connectivity/connections">← 返回列表</a>
+    {% if conn.is_active %}
+    <form method="post" action="/connectivity/connections/{{ conn.id }}/deactivate" style="display:inline">
+      <button type="submit">停用连接</button>
+    </form>
+    {% else %}
+    <form method="post" action="/connectivity/connections/{{ conn.id }}/activate" style="display:inline">
+      <button type="submit">启用连接</button>
+    </form>
+    {% endif %}
+  </p>
+</div>
+
+<div class="card">
+  <div class="card__title">订阅主题（{{ topics|length }}）</div>
+  <form method="post" action="/connectivity/connections/{{ conn.id }}/topics" class="form-row">
+    <div class="field" style="flex:2"><label>Topic 模式</label>
+      <input name="topic_pattern" placeholder="machine/line1/+/count" required></div>
+    <div class="field"><label>格式</label>
+      <select name="payload_format">
+        <option value="json">json</option>
+        <option value="plain">plain</option>
+        <option value="csv">csv</option>
+        <option value="hex">hex</option>
+      </select>
+    </div>
+    <div class="field"><label>描述</label><input name="description"></div>
+    <button type="submit">添加</button>
+  </form>
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>模式</th><th>格式</th><th>描述</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for t in topics %}
+      <tr id="topic-{{ t.id }}">
+        <td>{{ t.id }}</td>
+        <td><code>{{ t.topic_pattern }}</code></td>
+        <td>{{ t.payload_format }}</td>
+        <td>{{ t.description or '—' }}</td>
+        <td>{% if t.is_active %}<span class="badge badge--ok">active</span>{% else %}<span class="badge">disabled</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/connectivity/connections/{{ conn.id }}/topics/{{ t.id }}/toggle" style="display:inline">
+            <button type="submit">{% if t.is_active %}停用{% else %}启用{% endif %}</button>
+          </form>
+          <form method="post" action="/connectivity/connections/{{ conn.id }}/topics/{{ t.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除 topic {{ t.topic_pattern }}？')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="color:#6b7280;text-align:center">暂无 topic</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card__title">最近消息（{{ messages|length }}/100）</div>
+  <table class="data-table">
+    <thead><tr><th>时间</th><th>Topic</th><th>Payload</th><th>匹配</th></tr></thead>
+    <tbody>
+      {% for m in messages %}
+      <tr>
+        <td>{{ m.received_at.strftime('%H:%M:%S') }}</td>
+        <td><code style="word-break:break-all">{{ m.topic }}</code></td>
+        <td><pre style="max-width:600px;white-space:pre-wrap;max-height:80px;overflow:auto">{{ m.raw_payload[:200] }}{% if m.raw_payload|length > 200 %}...{% endif %}</pre></td>
+        <td>
+          {% if m.matched_topic_id %}<a href="#topic-{{ m.matched_topic_id }}">#{{ m.matched_topic_id }}</a>
+          {% else %}<span class="badge">skipped</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="color:#6b7280;text-align:center">暂无消息</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
