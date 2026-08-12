@@ -31,8 +31,8 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.PrimaryKeyConstraint('id'),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id']),
-        sa.ForeignKeyConstraint(['revoked_by'], ['users.id']),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(['revoked_by'], ['users.id'], ondelete="SET NULL"),
     )
     op.create_index('ix_api_keys_key_prefix', 'api_keys', ['key_prefix'])
     op.create_index('ix_api_keys_user_id', 'api_keys', ['user_id'])
@@ -46,12 +46,12 @@ def upgrade() -> None:
         sa.Column('duration_ms', sa.Integer(), nullable=False),
         sa.Column('trace_id', sa.String(length=32), nullable=True),
         sa.Column('client_ip', sa.String(length=64), nullable=True),
-        sa.Column('error_detail', sa.String(length=500), nullable=True),
+        sa.Column('error_detail', sa.String(length=200), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.PrimaryKeyConstraint('id'),
-        sa.ForeignKeyConstraint(['api_key_id'], ['api_keys.id']),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id']),
+        sa.ForeignKeyConstraint(['api_key_id'], ['api_keys.id'], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete="SET NULL"),
     )
     op.create_index('ix_api_call_logs_api_key_id', 'api_call_logs', ['api_key_id'])
     op.create_index('ix_api_call_logs_user_id', 'api_call_logs', ['user_id'])

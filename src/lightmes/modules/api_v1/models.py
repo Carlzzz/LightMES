@@ -15,13 +15,15 @@ class ApiCallLog(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     api_key_id: Mapped[int | None] = mapped_column(
-        ForeignKey("api_keys.id"), default=None, index=True)
+        ForeignKey("api_keys.id", ondelete="SET NULL"),
+        default=None, index=True)
     user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id"), default=None, index=True)
-    method: Mapped[str] = mapped_column(String(10))
-    path: Mapped[str] = mapped_column(String(255))
-    status_code: Mapped[int] = mapped_column(Integer)
-    duration_ms: Mapped[int] = mapped_column(Integer)
+        ForeignKey("users.id", ondelete="SET NULL"),
+        default=None, index=True)
+    method: Mapped[str] = mapped_column(String(10), nullable=False)
+    path: Mapped[str] = mapped_column(String(255), nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     trace_id: Mapped[str | None] = mapped_column(String(32), default=None)
     client_ip: Mapped[str | None] = mapped_column(String(64), default=None)
-    error_detail: Mapped[str | None] = mapped_column(String(500), default=None)
+    error_detail: Mapped[str | None] = mapped_column(String(200), default=None)

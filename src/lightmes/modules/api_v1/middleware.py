@@ -1,3 +1,4 @@
+import re
 import time
 import uuid
 
@@ -11,6 +12,22 @@ from lightmes.modules.api_v1.models import ApiCallLog
 
 # 写操作记录；失败记录；GET 成功不记录
 _WRITTEN_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
+
+# 需要从错误日志中脱敏的模式
+_REDACT_PATTERNS = [
+    (re.compile(r"lmk_(live|test)_[A-Za-z0-9_-]+"), r"lmk_\1_REDACTED"),
+    (re.compile(r"(password|pwd|secret|token)([\"'=:]?\s*)(\S+)", re.IGNORECASE), r"\1\2REDACTED"),
+]
+
+
+def sanitize_error_detail(detail: str | None) -> str | None:
+    """Redact sensitive patterns from error detail before logging."""
+    if detail is None:
+        return None
+    redacted = detail
+    for pattern, replacement in _REDACT_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted[:200]  # Truncate to column size
 
 
 class TraceIdMiddleware(BaseHTTPMiddleware):
@@ -50,9 +67,12 @@ class ApiCallLogMiddleware(BaseHTTPMiddleware):
                 if body:
                     import json
                     data = json.loads(body)
-                    error_detail = str(data.get("detail") or "")[:500]
+                    error_detail = str(data.get("detail") or "")
             except Exception:
                 error_detail = None
+
+        # 脱敏 + 截断（防止泄露 API key、密码、token 等敏感信息）
+        error_detail = sanitize_error_detail(error_detail)
 
         # 异步写 log（独立 session 避免污染请求 session）
         try:
