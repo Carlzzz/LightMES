@@ -174,7 +174,7 @@ def mount_mcp(app: FastAPI) -> None:
     # 触发 tool 模块导入 —— `@mcp.tool()` 装饰器在 import 时执行注册。
     # 必须在 `mcp.http_app()` 之前完成，否则 tools/list 为空。
     from lightmes.modules.agent_gateway.tools import (  # noqa: F401
-        api_keys, defect_types, defects, serial_units, work_orders,
+        api_keys, defect_types, defects, query, serial_units, work_orders,
     )
 
     # FastMCP http_app 返回 StarletteWithLifespan（ASGI app）。
