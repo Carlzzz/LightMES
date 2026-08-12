@@ -97,3 +97,69 @@ def test_connections_delete(client, db_session):
     resp = client.post(f"/connectivity/connections/{c.id}/delete")
     assert resp.status_code in (200, 303)
     assert db_session.get(MachineConnection, c.id) is None
+
+
+def _make_conn(db_session, name="t-detail"):
+    from lightmes.modules.connectivity.models import MachineConnection, MqttConnection
+    c = MachineConnection(name=name)
+    db_session.add(c); db_session.flush()
+    m = MqttConnection(machine_connection_id=c.id, broker_host="x", broker_port=1883)
+    db_session.add(m); db_session.flush()
+    return c
+
+
+def test_connection_detail_renders(client, db_session):
+    _login_admin(client, db_session, "d1")
+    c = _make_conn(db_session, "detail-r")
+    resp = client.get(f"/connectivity/connections/{c.id}")
+    assert resp.status_code == 200
+    assert "detail-r" in resp.text
+
+
+def test_connection_detail_not_found(client, db_session):
+    _login_admin(client, db_session, "d2")
+    resp = client.get("/connectivity/connections/99999")
+    assert resp.status_code == 404
+
+
+def test_topic_add_via_post(client, db_session):
+    _login_admin(client, db_session, "d3")
+    c = _make_conn(db_session, "topic-add")
+    resp = client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/+/count",
+        "payload_format": "json",
+    })
+    assert resp.status_code in (200, 303)
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    assert t.topic_pattern == "machine/+/count"
+
+
+def test_topic_toggle_via_post(client, db_session):
+    _login_admin(client, db_session, "d4")
+    c = _make_conn(db_session, "topic-tog")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    assert t.is_active is True
+    # toggle → False
+    resp = client.post(f"/connectivity/connections/{c.id}/topics/{t.id}/toggle")
+    assert resp.status_code in (200, 303)
+    db_session.refresh(t)
+    assert t.is_active is False
+
+
+def test_topic_delete_via_post(client, db_session):
+    _login_admin(client, db_session, "d5")
+    c = _make_conn(db_session, "topic-del")
+    client.post(f"/connectivity/connections/{c.id}/topics", data={
+        "topic_pattern": "machine/x", "payload_format": "json"})
+    from lightmes.modules.connectivity.models import MachineTopic
+    t = db_session.query(MachineTopic).filter(
+        MachineTopic.machine_connection_id == c.id).one()
+    resp = client.post(f"/connectivity/connections/{c.id}/topics/{t.id}/delete")
+    assert resp.status_code in (200, 303)
+    assert db_session.get(MachineTopic, t.id) is None
