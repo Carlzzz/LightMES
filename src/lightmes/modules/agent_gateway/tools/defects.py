@@ -1,6 +1,10 @@
-"""Defect MCP tools (2 read wrappers)."""
+"""Defect MCP tools (2 read wrappers + 1 compose write)."""
+from sqlalchemy import select
+
 from lightmes.modules.agent_gateway.auth import require_scope
-from lightmes.modules.agent_gateway.schemas import DefectReadV1
+from lightmes.modules.agent_gateway.schemas import (
+    DefectReadV1, ReportDefectResult,
+)
 from lightmes.modules.agent_gateway.server import mcp
 
 
@@ -65,3 +69,61 @@ def get_defect(defect_id: int) -> DefectReadV1:
     if d is None:
         raise NotFoundError(f"缺陷不存在: {defect_id}")
     return DefectReadV1.model_validate(d)
+
+
+@mcp.tool()
+@require_scope("write")
+def report_defect_for_sn(
+    sn: str,
+    defect_type_code: str,
+    remark: str | None = None,
+    position: str | None = None,
+) -> ReportDefectResult:
+    """按 SN 登记缺陷（write scope）。登记后 SN 自动隔离（status=quarantined）。
+
+    defect_type_code 必须先用 list_defect_types 工具查询可用的 code。
+
+    Args:
+        sn: 序列号。
+        defect_type_code: 缺陷类型编码（须 active）。
+        remark: 可选备注。
+        position: 可选缺陷位置描述。
+
+    Returns:
+        ReportDefectResult：defect_record + serial_unit_status（通常为 "quarantined"）。
+
+    Raises:
+        NotFoundError: SN 或缺陷类型不存在 / 缺陷类型已停用。
+    """
+    from fastmcp.server.dependencies import get_http_request
+
+    from lightmes.modules.production.defect_service import DefectService
+    from lightmes.modules.production.models import DefectType
+    from lightmes.modules.production.repository import SerialUnitRepository
+    from lightmes.shared.errors import NotFoundError
+
+    db = get_http_request().state.db_session
+    user = get_http_request().state.user
+
+    su = SerialUnitRepository(db).get_by_sn(sn)
+    if su is None:
+        raise NotFoundError(f"SN 不存在: {sn}")
+    dt = db.execute(
+        select(DefectType).where(DefectType.code == defect_type_code)
+    ).scalar_one_or_none()
+    if dt is None or not dt.is_active:
+        raise NotFoundError(f"缺陷类型不存在或已停用: {defect_type_code}")
+
+    # operation_id 必须是 operations.id 的有效 FK；SN 的 current_operation_seq
+    # 是序号不是 id，故这里传 None（缺陷登记不需要严格关联工序行）。
+    record = DefectService(db).log_defect(
+        defect_type_id=dt.id, sn=sn, discovered_by=user.id,
+        operation_id=None, work_station_id=None,
+        position=position, remark=remark)
+    db.commit()
+    db.refresh(record)
+    db.refresh(su)
+    return ReportDefectResult(
+        defect_record=DefectReadV1.model_validate(record),
+        serial_unit_status=su.status,
+    )
