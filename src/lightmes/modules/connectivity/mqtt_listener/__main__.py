@@ -10,7 +10,9 @@ Signals: SIGTERM/SIGINT → graceful shutdown (cancel all client tasks).
 Usage::
 
     uv run python -m lightmes.modules.connectivity.mqtt_listener
+    uv run python -m lightmes.modules.connectivity.mqtt_listener --cleanup  # 保留 90 天
 """
+import argparse
 import asyncio
 import logging
 import signal
@@ -26,6 +28,18 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("lightmes.connectivity.mqtt_listener")
+
+
+def _run_cleanup(retention_days: int) -> int:
+    """One-shot retention cleanup. Returns exit code."""
+    from lightmes.modules.connectivity.cleanup import prune_old_messages
+
+    result = prune_old_messages(retention_days=retention_days)
+    logger.info(
+        "清理完成：删除 %s 条（cutoff=%s）",
+        result["deleted"], result["cutoff"].isoformat(),
+    )
+    return 0
 
 
 async def main() -> int:
@@ -126,4 +140,19 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog="python -m lightmes.modules.connectivity.mqtt_listener",
+        description="数采连接监听服务 / 消息保留清理",
+    )
+    parser.add_argument(
+        "--cleanup", action="store_true",
+        help="执行一次性消息保留清理（删除 90 天前的消息）后退出",
+    )
+    parser.add_argument(
+        "--retention-days", type=int, default=90,
+        help="保留天数（默认 90，仅 --cleanup 时生效）",
+    )
+    args = parser.parse_args()
+    if args.cleanup:
+        sys.exit(_run_cleanup(args.retention_days))
     sys.exit(asyncio.run(main()))
