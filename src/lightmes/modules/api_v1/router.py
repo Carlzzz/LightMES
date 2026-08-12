@@ -17,8 +17,7 @@ router = APIRouter()
 
 
 @router.get("/api-keys", response_model=list[ApiKeyRead],
-            tags=["API Keys"],
-            dependencies=[Depends(require_api_key("read"))])
+            tags=["API Keys"])
 def list_api_keys(
     db: Session = Depends(get_db),
     user: User = Depends(require_api_key("read")),
@@ -30,8 +29,7 @@ def list_api_keys(
 
 @router.post("/api-keys", response_model=ApiKeyCreatedResponse,
              tags=["API Keys"],
-             status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(require_api_key("read", "write"))])
+             status_code=status.HTTP_201_CREATED)
 def create_api_key(
     data: ApiKeyCreate,
     db: Session = Depends(get_db),
@@ -50,8 +48,7 @@ def create_api_key(
 
 
 @router.delete("/api-keys/{key_id}", tags=["API Keys"],
-               status_code=status.HTTP_204_NO_CONTENT,
-               dependencies=[Depends(require_api_key("read", "write"))])
+               status_code=status.HTTP_204_NO_CONTENT)
 def revoke_api_key(
     key_id: int,
     db: Session = Depends(get_db),

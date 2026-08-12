@@ -104,6 +104,35 @@ def test_require_api_key_session_fallback(client, db_session):
     assert resp.status_code == 401
 
 
+def test_write_endpoint_rejects_operator_with_write_key(client, db_session):
+    """operator-role user with write-scoped key cannot POST (needs admin/supervisor)."""
+    from lightmes.modules.api_v1.dependencies import require_api_key
+    from lightmes.shared.security import hash_password
+    from fastapi import Depends
+
+    operator_role = db_session.query(Role).filter(Role.name == "operator").first()
+    if operator_role is None:
+        operator_role = Role(name="operator", display_name="Operator")
+        db_session.add(operator_role); db_session.flush()
+    u = User(username="op_w", password_hash=hash_password("p"),
+             display_name="OP", is_active=True, role_id=operator_role.id)
+    db_session.add(u); db_session.flush()
+    full_key, _ = ApiKeyService(db_session).create(
+        name="op-write", user_id=u.id, scopes=["read", "write"])
+
+    test_app = FastAPI()
+    # 关键：让 test_app 的 get_db 返回同一 SAVEPOINT session
+    test_app.dependency_overrides[get_db] = lambda: db_session
+
+    @test_app.post("/test")
+    def handler(user: User = Depends(require_api_key("read", "write"))):
+        return {"ok": True}
+    test_client = TestClient(test_app)
+    resp = test_client.post("/test", headers={"Authorization": f"Bearer {full_key}"})
+    assert resp.status_code == 403
+    assert "admin/supervisor" in resp.json()["detail"]
+
+
 def test_problem_details_error_format(client, db_session):
     """DomainError 返回 application/problem+json。"""
     from lightmes.shared.errors import NotFoundError

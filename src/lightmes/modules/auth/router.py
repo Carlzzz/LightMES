@@ -198,6 +198,11 @@ def api_key_revoke(
     if not _is_admin(user):
         return HTMLResponse("权限不足", status_code=403)
     from lightmes.modules.api_v1.api_key_service import ApiKeyService
+    from lightmes.modules.auth.models import ApiKey
+    target = db.get(ApiKey, key_id)
+    if target is None or target.user_id != user.id:
+        # IDOR 防护：与 JSON 路由保持一致，不存在与其他用户的不做区分
+        return HTMLResponse("API Key 不存在", status_code=404)
     ApiKeyService(db).revoke(key_id, revoked_by_user_id=user.id)
     db.commit()
     return RedirectResponse(url="/system/api-keys", status_code=303)
