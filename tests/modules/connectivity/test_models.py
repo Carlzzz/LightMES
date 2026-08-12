@@ -1,5 +1,6 @@
 from lightmes.modules.connectivity.models import (
     MachineConnection, MqttConnection, MachineTopic, MachineMessage,
+    TopicMapping,
 )
 
 
@@ -50,3 +51,35 @@ def test_machine_message_basic_fields(db_session):
     assert m.id is not None
     assert m.processing_status == "ok"
     assert m.matched_topic_id is None
+
+
+def test_topic_mapping_basic_fields(db_session):
+    from lightmes.modules.connectivity.models import MachineConnection, MachineTopic
+    c = MachineConnection(name="tm-test")
+    db_session.add(c); db_session.flush()
+    t = MachineTopic(machine_connection_id=c.id, topic_pattern="x", payload_format="json")
+    db_session.add(t); db_session.flush()
+    m = TopicMapping(
+        machine_topic_id=t.id, action_type="log_event",
+        action_params={"key": "val"}, priority=50)
+    db_session.add(m); db_session.flush()
+    assert m.id is not None
+    assert m.action_type == "log_event"
+    assert m.priority == 50
+    assert m.is_active is True
+
+
+def test_machine_message_new_fields(db_session):
+    from datetime import datetime, timezone
+    from lightmes.modules.connectivity.models import MachineConnection
+    c = MachineConnection(name="nm-test")
+    db_session.add(c); db_session.flush()
+    msg = MachineMessage(
+        machine_connection_id=c.id, topic="t", raw_payload="p",
+        received_at=datetime.now(timezone.utc),
+        parsed_data={"count": 1},
+        actions_triggered=[{"status": "ok"}],
+        processing_error=None)
+    db_session.add(msg); db_session.flush()
+    assert msg.parsed_data == {"count": 1}
+    assert msg.actions_triggered == [{"status": "ok"}]
