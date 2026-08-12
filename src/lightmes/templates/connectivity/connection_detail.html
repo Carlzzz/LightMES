@@ -78,6 +78,65 @@
 </div>
 
 <div class="card">
+  <div class="card__title">Action Mappings（全部 topics）</div>
+  {% for topic, maps in all_mappings %}
+    <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+      <strong><code>{{ topic.topic_pattern }}</code></strong>
+      <span style="color:#6b7280">（{{ topic.payload_format }}）</span>
+      {% if maps %}
+      <table class="data-table" style="margin-top:6px">
+        <thead><tr><th>优先级</th><th>Action</th><th>字段</th><th>条件</th><th>参数</th><th>描述</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>
+          {% for m in maps %}
+          <tr>
+            <td>{{ m.priority }}</td>
+            <td><code>{{ m.action_type }}</code></td>
+            <td><code>{{ m.field_path or '—' }}</code></td>
+            <td><code>{{ m.condition_expr or '总是' }}</code></td>
+            <td><code style="font-size:11px;word-break:break-all">{{ m.action_params or '{}' }}</code></td>
+            <td>{{ m.description or '—' }}</td>
+            <td>{% if m.is_active %}<span class="badge badge--ok">启用</span>{% else %}<span class="badge">停用</span>{% endif %}</td>
+            <td>
+              <form method="post" action="/connectivity/connections/{{ conn.id }}/topics/{{ topic.id }}/mappings/{{ m.id }}/toggle" style="display:inline">
+                <button type="submit">{% if m.is_active %}停用{% else %}启用{% endif %}</button>
+              </form>
+              <form method="post" action="/connectivity/connections/{{ conn.id }}/topics/{{ topic.id }}/mappings/{{ m.id }}/delete" style="display:inline"
+                    onsubmit="return confirm('确认删除此 mapping？')">
+                <button type="submit" class="btn-danger">删</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#6b7280;margin:4px 0">暂无 mapping</p>
+      {% endif %}
+      <form method="post" action="/connectivity/connections/{{ conn.id }}/topics/{{ topic.id }}/mappings" class="form-row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+        <div class="field"><label>Action</label>
+          <select name="action_type">
+            <option value="log_event">log_event</option>
+            <option value="update_work_order_produced_qty">update_wo_qty</option>
+            <option value="set_work_order_status">set_wo_status</option>
+            <option value="update_serial_unit_status">update_sn_status</option>
+            <option value="create_defect">create_defect</option>
+            <option value="webhook_forward">webhook_forward</option>
+          </select>
+        </div>
+        <div class="field"><label>字段路径</label><input name="field_path" placeholder="$.count" style="min-width:140px"></div>
+        <div class="field"><label>条件</label><input name="condition_expr" placeholder="value > 0" style="min-width:120px"></div>
+        <div class="field" style="flex:2"><label>参数（JSON）</label><input name="action_params" placeholder='{"work_order_code": "WO-001"}' style="font-size:12px"></div>
+        <div class="field"><label>优先级</label><input name="priority" type="number" value="100" style="max-width:80px"></div>
+        <div class="field"><label>描述</label><input name="description" placeholder="备注"></div>
+        <button type="submit">添加</button>
+      </form>
+    </div>
+  {% else %}
+  <p style="color:#6b7280;text-align:center">暂无 topic，先在上面添加 topic</p>
+  {% endfor %}
+</div>
+
+<div class="card">
   <div class="card__title">最近消息（{{ messages|length }}/100）</div>
   <table class="data-table">
     <thead><tr><th>时间</th><th>Topic</th><th>Payload</th><th>匹配</th></tr></thead>

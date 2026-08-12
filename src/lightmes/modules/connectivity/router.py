@@ -124,6 +124,11 @@ def connection_detail(
     mqtt = svc.get_mqtt_for_connection(conn_id)
     topics = svc.list_topics(conn_id)
     messages = svc.list_recent_messages(conn_id, limit=100)
+    # 组装 all_mappings：dict[topic -> list[TopicMapping]]
+    # （Jinja 不能用 ORM 对象做 dict key；改成 list[tuple(topic, mappings)] 形式）
+    all_mappings = [
+        (t, svc.list_mappings(t.id)) for t in topics
+    ]
     return templates.TemplateResponse(
         request,
         "connectivity/connection_detail.html",
@@ -141,6 +146,7 @@ def connection_detail(
                 "qos_default": mqtt.qos_default if mqtt else 0,
             },
             "topics": topics,
+            "all_mappings": all_mappings,
             "messages": messages,
         },
     )
@@ -189,5 +195,69 @@ def topic_delete(
 ) -> HTMLResponse:
     svc = ConnectivityService(db)
     svc.delete_topic(conn_id, topic_id)
+    db.commit()
+    return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
+
+
+@router.post("/connectivity/connections/{conn_id}/topics/{topic_id}/mappings",
+             response_class=HTMLResponse)
+def mapping_add(
+    conn_id: int,
+    topic_id: int,
+    action_type: str = Form(...),
+    action_params: str = Form(""),
+    field_path: str = Form(""),
+    condition_expr: str = Form(""),
+    priority: int = Form(100),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> HTMLResponse:
+    svc = ConnectivityService(db)
+    try:
+        svc.add_mapping(
+            topic_id=topic_id, action_type=action_type,
+            action_params=action_params or None,
+            field_path=field_path or None,
+            condition_expr=condition_expr or None,
+            priority=priority,
+            description=description or None,
+        )
+        db.commit()
+    except DomainError as e:
+        return HTMLResponse(f"添加失败: {e.detail}", status_code=400)
+    return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
+
+
+@router.post(
+    "/connectivity/connections/{conn_id}/topics/{topic_id}/mappings/{mid}/toggle",
+    response_class=HTMLResponse,
+)
+def mapping_toggle(
+    conn_id: int,
+    topic_id: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> HTMLResponse:
+    svc = ConnectivityService(db)
+    svc.toggle_mapping(topic_id, mid)
+    db.commit()
+    return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
+
+
+@router.post(
+    "/connectivity/connections/{conn_id}/topics/{topic_id}/mappings/{mid}/delete",
+    response_class=HTMLResponse,
+)
+def mapping_delete(
+    conn_id: int,
+    topic_id: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> HTMLResponse:
+    svc = ConnectivityService(db)
+    svc.delete_mapping(topic_id, mid)
     db.commit()
     return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
