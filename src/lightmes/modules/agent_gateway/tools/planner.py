@@ -143,7 +143,8 @@ def create_and_schedule_work_order(
     wo.priority = priority
     db.flush()
 
-    # 7. 排程（冲突时不抛出，捕获并返回 conflict dict）
+    # 7. 排程（冲突时不抛出，捕获并返回 conflict dict；其它异常回滚整个事务，
+    #    避免 flush 过的 WO 在 session 关闭时被半提交，留下无 schedule 的孤儿 WO）
     conflict: dict | None = None
     try:
         PlannerService(db).schedule(
@@ -151,6 +152,9 @@ def create_and_schedule_work_order(
             user_id=user.id, force=force_conflict)
     except ConflictError as e:
         conflict = {"error": e.detail}
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(wo)
     return CreateAndScheduleResult(

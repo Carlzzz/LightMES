@@ -91,7 +91,8 @@ class ApiCallLogMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        if not request.url.path.startswith("/api/v1/"):
+        path = request.url.path
+        if not (path.startswith("/api/v1/") or path.startswith("/mcp")):
             return await call_next(request)
 
         start = time.perf_counter()

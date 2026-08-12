@@ -68,6 +68,11 @@ async def verify_bearer(
     full_key = authorization[len("Bearer "):]
     # ApiKeyService.validate 自身会 raise HTTPException(401) 处理无效 / 过期 / 吊销场景
     user, api_key = ApiKeyService(db).validate(full_key)
+    # 更新 last_used_at / last_used_ip（与 C-layer require_api_key 保持一致）
+    from datetime import datetime
+    api_key.last_used_at = datetime.now()
+    api_key.last_used_ip = request.client.host if request.client else None
+    db.flush()
     # 注入到 request.state 供 MCP tools 访问（Task 3+）
     request.state.user = user
     request.state.api_key = api_key
