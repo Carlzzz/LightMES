@@ -288,6 +288,7 @@ def station_pass(
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    operator_id = user.id
     # 组件：收集 serial (component_sn) 和 batch (component_batch) 两种
     components = []
     for i, pid in enumerate(component_product_id):
@@ -329,7 +330,7 @@ def station_pass(
     # 先过站（创建工序记录）
     op_svc = OperationPassService(db)
     data = OperationPassInput(
-        work_station_id=work_station_id, operator_id=user.id,
+        work_station_id=work_station_id, operator_id=operator_id,
         components=components, params=params,
         first_inspection=first_inspection)
     # 先按 SN 试，仅当 SN/载体码不存在时才回退当工单号（首件）
@@ -350,7 +351,7 @@ def station_pass(
         db.rollback()
         # 物料绑定/参数等报错不销毁主界面：重新渲染工位视图 + 顶部错误提示
         try:
-            view = StationService(db).load(scan, work_station_id, user.id)
+            view = StationService(db).load(scan, work_station_id, operator_id)
             return templates.TemplateResponse(
                 request, "production/station_view.html",
                 {"view": view, "work_station_id": work_station_id,
