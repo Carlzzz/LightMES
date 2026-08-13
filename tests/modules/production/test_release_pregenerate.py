@@ -44,11 +44,10 @@ def test_release_requires_sn_rule(db_session):
         prod.release_work_order(wo.id)
 
 
-def test_release_requires_positive_qty(db_session):
+def test_create_work_order_requires_positive_qty(db_session):
     # qty=0 的工单下达应拒绝
-    prod, wo = _wo(db_session, qty=0)
-    with pytest.raises(ValueError):
-        prod.release_work_order(wo.id)
+    with pytest.raises(ValueError, match="工单数量须大于 0"):
+        _wo(db_session, qty=0)
 
 
 def test_release_twice_no_duplicate(db_session):

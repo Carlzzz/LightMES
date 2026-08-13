@@ -7,6 +7,8 @@ from lightmes.modules.production.repository import (
 )
 from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
 from lightmes.modules.production.sn_generator import validate_pattern, SnGenerator
+from lightmes.modules.production.process_snapshot import build_process_snapshot
+from lightmes.modules.production.batch_service import BatchService
 
 
 class ProductionService:
@@ -28,6 +30,8 @@ class ProductionService:
         return self.sn_rules.add(rule)
 
     def create_work_order(self, data: WorkOrderCreate) -> WorkOrder:
+        if data.qty <= 0:
+            raise ValueError(f"工单数量须大于 0: {data.qty}")
         if self.work_orders.get_by_code(data.code) is not None:
             raise ValueError(f"工单号已存在: {data.code}")
         if self.db.get(Product, data.product_id) is None:
@@ -70,12 +74,14 @@ class ProductionService:
         rule = self.sn_rules.get(wo.sn_rule_id)
         if rule is None:
             raise ValueError("SN 规则不存在")
+        wo.process_snapshot = build_process_snapshot(self.db, wo)
         wo.status = "released"
+        batch = BatchService(self.db).create_initial_batch(wo)
         # 批量预生成 SerialUnit（pending）
         for _ in range(wo.qty):
             new_sn = self.sn_gen.next_sn(rule)
             self.serial_units.add(SerialUnit(
                 sn=new_sn, work_order_id=wo.id, product_id=wo.product_id,
-                status="pending", current_operation_seq=0))
+                status="pending", current_operation_seq=0, batch_id=batch.id))
         self.db.flush()
         return wo
