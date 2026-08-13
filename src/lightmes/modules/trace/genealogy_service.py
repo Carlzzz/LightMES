@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
+from lightmes.modules.production.material_lot_service import MaterialLotService
+from lightmes.modules.production.repository import MaterialLotRepository
 from lightmes.modules.trace.events import GenealogyBound, GenealogyUnbound
 from lightmes.modules.trace.models import GenealogyBind
 from lightmes.modules.trace.repository import GenealogyBindRepository
@@ -17,6 +19,13 @@ class GenealogyService:
         self.db = db
         self.query = MasterDataQueryService(db)
         self.binds = GenealogyBindRepository(db)
+
+    def return_batch_consumption(self, *, material_lot_id: int, quantity: float, reason: str) -> None:
+        MaterialLotService(self.db).return_consumed(
+            material_lot_id=material_lot_id,
+            quantity=quantity,
+            reason=reason,
+        )
 
     def bind_components(
         self, parent_su, components: list[ComponentBind],
@@ -83,6 +92,15 @@ class GenealogyService:
         bind.status = "unbound"
         bind.unbind_time = datetime.now(timezone.utc)
         bind.unbind_reason = reason
+        if bind.component_type == "batch" and bind.component_batch_no:
+            lot = MaterialLotRepository(self.db).get_by_code(bind.component_batch_no)
+            if lot is None:
+                raise NotFoundError(f"物料批次不存在: {bind.component_batch_no}")
+            self.return_batch_consumption(
+                material_lot_id=lot.id,
+                quantity=float(bind.qty or 0),
+                reason=reason or "",
+            )
         self.db.flush()
         event_bus.publish(GenealogyUnbound(
             bind_id=bind.id, parent_sn_id=bind.parent_sn_id, reason=reason,
