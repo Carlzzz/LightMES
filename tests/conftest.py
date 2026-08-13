@@ -13,6 +13,22 @@ from lightmes.modules.connectivity import models as _connectivity_models  # noqa
 from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 
+@pytest.fixture(scope="session", autouse=True)
+def clean_test_database():
+    from sqlalchemy import text
+
+    from lightmes.config import get_settings
+    from lightmes.database import engine
+    from lightmes.shared.base import Base
+
+    if get_settings().environment == "production":
+        pytest.fail("Refusing to truncate a production database")
+
+    with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
+
+
 @pytest.fixture()
 def db_session(monkeypatch):
     """每个测试用外层事务包裹 + SAVEPOINT，结束回滚，保持隔离。
