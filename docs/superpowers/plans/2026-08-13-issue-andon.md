@@ -1938,7 +1938,7 @@ git commit -m "feat(issue): CAPA endpoints + IssueType admin CRUD"
 - Modify: `src/lightmes/modules/production/router.py`（加 `/production/station/andon-form` GET）
 - Modify: `src/lightmes/modules/production/schemas.py`（StationView 加 `blocking_issue`）
 - Create: `src/lightmes/templates/production/partials/andon_form.html`
-- Modify: `src/lightmes/templates/production/station_view.html`（横幅 + ANDON 启用 + modal）
+- Modify: `src/lightmes/templates/production/station_view.html`（横幅 + ANDON 启用）
 - Modify: `src/lightmes/templates/production/station.html`（modal 容器 + ANDON 按钮）
 - Test: `tests/modules/issue/test_station_integration.py`
 
@@ -2188,7 +2188,7 @@ def issue_create(
 
 - [ ] **Step 8: 改 station_view.html 加阻断横幅 + ANDON 按钮启用**
 
-在 `src/lightmes/templates/production/partials/station_view.html` 的 `<div class="station">` 之后立即插入：
+在 `src/lightmes/templates/production/station_view.html` 的 `<div class="station">` 之后立即插入：
 
 ```html
 {% if view.blocking_issue %}
@@ -2263,7 +2263,7 @@ git add src/lightmes/modules/production/operation_pass_service.py \
         src/lightmes/modules/production/schemas.py \
         src/lightmes/modules/issue/router.py \
         src/lightmes/templates/production/partials/andon_form.html \
-        src/lightmes/templates/production/partials/station_view.html \
+        src/lightmes/templates/production/station_view.html \
         src/lightmes/templates/production/station.html \
         tests/modules/issue/test_station_integration.py \
         tests/conftest.py
