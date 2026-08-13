@@ -615,6 +615,7 @@ def defect_log_submit(
     defect_type_id: int = Form(...),
     position: str = Form(""),
     remark: str = Form(""),
+    create_issue: bool = Form(False),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     if (r := _login_guard(request, db)): return r
@@ -623,7 +624,8 @@ def defect_log_submit(
         record = DefectService(db).log_defect(
             defect_type_id=defect_type_id, sn=sn, discovered_by=user.id,
             position=position if position else None,
-            remark=remark if remark else None)
+            remark=remark if remark else None,
+            create_issue=create_issue)
         db.commit()
     except DomainError as e:
         # 领域错误（SN 不存在/已隔离等）：用户可见的中文消息

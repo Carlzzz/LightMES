@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 import lightmes.database as db_module
@@ -9,6 +10,7 @@ from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F4
 from lightmes.modules.production import models as _production_models  # noqa: F401
 from lightmes.modules.api_v1 import models as _api_v1_models  # noqa: F401
 from lightmes.modules.connectivity import models as _connectivity_models  # noqa: F401
+from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 
 @pytest.fixture()
@@ -43,3 +45,62 @@ def db_session(monkeypatch):
         trans.rollback()
         connection.close()
         monkeypatch.setattr(db_module, "SessionLocal", original_sessionlocal)
+
+
+@pytest.fixture
+def sample_user(db_session):
+    """提供测试用的已登录 user。"""
+    from lightmes.modules.auth.models import User, Role
+    role = db_session.execute(
+        select(Role).where(Role.name == "admin")
+    ).scalar_one_or_none()
+    if role is None:
+        role = Role(name="admin", display_name="admin", description="admin")
+        db_session.add(role); db_session.flush()
+    user = User(
+        username="_test_sample_user", password_hash="x",
+        display_name="Test", role_id=role.id, is_active=True,
+    )
+    db_session.add(user); db_session.flush()
+    return user
+
+
+@pytest.fixture
+def full_station_setup(db_session, sample_user):
+    """提供完整的过站上下文：Product + Routing + Operation + Line + WorkStation + WorkOrder + SerialUnit。"""
+    from dataclasses import dataclass
+    from lightmes.modules.masterdata.models import (
+        Product, Routing, Operation, Line, WorkStation,
+    )
+    from lightmes.modules.production.models import WorkOrder, SerialUnit
+
+    product = Product(code="P1", name="P1", type="finished")
+    db_session.add(product); db_session.flush()
+    line = Line(code="L1", name="L1")
+    db_session.add(line); db_session.flush()
+    ws = WorkStation(code="WS1", name="WS1", line_id=line.id, seq=1)
+    db_session.add(ws); db_session.flush()
+    routing = Routing(code="R1", name="R1", product_id=product.id, status="active")
+    db_session.add(routing); db_session.flush()
+    op = Operation(seq=10, code="OP10", name="OP10", routing_id=routing.id,
+                   default_work_station_id=ws.id)
+    db_session.add(op); db_session.flush()
+    wo = WorkOrder(code="WO1", product_id=product.id, routing_id=routing.id,
+                   line_id=line.id, qty=10, status="released")
+    db_session.add(wo); db_session.flush()
+    su = SerialUnit(sn="SN_TEST_001", work_order_id=wo.id, product_id=product.id,
+                    current_operation_seq=0, status="in_process")
+    db_session.add(su); db_session.flush()
+
+    @dataclass
+    class Setup:
+        product: Product
+        line: Line
+        work_station: WorkStation
+        work_station_id: int
+        routing: Routing
+        operation: Operation
+        work_order: WorkOrder
+        serial_unit: SerialUnit
+
+    return Setup(product, line, ws, ws.id, routing, op, wo, su)

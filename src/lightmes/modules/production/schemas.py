@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 
@@ -152,8 +153,11 @@ class TestDataStationView(BaseModel):
 
 
 class StationView(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     sn: str
+    sn_id: int | None = None  # SerialUnit.id（ANDON 表单 hx-vals 用）
     work_order_code: str
+    work_order_id: int | None = None  # ANDON 表单 hx-vals 用
     product_code: str
     product_name: str
     operator_name: str
@@ -170,6 +174,7 @@ class StationView(BaseModel):
     sop_url: str | None = None
     first_inspection: FirstInspectionStationView | None = None
     test_data: TestDataStationView | None = None
+    blocking_issue: Any | None = None  # Issue 模型或 None
 
 
 class CarrierBindInput(BaseModel):

@@ -15,6 +15,7 @@ from lightmes.modules import (
     auth,
     connectivity,
     integration,
+    issue,
     masterdata,
     production,
     trace,
@@ -26,6 +27,7 @@ from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import User
 from lightmes.modules.api_v1.errors import register_problem_details_handler
 from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
+from lightmes.modules.issue.linkify import issue_linkify
 
 settings = get_settings()
 app = FastAPI(
@@ -56,6 +58,7 @@ app.mount(
     name="static",
 )
 auth.register(app)
+issue.register(app)
 masterdata.register(app)
 production.register(app)
 trace.register(app)
@@ -76,6 +79,7 @@ register_problem_details_handler(app)
 _templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent / "templates")
 )
+_templates.env.filters["issue_linkify"] = issue_linkify
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -84,7 +88,20 @@ def home(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=302, headers={"Location": "/login"})
-    return _templates.TemplateResponse(request, "home.html", {"user": user})
+    from lightmes.modules.issue.repository import IssueRepository
+
+    issue_repo = IssueRepository(db)
+    open_count = issue_repo.count_open()
+    blocking_count = issue_repo.count_blocking()
+    return _templates.TemplateResponse(
+        request,
+        "home.html",
+        {
+            "user": user,
+            "issue_open_count": open_count,
+            "issue_blocking_count": blocking_count,
+        },
+    )
 
 
 @app.get("/health")

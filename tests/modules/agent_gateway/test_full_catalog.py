@@ -1,9 +1,10 @@
-"""Task 7: Full 17-tool catalog verification.
+"""Task 7 + Task 10: Full 21-tool catalog verification.
 
-Verifies tools/list returns exactly 17 tools with the expected names:
+Verifies tools/list returns exactly 21 tools with the expected names:
 - 13 thin wrappers (1:1 对应 API v1 endpoints)
 - 4 compose tools (query_production_status / list_backlog /
   create_and_schedule_work_order / report_defect_for_sn)
+- 4 issue tools (list_issues / get_issue / create_issue / update_issue_status)
 
 Adaptations from brief:
 - Fixture uses `with TestClient(app) as c:` (FastMCP StreamableHTTPSessionManager
@@ -56,8 +57,8 @@ def _mcp_call(client, key, method, params=None, headers=None):
     })
 
 
-def test_mcp_catalog_has_17_tools(client, db_session):
-    """tools/list 列出全部 17 个工具（13 thin + 4 compose）。"""
+def test_mcp_catalog_has_21_tools(client, db_session):
+    """tools/list 列出全部 21 个工具（13 thin + 4 compose + 4 issue）。"""
     key = _key(db_session)
     init = _mcp_call(client, key, "initialize", {
         "protocolVersion": "2024-11-05",
@@ -80,7 +81,7 @@ def test_mcp_catalog_has_17_tools(client, db_session):
     resp = _mcp_call(client, key, "tools/list", {}, headers=headers)
     assert resp.status_code == 200, resp.text
     tools = resp.json()["result"]["tools"]
-    assert len(tools) == 17
+    assert len(tools) == 21
     tool_names = {t["name"] for t in tools}
     expected = {
         # 13 thin wrappers
@@ -93,5 +94,7 @@ def test_mcp_catalog_has_17_tools(client, db_session):
         # 4 compose
         "query_production_status", "list_backlog",
         "create_and_schedule_work_order", "report_defect_for_sn",
+        # 4 issue (Task 10)
+        "list_issues", "get_issue", "create_issue", "update_issue_status",
     }
     assert tool_names == expected

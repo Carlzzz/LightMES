@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Issue #{{ issue.id }}{% endblock %}
+{% block content %}
+<h1 class="page-title">#{{ issue.id }} <small>{{ issue.title }}</small></h1>
+
+<div class="card">
+  <div class="card__title">概要</div>
+  <p>
+    <span class="badge {% if issue.severity == 'critical' %}badge--danger{% elif issue.severity == 'major' %}badge--warn{% endif %}">{{ issue.severity }}</span>
+    <span class="badge {% if issue.status == 'open' %}badge--warn{% elif issue.status == 'closed' %}badge--ok{% endif %}">{{ issue.status }}</span>
+    <span class="badge">{{ issue.source }}</span>
+    <span class="badge">{{ issue.issue_type.code }} {{ issue.issue_type.name }}</span>
+    {% if issue.status in ['open', 'acknowledged'] and issue.issue_type.is_blocking %}<span class="badge badge--danger">阻断中</span>{% endif %}
+  </p>
+  {% if issue.description %}<p>{{ issue.description | issue_linkify }}</p>{% endif %}
+</div>
+
+<div class="card">
+  <div class="card__title">关联上下文</div>
+  <p>SN: {% if issue.serial_unit_id %}<a href="/trace/query?sn={{ issue.serial_unit_id }}">#{{ issue.serial_unit_id }}</a>{% else %}—{% endif %} ·
+  WO: {% if issue.work_order_id %}#{{ issue.work_order_id }}{% else %}—{% endif %} ·
+  工位: {% if issue.work_station_id %}#{{ issue.work_station_id }}{% else %}—{% endif %} ·
+  工序: {% if issue.operation_id %}#{{ issue.operation_id }}{% else %}—{% endif %}
+  {% if issue.defect_id %}· <a href="/quality/defects/{{ issue.defect_id }}">关联缺陷 #{{ issue.defect_id }}</a>{% endif %}</p>
+  <p style="color:var(--text-soft);font-size:12px">上报 #{{ issue.reported_by_id }} @ {{ issue.reported_at }}
+    {% if issue.acknowledged_at %} · 确认 #{{ issue.acknowledged_by_id }} @ {{ issue.acknowledged_at }}{% endif %}
+    {% if issue.resolved_at %} · 处置 #{{ issue.resolved_by_id }} @ {{ issue.resolved_at }}{% endif %}
+    {% if issue.closed_at %} · 关闭 #{{ issue.closed_by_id }} @ {{ issue.closed_at }}{% endif %}</p>
+</div>
+
+{% if is_privileged %}
+<div class="card">
+  <div class="card__title">状态机操作</div>
+  {% if issue.status == 'open' %}
+  <form method="post" action="/issues/{{ issue.id }}/acknowledge" style="display:inline">
+    <button type="submit">确认 (Acknowledge)</button>
+  </form>
+  {% elif issue.status == 'acknowledged' %}
+  <details>
+    <summary><button type="button">处置 (Resolve)</button></summary>
+    <form method="post" action="/issues/{{ issue.id }}/resolve" style="margin-top:12px">
+      <div class="field"><label>根因 (root_cause)</label><input name="root_cause" required></div>
+      <div class="field"><label>遏制措施 (containment_action)</label><input name="containment_action" required></div>
+      <div class="field"><label>处理决策 (disposition)</label>
+        <select name="disposition" required>
+          <option value="">请选择</option>
+          <option value="use_as_is">让步接收 (use_as_is)</option>
+          <option value="rework">返工 (rework)</option>
+          <option value="scrap">报废 (scrap)</option>
+          <option value="hold">暂存 (hold)</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1"><label>处置备注</label><input name="resolution_notes"></div>
+      <button type="submit">提交处置</button>
+    </form>
+  </details>
+  {% elif issue.status == 'resolved' %}
+  <form method="post" action="/issues/{{ issue.id }}/close" style="display:inline">
+    <button type="submit">关闭 (Close)</button>
+  </form>
+  {% elif issue.status == 'closed' %}
+  <details>
+    <summary><button type="button">重开 (Reopen)</button></summary>
+    <form method="post" action="/issues/{{ issue.id }}/reopen" style="margin-top:12px">
+      <div class="field" style="flex:1"><label>重开原因</label><input name="reason" required></div>
+      <button type="submit">提交重开</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if issue.resolved_at %}
+<div class="card">
+  <div class="card__title">处置详情</div>
+  <p><strong>根因:</strong> {{ issue.root_cause | issue_linkify }}</p>
+  <p><strong>遏制:</strong> {{ issue.containment_action | issue_linkify }}</p>
+  <p><strong>决策:</strong> <span class="badge">{{ issue.disposition }}</span></p>
+  {% if issue.resolution_notes %}<p><strong>备注:</strong> {{ issue.resolution_notes | issue_linkify }}</p>{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card__title">CAPA 行动 ({{ actions|length }})</div>
+  {% if actions %}
+  <table class="data-table">
+    <thead><tr><th>类型</th><th>标题</th><th>状态</th><th>负责人</th><th>截止</th>{% if is_privileged %}<th>操作</th>{% endif %}</tr></thead>
+    <tbody>
+      {% for a in actions %}
+      <tr>
+        <td><span class="badge">{{ a.type }}</span></td>
+        <td>{{ a.title | issue_linkify }}</td>
+        <td><span class="badge {% if a.status == 'verified' %}badge--ok{% elif a.status == 'open' %}badge--warn{% endif %}">{{ a.status }}</span></td>
+        <td>{% if a.assigned_to_id %}#{{ a.assigned_to_id }}{% else %}—{% endif %}</td>
+        <td>{{ a.due_date or '—' }}</td>
+        {% if is_privileged %}<td>
+          {% if a.status == 'open' %}
+          <form method="post" action="/issues/actions/{{ a.id }}/start" style="display:inline"><button type="submit" class="btn-secondary">开始</button></form>
+          {% elif a.status == 'in_progress' %}
+          <form method="post" action="/issues/actions/{{ a.id }}/complete" style="display:inline"><button type="submit" class="btn-secondary">完成</button></form>
+          {% elif a.status == 'done' %}
+          <form method="post" action="/issues/actions/{{ a.id }}/verify" style="display:inline"><button type="submit" class="btn-secondary">验证</button></form>
+          {% endif %}
+        </td>{% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p style="color:var(--text-soft)">暂无 CAPA 行动</p>{% endif %}
+
+  {% if is_privileged and issue.status != 'closed' %}
+  <details style="margin-top:12px">
+    <summary><button type="button" class="btn-secondary">+ 添加 CAPA</button></summary>
+    <form method="post" action="/issues/{{ issue.id }}/actions" style="margin-top:12px">
+      <div class="field"><label>类型</label>
+        <select name="type" required>
+          <option value="corrective">纠正 (corrective)</option>
+          <option value="preventive">预防 (preventive)</option>
+          <option value="containment">遏制 (containment)</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1"><label>标题</label><input name="title" required></div>
+      <div class="field" style="flex:1"><label>描述</label><input name="description"></div>
+      <div class="field"><label>负责人 ID</label><input name="assigned_to_id" type="number"></div>
+      <div class="field"><label>截止日期</label><input name="due_date" type="date"></div>
+      <button type="submit">添加</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

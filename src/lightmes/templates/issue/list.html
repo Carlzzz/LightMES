@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Issue 列表{% endblock %}
+{% block content %}
+<h1 class="page-title">Issue 看板 <small>异常 / Andon</small></h1>
+
+<div class="card">
+  <div class="card__title">过滤</div>
+  <form method="get" class="form-row">
+    <div class="field"><label>状态</label>
+      <select name="status">
+        <option value="">全部</option>
+        <option value="open" {% if filters.status == 'open' %}selected{% endif %}>open</option>
+        <option value="acknowledged" {% if filters.status == 'acknowledged' %}selected{% endif %}>acknowledged</option>
+        <option value="resolved" {% if filters.status == 'resolved' %}selected{% endif %}>resolved</option>
+        <option value="closed" {% if filters.status == 'closed' %}selected{% endif %}>closed</option>
+      </select>
+    </div>
+    <div class="field"><label>严重度</label>
+      <select name="severity">
+        <option value="">全部</option>
+        {% for s in ['info', 'minor', 'major', 'critical'] %}
+        <option value="{{ s }}" {% if filters.severity == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>来源</label>
+      <select name="source">
+        <option value="">全部</option>
+        {% for s in ['station_andon', 'defect_linked', 'manual'] %}
+        <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="flex:1;min-width:200px"><label>搜索标题</label>
+      <input name="search" value="{{ filters.search }}" placeholder="关键词"></div>
+    <button type="submit">过滤</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">Issues ({{ issues|length }})</div>
+  <table class="data-table">
+    <thead><tr><th>#</th><th>标题</th><th>类型</th><th>严重</th><th>状态</th><th>SN</th><th>上报人</th><th>时间</th></tr></thead>
+    <tbody>
+      {% for i in issues %}
+      <tr {% if i.status in ['open', 'acknowledged'] and i.issue_type.is_blocking %}style="border-left:4px solid var(--danger)"{% endif %}>
+        <td><a href="/issues/{{ i.id }}">#{{ i.id }}</a></td>
+        <td>{{ i.title | issue_linkify }}{% if i.status in ['open','acknowledged'] and i.issue_type.is_blocking %} <span class="badge badge--danger">阻断</span>{% endif %}</td>
+        <td><span class="badge">{{ i.issue_type.code }}</span></td>
+        <td><span class="badge {% if i.severity == 'critical' %}badge--danger{% elif i.severity == 'major' %}badge--warn{% endif %}">{{ i.severity }}</span></td>
+        <td><span class="badge {% if i.status == 'open' %}badge--warn{% elif i.status == 'closed' %}badge--ok{% endif %}">{{ i.status }}</span></td>
+        <td>{% if i.serial_unit_id %}<a href="/trace/query?sn={{ i.serial_unit_id }}">SN#{{ i.serial_unit_id }}</a>{% else %}—{% endif %}</td>
+        <td>#{{ i.reported_by_id }}</td>
+        <td>{{ i.reported_at.strftime('%Y-%m-%d %H:%M') if i.reported_at else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="color:var(--text-soft);text-align:center">暂无 Issue</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
