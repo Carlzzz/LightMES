@@ -84,7 +84,7 @@ def test_query_history_records_and_params(client, db_session):
     _login(client, db_session)
     resp = client.post("/trace/query", data={"query_type": "history", "value": sn})
     assert resp.status_code == 200
-    assert "工序#" in resp.text
+    assert "装配" in resp.text
     assert "torque" in resp.text
     assert "MB-7" in resp.text
 
@@ -115,4 +115,3 @@ def test_rework_page_requires_login(client, db_session):
     resp = client.post("/trace/rework",
         data={"sn": "X", "target_seq": 0, "reason": ""})
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"

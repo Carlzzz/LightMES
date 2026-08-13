@@ -48,6 +48,7 @@ def _setup(db_session, n_ops=2, qty=2):
 
 def test_ready_page_has_three_sections(client, db_session):
     ws, wo, line = _setup(db_session)
+    _login(client, db_session)
     resp = client.get("/production/station")
     assert resp.status_code == 200
     assert "作业站" in resp.text and "工单" in resp.text and "扫" in resp.text

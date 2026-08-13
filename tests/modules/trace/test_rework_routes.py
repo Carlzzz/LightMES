@@ -36,7 +36,8 @@ def _setup_and_pass(db, suffix=""):
     ]
     routing = md.create_routing(RoutingCreate(code=f"RRRT{suffix}", name="路线", product_id=p.id, operations=ops))
     prod = ProductionService(db)
-    rule = prod.create_sn_rule(SnRuleCreate(code=f"RRSR{suffix}", name="r", pattern="SN{SEQ:5}"))
+    rule = prod.create_sn_rule(
+        SnRuleCreate(code=f"RRSR{suffix}", name="r", pattern=f"RR{suffix}SN{{SEQ:5}}"))
     wo = prod.create_work_order(WorkOrderCreate(code=f"RRWO{suffix}", product_id=p.id, routing_id=routing.id, line_id=line.id, qty=1, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
     role = _get_or_create_role(db, "supervisor", "主管")

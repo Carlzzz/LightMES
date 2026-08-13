@@ -4,6 +4,7 @@ from lightmes.main import app
 from lightmes.database import get_db
 from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.schemas import UserCreate
+from lightmes.modules.auth.models import Role
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
     ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
@@ -22,7 +23,13 @@ def client(db_session):
 
 
 def _login(client, db_session):
-    AuthService(db_session).create_user(UserCreate(username="ub", password="pw12345", display_name="Ub"))
+    role = db_session.query(Role).filter(Role.name == "admin").one_or_none()
+    if role is None:
+        role = Role(name="admin", display_name="admin")
+        db_session.add(role)
+        db_session.flush()
+    AuthService(db_session).create_user(
+        UserCreate(username="ub", password="pw12345", display_name="Ub", role_id=role.id))
     db_session.flush()
     client.post("/login", data={"username": "ub", "password": "pw12345"})
 

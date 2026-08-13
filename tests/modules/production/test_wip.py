@@ -2,12 +2,24 @@ from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
     ProductCreate, LineCreate, WorkStationCreate, RoutingCreate, OperationCreate,
 )
+from lightmes.modules.auth.service import AuthService
+from lightmes.modules.auth.schemas import UserCreate
 from lightmes.modules.production.service import ProductionService
 from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, OperationPassInput,
 )
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
+
+
+def _login(client, db_session):
+    AuthService(db_session).create_user(
+        UserCreate(username="wipop", password="pw12345", display_name="Wip"))
+    db_session.flush()
+    assert client.post(
+        "/login",
+        data={"username": "wipop", "password": "pw12345"},
+    ).status_code == 204
 
 
 def _line(db_session):
@@ -55,6 +67,7 @@ def test_wip_page_renders(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
     try:
         client = TestClient(app)
+        _login(client, db_session)
         resp = client.get(f"/production/wip?work_order={wo.code}")
         assert resp.status_code == 200
         assert "WIP 看板" in resp.text
@@ -88,6 +101,7 @@ def test_wip_page_empty_without_work_order(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
     try:
         client = TestClient(app)
+        _login(client, db_session)
         resp = client.get("/production/wip")
         assert resp.status_code == 200
         assert "WIP 看板" in resp.text
