@@ -3,12 +3,35 @@
 让 AI Agent 也能查询与管理 Issue：与 issue HTML UI 共用 IssueService 状态机，
 保持业务规则一致（CAPA 验证闸 / 状态转换 / source 枚举）。Agent 通过 type_code
 而非 type_id 创建，避免 type id 泄漏到 agent 接口。
+
+授权对齐：与 issue HTML router (`issue/router.py`) 保持一致 —— operator 仅能
+查看/操作自己上报的 Issue；supervisor+ 视为特权用户可见全部。角色判定走
+`role_obj.name` 优先、legacy `role` 字段兜底（与 `auth/dependencies.py:require_role`
+及 `agent_gateway/auth.py:_has_write_role` 同款 pattern）。
 """
 from lightmes.modules.agent_gateway.auth import require_scope
 from lightmes.modules.agent_gateway.schemas import (
     CreateIssueResult, IssueActionReadV1, IssueReadV1, UpdateIssueStatusResult,
 )
 from lightmes.modules.agent_gateway.server import mcp
+
+
+def _user_role_name(user) -> str | None:
+    """读取用户角色名：优先 role_obj.name，回退 legacy role 字段。
+
+    与 `issue/router.py:_user_role_name` 同款逻辑，本地复制以避免 router → tools
+    循环 import（router 文件会拉起 templates / Jinja 初始化）。
+    """
+    if user is None:
+        return None
+    if getattr(user, "role_obj", None) is not None:
+        return user.role_obj.name
+    return getattr(user, "role", None)
+
+
+def _is_privileged(user) -> bool:
+    """supervisor / admin 视为特权，可访问全部 Issue。"""
+    return _user_role_name(user) in ("supervisor", "admin")
 
 
 @mcp.tool()
@@ -35,17 +58,26 @@ def list_issues(
 
     Returns:
         Issue 列表（含 issue_type_code + is_blocking 派生字段），按 status asc / id desc 排序。
+
+    授权：operator 仅看到自己上报的 Issue；supervisor+ 全部。与 HTML /issues 一致。
     """
     from fastmcp.server.dependencies import get_http_request
 
     from lightmes.modules.issue.repository import IssueRepository
 
-    db = get_http_request().state.db_session
-    rows = IssueRepository(db).list(
-        statuses=statuses, severities=severities, sources=sources,
-        serial_unit_id=serial_unit_id, work_order_id=work_order_id,
-        page=page, size=size,
-    )
+    request = get_http_request()
+    db = request.state.db_session
+    user = request.state.user
+
+    kwargs: dict = {
+        "statuses": statuses, "severities": severities, "sources": sources,
+        "serial_unit_id": serial_unit_id, "work_order_id": work_order_id,
+        "page": page, "size": size,
+    }
+    # operator 仅看自己上报的；特权用户看全部（与 HTML router 一致）
+    if _user_role_name(user) == "operator":
+        kwargs["reported_by_id"] = user.id
+    rows = IssueRepository(db).list(**kwargs)
     return [_to_read(db, r) for r in rows]
 
 
@@ -62,6 +94,7 @@ def get_issue(issue_id: int) -> dict:
 
     Raises:
         NotFoundError: 不存在。
+        PermissionError: operator 试图查看他人上报的 Issue（与 HTML /issues/{id} 对齐）。
     """
     from fastmcp.server.dependencies import get_http_request
 
@@ -70,10 +103,16 @@ def get_issue(issue_id: int) -> dict:
     )
     from lightmes.shared.errors import NotFoundError
 
-    db = get_http_request().state.db_session
+    request = get_http_request()
+    db = request.state.db_session
+    user = request.state.user
+
     issue = IssueRepository(db).get(issue_id)
     if issue is None:
         raise NotFoundError(f"Issue 不存在: {issue_id}")
+    # operator 只能看自己上报的（与 HTML router 一致）；特权用户不受限
+    if not _is_privileged(user) and issue.reported_by_id != user.id:
+        raise PermissionError("无权查看该 Issue")
     actions = IssueActionRepository(db).list_for_issue(issue_id)
     return {
         "issue": _to_read(db, issue).model_dump(),
@@ -171,14 +210,27 @@ def update_issue_status(
         BusinessRuleError: 当前状态不允许该转换 / close 时还有 CAPA 未 verified。
         ValidationError: action 非法 / 缺必填字段。
         NotFoundError: issue 不存在。
+        PermissionError: operator 试图操作他人 Issue（defense-in-depth：scope 写
+            权限已限制 admin/supervisor，但显式校验防止 scope 配置漂移）。
     """
     from fastmcp.server.dependencies import get_http_request
 
+    from lightmes.modules.issue.repository import IssueRepository
     from lightmes.modules.issue.service import IssueService
-    from lightmes.shared.errors import ValidationError
+    from lightmes.shared.errors import NotFoundError, ValidationError
 
-    db = get_http_request().state.db_session
-    user_id = get_http_request().state.user.id
+    request = get_http_request()
+    db = request.state.db_session
+    user = request.state.user
+    user_id = user.id
+
+    # Defense-in-depth：即便 scope=write 已要求 admin/supervisor，仍显式校验归属，
+    # 防止未来 scope 配置变更（例如给 operator 写权限）后非授权访问。
+    existing = IssueRepository(db).get(issue_id)
+    if existing is None:
+        raise NotFoundError(f"Issue 不存在: {issue_id}")
+    if not _is_privileged(user) and existing.reported_by_id != user_id:
+        raise PermissionError("无权操作该 Issue")
 
     svc = IssueService(db)
     if action == "acknowledge":

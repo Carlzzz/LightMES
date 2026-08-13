@@ -84,6 +84,29 @@ def _readonly_key(db_session, username="issuero"):
     return ro_key
 
 
+def _operator_with_key(db_session, username="issueopr"):
+    """operator 用户 + read-only key，用于验证 operator 授权过滤。
+
+    复用现有 admin Role 是不行的（admin 会被 _is_privileged 判为特权），
+    必须创建 operator Role 并把用户绑到它上面。返回 (user, full_key)。
+    """
+    role = db_session.query(Role).filter(Role.name == "operator").first()
+    if role is None:
+        role = Role(name="operator", display_name="Operator")
+        db_session.add(role)
+        db_session.flush()
+    u = User(
+        username=username, password_hash=hash_password("p"),
+        display_name="O", is_active=True, role_id=role.id,
+    )
+    db_session.add(u)
+    db_session.flush()
+    full_key, _ = ApiKeyService(db_session).create(
+        name="issue-op-key", user_id=u.id, scopes=["read"],
+    )
+    return u, full_key
+
+
 def _mcp_session(client, key):
     """初始化 MCP session，返回带 Mcp-Session-Id 的 headers。"""
     init = client.post(
@@ -268,3 +291,70 @@ def test_readonly_scope_blocked_on_write(client, db_session, issue_type_quality)
     assert data["result"].get("isError") is True
     text = data["result"]["content"][0]["text"]
     assert "scope" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Authz parity tests (operator visibility — Task 10 security fix)
+# ---------------------------------------------------------------------------
+
+
+def test_list_issues_operator_only_sees_own(client, db_session, issue_type_quality):
+    """operator 调 list_issues 只看到自己上报的 Issue（HTML router 同款约束）。
+
+    Setup：一个 operator + 一个 admin（特权），各自上报一个 Issue。
+    断言：operator 的 list_issues 只返回自己的那条。
+    """
+    from lightmes.modules.issue.repository import IssueTypeRepository
+    from lightmes.modules.issue.service import IssueService
+
+    type_id = IssueTypeRepository(db_session).get_by_code("quality").id
+
+    operator, op_key = _operator_with_key(db_session)
+    # 另一个用户（admin，特权）上报一条
+    admin, admin_key = _admin_with_key(db_session, username="otheradm")
+    own_issue = IssueService(db_session).create_issue(
+        issue_type_id=type_id, title="operator own",
+        source="manual", reported_by_id=operator.id,
+    )
+    other_issue = IssueService(db_session).create_issue(
+        issue_type_id=type_id, title="admin other",
+        source="manual", reported_by_id=admin.id,
+    )
+    db_session.commit()
+    own_id, other_id = own_issue.id, other_issue.id
+
+    headers = _mcp_session(client, op_key)
+    payload = _payload(_call_tool(client, op_key, headers, "list_issues", {}))
+    ids = {row["id"] for row in payload}
+    assert own_id in ids, "operator 应看到自己上报的 Issue"
+    assert other_id not in ids, (
+        f"operator 不应看到他人上报的 Issue (got ids={ids}, other={other_id})"
+    )
+
+
+def test_get_issue_operator_403_for_others(client, db_session, issue_type_quality):
+    """operator 调 get_issue 看他人 Issue → MCP tool-level error (PermissionError)。"""
+    from lightmes.modules.issue.repository import IssueTypeRepository
+    from lightmes.modules.issue.service import IssueService
+
+    type_id = IssueTypeRepository(db_session).get_by_code("quality").id
+
+    operator, op_key = _operator_with_key(db_session)
+    admin, _ = _admin_with_key(db_session, username="otheradm2")
+    other_issue = IssueService(db_session).create_issue(
+        issue_type_id=type_id, title="belongs to admin",
+        source="manual", reported_by_id=admin.id,
+    )
+    db_session.commit()
+    other_id = other_issue.id
+
+    headers = _mcp_session(client, op_key)
+    data = _call_tool(client, op_key, headers, "get_issue", {"issue_id": other_id})
+    assert "result" in data
+    assert data["result"].get("isError") is True, (
+        f"operator 应被拒绝；实际响应: {data}"
+    )
+    text = data["result"]["content"][0]["text"]
+    assert "无权" in text or "权限" in text or "permission" in text.lower(), (
+        f"错误消息应说明权限原因；实际: {text!r}"
+    )
