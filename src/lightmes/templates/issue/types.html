@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Issue 类型字典{% endblock %}
+{% block content %}
+<h1 class="page-title">Issue 类型字典 <small>Admin only</small></h1>
+
+<div class="card">
+  <div class="card__title">新建类型</div>
+  <form method="post" action="/issues/types" class="form-row">
+    <div class="field"><label>code</label><input name="code" required></div>
+    <div class="field"><label>name</label><input name="name" required></div>
+    <div class="field"><label>severity</label>
+      <select name="severity">
+        {% for s in ['info', 'minor', 'major', 'critical'] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>is_blocking</label><input type="checkbox" name="is_blocking" value="true"></div>
+    <div class="field"><label>is_active</label><input type="checkbox" name="is_active" value="true" checked></div>
+    <div class="field" style="flex:1"><label>description</label><input name="description"></div>
+    <button type="submit">创建</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">现有类型 ({{ types|length }})</div>
+  <table class="data-table">
+    <thead><tr><th>code</th><th>name</th><th>severity</th><th>blocking</th><th>active</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for t in types %}
+      <tr>
+        <td><code>{{ t.code }}</code></td>
+        <td>{{ t.name }}</td>
+        <td><span class="badge">{{ t.severity }}</span></td>
+        <td>{{ "✓" if t.is_blocking else "—" }}</td>
+        <td>{{ "✓" if t.is_active else "—" }}</td>
+        <td>
+          <form method="post" action="/issues/types/{{ t.id }}/toggle-active" style="display:inline">
+            <button type="submit" class="btn-secondary">停用/启用</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

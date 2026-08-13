@@ -69,3 +69,49 @@ def test_issue_close_rejected_with_unverified_capa(
     db_session.commit()
     r = privileged_client.post(f"/issues/{issue.id}/close")
     assert r.status_code == 422
+
+
+def test_add_capa_creates_action(privileged_client, db_session, admin_user):
+    from lightmes.modules.issue.models import Issue, IssueType
+    it = IssueType(code="T", name="T", severity="minor")
+    db_session.add(it); db_session.flush()
+    issue = Issue(issue_type_id=it.id, title="t", severity="minor",
+                  reported_by_id=admin_user.id)
+    db_session.add(issue); db_session.commit()
+    r = privileged_client.post(f"/issues/{issue.id}/actions",
+                               data={"type": "corrective", "title": "act"},
+                               follow_redirects=False)
+    assert r.status_code == 303
+    from lightmes.modules.issue.models import IssueAction
+    actions = db_session.query(IssueAction).all()
+    assert len(actions) == 1
+    assert actions[0].title == "act"
+
+
+def test_capa_lifecycle_via_http(privileged_client, db_session, admin_user):
+    from lightmes.modules.issue.models import Issue, IssueAction, IssueType
+    it = IssueType(code="T2", name="T2", severity="minor")
+    db_session.add(it); db_session.flush()
+    issue = Issue(issue_type_id=it.id, title="t", severity="minor",
+                  reported_by_id=admin_user.id)
+    db_session.add(issue); db_session.commit()
+    privileged_client.post(f"/issues/{issue.id}/actions",
+                           data={"type": "corrective", "title": "a"},
+                           follow_redirects=False)
+    a = db_session.query(IssueAction).first()
+    assert privileged_client.post(
+        f"/issues/actions/{a.id}/start", follow_redirects=False).status_code == 303
+    assert privileged_client.post(
+        f"/issues/actions/{a.id}/complete", follow_redirects=False).status_code == 303
+    assert privileged_client.post(
+        f"/issues/actions/{a.id}/verify", follow_redirects=False).status_code == 303
+    db_session.refresh(a)
+    assert a.status == "verified"
+
+
+def test_types_page_admin_only(privileged_client):
+    assert privileged_client.get("/issues/types").status_code == 200
+    # 未登录：清除 cookie 后再请求
+    privileged_client.cookies.clear()
+    r = privileged_client.get("/issues/types", follow_redirects=False)
+    assert r.status_code in (302, 401, 403)

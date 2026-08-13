@@ -9,7 +9,7 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none, require_role
 from lightmes.modules.issue.linkify import issue_linkify
 from lightmes.modules.issue.repository import (
-    IssueActionRepository, IssueRepository,
+    IssueActionRepository, IssueRepository, IssueTypeRepository,
 )
 from lightmes.modules.issue.service import IssueService
 from lightmes.shared.errors import DomainError
@@ -71,6 +71,18 @@ def issue_list(
          "filters": {"status": status, "severity": severity,
                      "source": source, "search": search}},
     )
+
+
+# IssueType 字典管理（必须在 /issues/{issue_id} 之前注册，避免路径参数遮蔽）
+@router.get("/issues/types", response_class=HTMLResponse)
+def issue_types_page(
+    request: Request,
+    user=Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    types = IssueTypeRepository(db).list_all()
+    return templates.TemplateResponse(
+        request, "issue/types.html", {"types": types})
 
 
 @router.get("/issues/{issue_id}", response_class=HTMLResponse)
@@ -170,3 +182,119 @@ def issue_reopen(
         db.rollback()
         return Response(status_code=e.status_code, content=e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
+
+
+# ---- CAPA POST 端点 ----
+
+@router.post("/issues/{issue_id}/actions")
+def issue_add_action(
+    request: Request, issue_id: int,
+    type: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    assigned_to_id: int | None = Form(None),
+    due_date: str = Form(""),
+    user=Depends(require_role("supervisor", "admin")),
+    db: Session = Depends(get_db),
+):
+    from datetime import date as date_t
+    try:
+        IssueService(db).add_action(
+            issue_id,
+            type=type, title=title,
+            description=description or None,
+            assigned_to_id=assigned_to_id,
+            due_date=date_t.fromisoformat(due_date) if due_date else None,
+        )
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return Response(status_code=e.status_code, content=e.detail)
+    return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
+
+
+def _capa_transition(action_id: int, op: str, user, db: Session) -> Response:
+    svc = IssueService(db)
+    try:
+        if op == "start":
+            action = svc.start_action(action_id, user.id)
+        elif op == "complete":
+            action = svc.complete_action(action_id, user.id)
+        elif op == "verify":
+            action = svc.verify_action(action_id, user.id)
+        else:
+            return Response(status_code=404)
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return Response(status_code=e.status_code, content=e.detail)
+    return Response(status_code=303, headers={"Location": f"/issues/{action.issue_id}"})
+
+
+@router.post("/issues/actions/{action_id}/start")
+def capa_start(
+    action_id: int,
+    user=Depends(require_role("supervisor", "admin")),
+    db: Session = Depends(get_db),
+):
+    return _capa_transition(action_id, "start", user, db)
+
+
+@router.post("/issues/actions/{action_id}/complete")
+def capa_complete(
+    action_id: int,
+    user=Depends(require_role("supervisor", "admin")),
+    db: Session = Depends(get_db),
+):
+    return _capa_transition(action_id, "complete", user, db)
+
+
+@router.post("/issues/actions/{action_id}/verify")
+def capa_verify(
+    action_id: int,
+    user=Depends(require_role("supervisor", "admin")),
+    db: Session = Depends(get_db),
+):
+    return _capa_transition(action_id, "verify", user, db)
+
+
+# ---- IssueType 字典 CRUD ----
+# GET /issues/types 已在文件上方注册（避免被 /issues/{issue_id} 遮蔽）
+
+@router.post("/issues/types")
+def issue_types_create(
+    code: str = Form(...),
+    name: str = Form(...),
+    severity: str = Form(...),
+    is_blocking: bool = Form(False),
+    is_active: bool = Form(False),
+    description: str = Form(""),
+    user=Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    from lightmes.modules.issue.models import IssueType
+    try:
+        db.add(IssueType(
+            code=code.strip(), name=name.strip(), severity=severity,
+            is_blocking=is_blocking, is_active=is_active,
+            description=description or None))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return Response(status_code=400, content=str(e))
+    return Response(status_code=303, headers={"Location": "/issues/types"})
+
+
+@router.post("/issues/types/{type_id}/toggle-active")
+def issue_types_toggle(
+    type_id: int,
+    user=Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    from lightmes.modules.issue.models import IssueType
+    t = db.get(IssueType, type_id)
+    if t is None:
+        return Response(status_code=404, content="不存在")
+    t.is_active = not t.is_active
+    db.commit()
+    return Response(status_code=303, headers={"Location": "/issues/types"})
