@@ -9,6 +9,7 @@ from lightmes.modules.auth import models as _auth_models  # noqa: F401
 from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F401
 from lightmes.modules.production import models as _production_models  # noqa: F401
 from lightmes.modules.trace import models as _trace_models  # noqa: F401
+from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

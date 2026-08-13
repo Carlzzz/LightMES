@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 import lightmes.database as db_module
@@ -9,6 +10,7 @@ from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F4
 from lightmes.modules.production import models as _production_models  # noqa: F401
 from lightmes.modules.api_v1 import models as _api_v1_models  # noqa: F401
 from lightmes.modules.connectivity import models as _connectivity_models  # noqa: F401
+from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 
 @pytest.fixture()
@@ -43,3 +45,21 @@ def db_session(monkeypatch):
         trans.rollback()
         connection.close()
         monkeypatch.setattr(db_module, "SessionLocal", original_sessionlocal)
+
+
+@pytest.fixture
+def sample_user(db_session):
+    """提供测试用的已登录 user。"""
+    from lightmes.modules.auth.models import User, Role
+    role = db_session.execute(
+        select(Role).where(Role.name == "admin")
+    ).scalar_one_or_none()
+    if role is None:
+        role = Role(name="admin", display_name="admin", description="admin")
+        db_session.add(role); db_session.flush()
+    user = User(
+        username="_test_sample_user", password_hash="x",
+        display_name="Test", role_id=role.id, is_active=True,
+    )
+    db_session.add(user); db_session.flush()
+    return user
