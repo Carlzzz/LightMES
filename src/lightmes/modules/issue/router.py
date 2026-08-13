@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import current_user_or_none, require_role
 from lightmes.modules.issue.linkify import issue_linkify
-from lightmes.modules.issue.models import Issue
 from lightmes.modules.issue.repository import (
     IssueActionRepository, IssueRepository,
 )
