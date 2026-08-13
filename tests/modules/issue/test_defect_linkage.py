@@ -1,4 +1,3 @@
-import pytest
 from lightmes.modules.production.defect_service import DefectService
 from lightmes.modules.issue.models import Issue
 

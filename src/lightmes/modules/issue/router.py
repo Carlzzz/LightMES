@@ -24,17 +24,15 @@ templates.env.filters["issue_linkify"] = issue_linkify
 
 
 def _user_role_name(user) -> str | None:
-    """读取用户角色名：优先 role_obj.name，回退 legacy role 字段（兼容）。"""
-    if user is None:
-        return None
-    if getattr(user, "role_obj", None) is not None:
-        return user.role_obj.name
-    return getattr(user, "role", None)
+    """读取用户角色名（向后兼容包装）。新代码应直接用 auth.role_utils.user_role_name。"""
+    from lightmes.modules.auth.role_utils import user_role_name
+    return user_role_name(user)
 
 
 def _is_privileged(user) -> bool:
     """supervisor / admin 看全部 Issue。"""
-    return _user_role_name(user) in ("supervisor", "admin")
+    from lightmes.modules.auth.role_utils import is_privileged
+    return is_privileged(user)
 
 
 @router.get("/issues", response_class=HTMLResponse)
@@ -311,6 +309,7 @@ def issue_types_create(
     user=Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
+    from sqlalchemy.exc import IntegrityError
     from lightmes.modules.issue.models import IssueType
     try:
         db.add(IssueType(
@@ -318,6 +317,9 @@ def issue_types_create(
             is_blocking=is_blocking, is_active=is_active,
             description=description or None))
         db.commit()
+    except IntegrityError:
+        db.rollback()
+        return Response(status_code=400, content=f"code 已存在：{code.strip()}")
     except Exception as e:
         db.rollback()
         return Response(status_code=400, content=str(e))

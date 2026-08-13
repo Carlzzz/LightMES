@@ -1,7 +1,8 @@
 import re
 from markupsafe import Markup, escape
 
-_ISSUE_REF = re.compile(r"#(\d{1,8})(?!\d)")
+# 不匹配 #数字; —— 避免 escape 后的数字字符实体（&#34; / &#x27; 等）里的 #digits 被误识别
+_ISSUE_REF = re.compile(r"#(\d{1,8})(?![\d;])")
 
 
 def issue_linkify(text) -> Markup:

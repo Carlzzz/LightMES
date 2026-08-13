@@ -211,9 +211,14 @@ class IssueService:
         quality_type = self.types.get_by_code("quality")
         if quality_type is None:
             raise BusinessRuleError("IssueType 'quality' 未 seed，无法联动")
-        from lightmes.modules.production.models import DefectRecord  # 局部 import 避免循环
+        from lightmes.modules.production.models import DefectRecord, SerialUnit  # 局部 import 避免循环
         assert isinstance(defect, DefectRecord)
-        title = f"缺陷上报: {defect.defect_type_name} (SN {defect.serial_unit_id})"
+        sn_label = defect.serial_unit_id
+        if defect.serial_unit_id is not None:
+            su = self.db.get(SerialUnit, defect.serial_unit_id)
+            if su is not None:
+                sn_label = su.sn
+        title = f"缺陷上报: {defect.defect_type_name} (SN {sn_label})"
         return self.create_issue(
             issue_type_id=quality_type.id,
             title=title,

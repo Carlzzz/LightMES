@@ -14,24 +14,8 @@ from lightmes.modules.agent_gateway.schemas import (
     CreateIssueResult, IssueActionReadV1, IssueReadV1, UpdateIssueStatusResult,
 )
 from lightmes.modules.agent_gateway.server import mcp
-
-
-def _user_role_name(user) -> str | None:
-    """读取用户角色名：优先 role_obj.name，回退 legacy role 字段。
-
-    与 `issue/router.py:_user_role_name` 同款逻辑，本地复制以避免 router → tools
-    循环 import（router 文件会拉起 templates / Jinja 初始化）。
-    """
-    if user is None:
-        return None
-    if getattr(user, "role_obj", None) is not None:
-        return user.role_obj.name
-    return getattr(user, "role", None)
-
-
-def _is_privileged(user) -> bool:
-    """supervisor / admin 视为特权，可访问全部 Issue。"""
-    return _user_role_name(user) in ("supervisor", "admin")
+from lightmes.modules.auth.role_utils import is_privileged as _is_privileged
+from lightmes.modules.auth.role_utils import user_role_name as _user_role_name
 
 
 @mcp.tool()
