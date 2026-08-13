@@ -117,5 +117,16 @@
     </a>
   </div>
 </div>
+
+<div class="card">
+  <div class="card__title">异常管理</div>
+  <div class="nav-grid">
+    <a class="nav-card" href="/issues">
+      <span class="nav-card__icon">🚨</span>
+      <div class="nav-card__name">Issue 看板</div>
+      <div class="nav-card__desc">未关闭: <strong>{{ issue_open_count }}</strong>{% if issue_blocking_count %} <span class="badge badge--danger">阻断 {{ issue_blocking_count }}</span>{% endif %}</div>
+    </a>
+  </div>
+</div>
 </div>
 {% endblock %}

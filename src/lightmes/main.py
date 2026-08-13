@@ -88,7 +88,20 @@ def home(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
         return Response(status_code=302, headers={"Location": "/login"})
-    return _templates.TemplateResponse(request, "home.html", {"user": user})
+    from lightmes.modules.issue.repository import IssueRepository
+
+    issue_repo = IssueRepository(db)
+    open_count = issue_repo.count_open()
+    blocking_count = issue_repo.count_blocking()
+    return _templates.TemplateResponse(
+        request,
+        "home.html",
+        {
+            "user": user,
+            "issue_open_count": open_count,
+            "issue_blocking_count": blocking_count,
+        },
+    )
 
 
 @app.get("/health")
