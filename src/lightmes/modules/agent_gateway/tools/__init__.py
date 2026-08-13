@@ -7,6 +7,7 @@ from lightmes.modules.agent_gateway.tools import (  # noqa: F401
     api_keys,
     defect_types,
     defects,
+    issues,
     planner,
     query,
     serial_units,

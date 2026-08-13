@@ -3,7 +3,7 @@
 工具直接复用 api_v1 的 Read schemas，避免重复定义。Create / Patch 输入
 直接用 tool 函数签名（FastMCP 把签名转为 JSON Schema），不引入额外模型。
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from lightmes.modules.api_v1.schemas import (
     ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyRead,
@@ -60,6 +60,50 @@ class ReportDefectResult(BaseModel):
     serial_unit_status: str
 
 
+class IssueActionReadV1(BaseModel):
+    """CAPA / IssueAction 的轻量 Read（MCP 专用，不直接复用 api_v1）。"""
+    id: int
+    type: str
+    title: str
+    status: str
+    assigned_to_id: int | None = None
+    due_date: str | None = None
+
+
+class IssueReadV1(BaseModel):
+    """Issue Read（MCP 专用，含 issue_type_code + is_blocking 派生字段）。"""
+    id: int
+    issue_type_code: str
+    title: str
+    description: str | None
+    status: str
+    severity: str
+    source: str
+    serial_unit_id: int | None = None
+    work_order_id: int | None = None
+    work_station_id: int | None = None
+    defect_id: int | None = None
+    reported_at: str
+    acknowledged_at: str | None = None
+    resolved_at: str | None = None
+    closed_at: str | None = None
+    is_blocking: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CreateIssueResult(BaseModel):
+    """create_issue 返回结构。"""
+    id: int
+    status: str = "open"
+
+
+class UpdateIssueStatusResult(BaseModel):
+    """update_issue_status 返回结构。"""
+    id: int
+    status: str
+
+
 __all__ = [
     "ApiKeyCreate",
     "ApiKeyCreatedResponse",
@@ -67,11 +111,15 @@ __all__ = [
     "BacklogItem",
     "BacklogResult",
     "CreateAndScheduleResult",
+    "CreateIssueResult",
     "DefectReadV1",
     "DefectTypeReadV1",
+    "IssueActionReadV1",
+    "IssueReadV1",
     "ProductionStatusResult",
     "ReportDefectResult",
     "SerialUnitReadV1",
+    "UpdateIssueStatusResult",
     "WorkOrderCreateV1",
     "WorkOrderPriorityPatch",
     "WorkOrderReadV1",
