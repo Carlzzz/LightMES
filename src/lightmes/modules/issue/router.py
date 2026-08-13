@@ -107,7 +107,7 @@ def issue_create(
     # ANDON 提交后留在 station 页：返回小段 JS 触发 station view 刷新
     if source == "station_andon":
         return HTMLResponse(
-            f"<script>htmx.trigger(document.getElementById('station-enter-form'), 'submit'); "
+            f"<script>htmx.trigger(document.getElementById('enter-form'), 'submit'); "
             f"window.showErrorModal('Issue #{issue.id} 已上报');</script>")
     return Response(status_code=303, headers={"Location": f"/issues/{issue.id}"})
 
