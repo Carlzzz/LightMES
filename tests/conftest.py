@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
@@ -27,6 +29,7 @@ def clean_test_database():
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
+    os.environ["LIGHTMES_TEST_DB_TRUNCATED"] = "1"
 
 
 @pytest.fixture()

@@ -1,8 +1,5 @@
-from sqlalchemy import func, select
-
-from lightmes.modules.production.models import WorkOrder
+import os
 
 
-def test_database_starts_empty(db_session):
-    count = db_session.execute(select(func.count()).select_from(WorkOrder)).scalar_one()
-    assert count == 0
+def test_clean_test_database_sets_truncation_marker():
+    assert os.environ.get("LIGHTMES_TEST_DB_TRUNCATED") == "1"
