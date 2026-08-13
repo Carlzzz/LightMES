@@ -1,11 +1,17 @@
 from lightmes.modules.production.defect_service import DefectService
-from lightmes.modules.issue.models import Issue
+from lightmes.modules.issue.models import Issue, IssueType
 
 
 def test_log_defect_with_create_issue_true_links(
         db_session, sample_user, full_station_setup):
     """log_defect(create_issue=True) 同时建 issue + defect_id 关联。"""
     from lightmes.modules.production.models import DefectType
+    quality_type = db_session.query(IssueType).filter(
+        IssueType.code == "quality").one_or_none()
+    if quality_type is None:
+        quality_type = IssueType(code="quality", name="质量异常", severity="major")
+        db_session.add(quality_type)
+        db_session.flush()
     dt = DefectType(code="DT", name="DT", category="质量", severity="major", is_active=True)
     db_session.add(dt); db_session.flush()
     su = full_station_setup.serial_unit

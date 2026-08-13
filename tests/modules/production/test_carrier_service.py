@@ -67,7 +67,7 @@ def test_unbind_after_bind_first_carrier_allows_reuse(db_session):
     prod, wo, ws, user, line = _setup(db_session, qty=3)
     svc = CarrierService(db_session)
     svc.bind_first_carrier(wo.id, "PAL-R", user.id)
-    su = svc.unbind("PAL-R", user.id)
+    su, _carrier_code = svc.unbind("PAL-R", user.id)
     assert su.carrier_code is None
     # 载体码可复用
     su2 = svc.bind_first_carrier(wo.id, "PAL-R", user.id)
@@ -78,7 +78,7 @@ def test_unbind_by_sn(db_session):
     prod, wo, ws, user, line = _setup(db_session, qty=3)
     svc = CarrierService(db_session)
     su = svc.bind_first_carrier(wo.id, "PAL-X", user.id)
-    su_unbound = svc.unbind(su.sn, user.id)
+    su_unbound, _carrier_code = svc.unbind(su.sn, user.id)
     assert su_unbound.carrier_code is None
 
 

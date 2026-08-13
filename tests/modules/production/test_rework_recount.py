@@ -47,7 +47,8 @@ def test_rework_finished_recount_not_double_counted(db_session):
     assert wo_repo.get(wo.id).produced_qty == 1
 
     # 完工件可返工（rework 仅拒 scrapped；target_seq < current_operation_seq）
-    reworked = ReworkService(db_session).rework(res.sn, target_seq=0, reason="返修")
+    reworked = ReworkService(db_session).rework(
+        res.sn, target_seq=0, expected_repass_station_id=w.id, reason="返修")
     assert reworked.status == "reworking"
     assert reworked.current_operation_seq == 0
 

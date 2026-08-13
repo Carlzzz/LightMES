@@ -67,25 +67,25 @@ def _line(db_session):
 
 
 def test_scan_page_requires_login(client, db_session):
-    # 未登录 POST 过站页 → 401 + HX-Redirect
-    resp = client.post("/production/scan",
-        data={"work_station_id": 1, "code_or_sn": "X"})
+    resp = client.post("/production/station/load",
+        data={"work_station_id": 1, "scan": "X"})
     assert resp.status_code == 401
     assert resp.headers.get("HX-Redirect") == "/login"
 
 
 def test_scan_page_renders(client, db_session):
+    w1 = _line(db_session)
     _login(client, db_session)
-    resp = client.get("/production/scan?work_station_id=7")
+    resp = client.get(f"/production/station?work_station_id={w1.id}")
     assert resp.status_code == 200
-    assert 'value="7"' in resp.text  # 当前作业站回填到表单
+    assert f'value="{w1.id}"' in resp.text
 
 
 def test_scan_first_pass_success_fragment(client, db_session):
     w1 = _line(db_session)
     _login(client, db_session)
-    resp = client.post("/production/scan",
-        data={"work_station_id": w1.id, "code_or_sn": "PWO"})
+    resp = client.post("/production/station/pass",
+        data={"work_station_id": w1.id, "scan": "PWO"})
     assert resp.status_code == 200
     assert "P001" in resp.text
     assert "✓" in resp.text
@@ -94,8 +94,8 @@ def test_scan_first_pass_success_fragment(client, db_session):
 def test_scan_error_fragment_shows_reason(client, db_session):
     w1 = _line(db_session)
     _login(client, db_session)
-    resp = client.post("/production/scan",
-        data={"work_station_id": w1.id, "code_or_sn": "NOSUCH"})
+    resp = client.post("/production/station/pass",
+        data={"work_station_id": w1.id, "scan": "NOSUCH"})
     assert resp.status_code == 200
     assert "✗" in resp.text  # 红色错误片段
 
@@ -140,10 +140,13 @@ def test_scan_wrong_station_first_pass_rolls_back_orphan(client, db_session):
     wo_id = wo.id
     wo_code = wo.code
     _login(client, db_session)
+    db_session.commit()
     # 首件在错误作业站扫工单号 → 生成 SN + SerialUnit(step3) 后防跳站失败(step5)
-    resp = client.post("/production/scan",
-        data={"work_station_id": w2.id, "code_or_sn": wo_code})
+    resp = client.post("/production/station/pass",
+        data={"work_station_id": w2.id, "scan": wo_code})
     assert resp.status_code == 200
     assert "✗" in resp.text  # 错误片段
-    # rollback 必须让该工单下的 SerialUnit 数量为 0（没有幻影/孤儿）
-    assert SerialUnitRepository(db_session).list_by_work_order(wo_id) == []
+    # 错误过站必须回滚本次尝试；工单仍只保留 release 时预生成的 pending 单元。
+    units = SerialUnitRepository(db_session).list_by_work_order(wo_id)
+    assert len(units) == wo.qty
+    assert all(u.current_operation_seq == 0 and u.status == "pending" for u in units)
