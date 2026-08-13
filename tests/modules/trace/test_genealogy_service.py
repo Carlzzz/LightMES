@@ -7,6 +7,7 @@ from lightmes.modules.masterdata.schemas import (
     BomCreate, BomItemCreate,
 )
 from lightmes.modules.production.service import ProductionService
+from lightmes.modules.production.material_lot_service import MaterialLotService
 from lightmes.modules.production.schemas import WorkOrderCreate
 from lightmes.modules.production.models import SerialUnit, OperationRecord
 from lightmes.modules.production.repository import (
@@ -109,6 +110,9 @@ def test_unbind(db_session):
     fin, c_ser, c_bat, other, make_su, _ctx = _setup(db_session)
     su = make_su("F7")
     svc = GenealogyService(db_session)
+    lot_service = MaterialLotService(db_session)
+    lot = lot_service.receive(code="LOT-7", product_id=c_bat.id, quantity=10)
+    lot_service.release(lot.code)
     binds = svc.bind_components(su, [
         ComponentBind(component_product_id=c_bat.id, component_batch_no="LOT-7")],
         operator_id=None)
