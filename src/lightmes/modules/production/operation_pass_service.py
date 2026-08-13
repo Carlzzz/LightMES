@@ -44,6 +44,15 @@ class OperationPassService:
                 raise NotFoundError(f"未找到 SN 或载体码: {data.sn}")
             if su.status in ("finished", "scrapped", "quarantined"):
                 raise BusinessRuleError(f"SN 已{su.status}，不可过站: {su.sn}")
+            # 1.5. SN 级阻断检查（Issue/Andon）
+            from lightmes.modules.issue.service import IssueService
+            blocking = IssueService(self.db).check_block_for_sn(su.id)
+            if blocking is not None:
+                raise BusinessRuleError(
+                    f"该 SN 被 Issue #{blocking.id} 阻断："
+                    f"[{blocking.severity.upper()}] {blocking.title}。"
+                    f"请等待主管处置或访问 /issues/{blocking.id}"
+                )
             wo = self.work_orders.get(su.work_order_id)
         else:
             if data.work_order_code is None:

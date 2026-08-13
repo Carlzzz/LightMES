@@ -189,9 +189,17 @@ class StationService:
                     needs_test_data=False
                 )
 
+        # Issue 阻断横幅
+        blocking_issue = None
+        if su is not None:
+            from lightmes.modules.issue.service import IssueService
+            blocking_issue = IssueService(self.db).check_block_for_sn(su.id)
+
         return StationView(
             sn=su.sn if su is not None else "",
+            sn_id=su.id if su is not None else None,
             work_order_code=wo.code,
+            work_order_id=wo.id,
             product_code=product.code if product else "",
             product_name=product.name if product else "",
             operator_name=operator.display_name if operator else "",
@@ -208,4 +216,5 @@ class StationService:
             sop_url=sop_url,
             first_inspection=first_inspection_view,
             test_data=test_data_view,
+            blocking_issue=blocking_issue,
         )

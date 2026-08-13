@@ -1,4 +1,12 @@
 <div class="station">
+  {% if view.blocking_issue %}
+  <div class="alert alert--danger" style="margin-bottom:6px">
+    ⛔ Issue #{{ view.blocking_issue.id }} 阻断中：
+    [{{ view.blocking_issue.severity|upper }}] {{ view.blocking_issue.title }}
+    · 状态: {{ view.blocking_issue.status }}
+    · <a href="/issues/{{ view.blocking_issue.id }}">查看详情 →</a>
+  </div>
+  {% endif %}
   {% if pass_error %}
   <div class="alert alert--danger pass-error-banner">✗ {{ pass_error }} <button type="button" onclick="this.parentElement.remove()" style="float:right;background:none;border:none;color:inherit;font-size:18px;cursor:pointer">×</button></div>
   <script>if(window.showErrorModal){showErrorModal("{{ pass_error|e }}");}</script>
@@ -285,7 +293,13 @@
 
     <div class="station__footer">
       <span class="station__status">{% if view.skill_ok %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
-      <button type="button" class="btn-secondary" disabled title="暂未开放">异常呼叫 (ANDON)</button>
+      <button type="button" class="btn-secondary"
+              hx-get="/production/station/andon-form"
+              hx-vals='{"work_station_id": "{{ work_station_id }}", "serial_unit_id": "{{ view.sn_id or "" }}", "work_order_id": "{{ view.work_order_id or "" }}", "operation_id": "{{ view.current_op.operation_id if view.current_op else "" }}"}'
+              hx-target="#andon-modal-body"
+              onclick="document.getElementById('andon-modal').style.display='flex'">
+        异常呼叫 (ANDON)
+      </button>
       <button type="submit" class="station__pass">确认过站 (PASS)</button>
     </div>
   </form>

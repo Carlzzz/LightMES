@@ -73,6 +73,45 @@ def issue_list(
     )
 
 
+@router.post("/issues")
+def issue_create(
+    request: Request,
+    issue_type_id: int = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    source: str = Form("manual"),
+    work_station_id: int | None = Form(None),
+    serial_unit_id: int | None = Form(None),
+    work_order_id: int | None = Form(None),
+    operation_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=302, headers={"Location": "/login"})
+    try:
+        issue = IssueService(db).create_issue(
+            issue_type_id=issue_type_id,
+            title=title,
+            description=description or None,
+            source=source,
+            work_station_id=work_station_id or None,
+            serial_unit_id=serial_unit_id or None,
+            work_order_id=work_order_id or None,
+            operation_id=operation_id or None,
+            reported_by_id=user.id)
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return Response(status_code=e.status_code, content=e.detail)
+    # ANDON 提交后留在 station 页：返回小段 JS 触发 station view 刷新
+    if source == "station_andon":
+        return HTMLResponse(
+            f"<script>htmx.trigger(document.getElementById('station-enter-form'), 'submit'); "
+            f"window.showErrorModal('Issue #{issue.id} 已上报');</script>")
+    return Response(status_code=303, headers={"Location": f"/issues/{issue.id}"})
+
+
 # IssueType 字典管理（必须在 /issues/{issue_id} 之前注册，避免路径参数遮蔽）
 @router.get("/issues/types", response_class=HTMLResponse)
 def issue_types_page(

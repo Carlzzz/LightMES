@@ -35,6 +35,9 @@
     <div class="nav-card__desc">作业站选定后自动列出本产线可用工单；首件扫载体码即自动绑定 SN 进入主界面，再手动确认过站。</div>
   </div>
   <div id="station-root" class="station-root"></div>
+  <div class="modal" id="andon-modal" style="display:none">
+    <div class="modal__body"><div id="andon-modal-body"></div></div>
+  </div>
 </div>
 <script>
   (function () {

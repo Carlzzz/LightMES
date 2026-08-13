@@ -63,3 +63,44 @@ def sample_user(db_session):
     )
     db_session.add(user); db_session.flush()
     return user
+
+
+@pytest.fixture
+def full_station_setup(db_session, sample_user):
+    """提供完整的过站上下文：Product + Routing + Operation + Line + WorkStation + WorkOrder + SerialUnit。"""
+    from dataclasses import dataclass
+    from lightmes.modules.masterdata.models import (
+        Product, Routing, Operation, Line, WorkStation,
+    )
+    from lightmes.modules.production.models import WorkOrder, SerialUnit
+
+    product = Product(code="P1", name="P1", type="finished")
+    db_session.add(product); db_session.flush()
+    line = Line(code="L1", name="L1")
+    db_session.add(line); db_session.flush()
+    ws = WorkStation(code="WS1", name="WS1", line_id=line.id, seq=1)
+    db_session.add(ws); db_session.flush()
+    routing = Routing(code="R1", name="R1", product_id=product.id, status="active")
+    db_session.add(routing); db_session.flush()
+    op = Operation(seq=10, code="OP10", name="OP10", routing_id=routing.id,
+                   default_work_station_id=ws.id)
+    db_session.add(op); db_session.flush()
+    wo = WorkOrder(code="WO1", product_id=product.id, routing_id=routing.id,
+                   line_id=line.id, qty=10, status="released")
+    db_session.add(wo); db_session.flush()
+    su = SerialUnit(sn="SN_TEST_001", work_order_id=wo.id, product_id=product.id,
+                    current_operation_seq=0, status="in_process")
+    db_session.add(su); db_session.flush()
+
+    @dataclass
+    class Setup:
+        product: Product
+        line: Line
+        work_station: WorkStation
+        work_station_id: int
+        routing: Routing
+        operation: Operation
+        work_order: WorkOrder
+        serial_unit: SerialUnit
+
+    return Setup(product, line, ws, ws.id, routing, op, wo, su)

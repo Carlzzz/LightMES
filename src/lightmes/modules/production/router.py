@@ -463,6 +463,29 @@ def station_skip_form(
         {"view": view, "work_station_id": work_station_id})
 
 
+@router.get("/production/station/andon-form", response_class=HTMLResponse)
+def station_andon_form(
+    request: Request,
+    work_station_id: int = Query(0),
+    serial_unit_id: int = Query(0),
+    work_order_id: int = Query(0),
+    operation_id: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    user = current_user_or_none(request, db)
+    if user is None:
+        return Response(status_code=302, headers={"Location": "/login"})
+    from lightmes.modules.issue.repository import IssueTypeRepository
+    types = IssueTypeRepository(db).list_active()
+    return templates.TemplateResponse(
+        request, "production/partials/andon_form.html",
+        {"types": types,
+         "ctx": {"work_station_id": work_station_id,
+                 "serial_unit_id": serial_unit_id,
+                 "work_order_id": work_order_id,
+                 "operation_id": operation_id}})
+
+
 @router.post("/production/station/skip", response_class=HTMLResponse)
 def station_skip(
     request: Request,
