@@ -48,6 +48,7 @@ class DefectService:
     def log_defect(self, defect_type_id: int, sn: str, discovered_by: int,
                    operation_id: int | None = None, work_station_id: int | None = None,
                    position: str | None = None, remark: str | None = None,
+                   create_issue: bool = False,
                    ) -> DefectRecord:
         dt = self.db.get(DefectType, defect_type_id)
         if dt is None or not dt.is_active:
@@ -73,6 +74,10 @@ class DefectService:
         event_bus.publish(DefectLogged(
             defect_record_id=record.id, serial_unit_id=su.id, sn=su.sn,
             defect_type_code=dt.code, severity=dt.severity))
+        if create_issue:
+            from lightmes.modules.issue.service import IssueService
+            IssueService(self.db).create_from_defect(
+                record, reported_by_id=discovered_by)
         return record
 
     def _get_pending(self, record_id: int) -> DefectRecord:
