@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, CheckConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -42,6 +42,8 @@ class Issue(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     issue_type_id: Mapped[int] = mapped_column(
         ForeignKey("issue_types.id"), index=True)
+    issue_type: Mapped["IssueType"] = relationship(
+        "IssueType", lazy="joined")
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(15), default="open", index=True)
