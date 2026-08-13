@@ -26,6 +26,7 @@ from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import User
 from lightmes.modules.api_v1.errors import register_problem_details_handler
 from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
+from lightmes.modules.issue.linkify import issue_linkify
 
 settings = get_settings()
 app = FastAPI(
@@ -76,6 +77,7 @@ register_problem_details_handler(app)
 _templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent / "templates")
 )
+_templates.env.filters["issue_linkify"] = issue_linkify
 
 
 @app.get("/", response_class=HTMLResponse)
