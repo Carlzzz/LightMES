@@ -17,7 +17,16 @@ from lightmes.modules.production.schemas import (
 )
 from lightmes.modules.production.defect_service import DefectService
 from lightmes.modules.production.events import OperationPassed, OperationSkipped, SerialUnitFinished
+from lightmes.modules.production.batch_service import BatchService
+from lightmes.modules.production.material_lot_service import MaterialLotService
 from lightmes.modules.production.quality_service import FirstInspectionService
+from lightmes.modules.production.process_snapshot import (
+    SnapshotBomItem,
+    SnapshotOperation,
+    has_snapshot,
+    snapshot_bom_items,
+    snapshot_operations,
+)
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.schemas import ComponentBind
 from lightmes.shared.errors import NotFoundError, BusinessRuleError, ConflictError, SkillError
@@ -32,6 +41,25 @@ class OperationPassService:
         self.records = OperationRecordRepository(db)
         self.params = OperationParamRepository(db)
         self.work_orders = WorkOrderRepository(db)
+
+    def _operations(self, wo: WorkOrder):
+        if has_snapshot(wo):
+            return snapshot_operations(wo)
+        return self.query.get_operations(wo.routing_id)
+
+    def _bom_items(self, wo: WorkOrder) -> list[SnapshotBomItem | object]:
+        if has_snapshot(wo):
+            return list(snapshot_bom_items(wo))
+        return list(self.query.get_active_bom_items(wo.product_id))
+
+    def _allowed_work_stations(self, op):
+        if isinstance(op, SnapshotOperation):
+            ids = op.allowed_work_station_ids
+        else:
+            allowed = self.query.get_allowed_work_stations(op.id)
+            ids = [ws.id for ws in allowed] or [op.default_work_station_id]
+        stations = [self.query.get_work_station(i) for i in ids]
+        return [ws for ws in stations if ws is not None]
 
     def pass_operation(self, data: OperationPassInput) -> OperationPassResult:
         # 1+3. 定位单元：SN → 载体码 → 工单号(取第一个 pending)
@@ -69,8 +97,10 @@ class OperationPassService:
             raise NotFoundError("工单不存在")
         if wo.status not in ("released", "in_process"):
             raise BusinessRuleError(f"工单状态不允许过站: {wo.status}")
+        if su.batch_id is not None:
+            BatchService(self.db).start_batch(su.batch_id)
 
-        operations = self.query.get_operations(wo.routing_id)
+        operations = self._operations(wo)
         if not operations:
             raise BusinessRuleError("工艺路径无工序")
 
@@ -86,7 +116,7 @@ class OperationPassService:
             raise NotFoundError(f"作业站不存在: {data.work_station_id}")
         if ws.line_id != wo.line_id:
             raise BusinessRuleError("当前作业站不属于本工单产线")
-        allowed = self.query.get_allowed_work_stations(expected.id)
+        allowed = self._allowed_work_stations(expected)
         allowed_ids = [w.id for w in allowed]
         if not allowed_ids:
             allowed_ids = [expected.default_work_station_id]  # 兜底（关联表空时退化为旧行为）
@@ -145,14 +175,18 @@ class OperationPassService:
 
         # 5d. 物料绑定校验
         # 5d-① 即时校验：本工序应装的件（consume_at_operation_seq == expected.seq）
-        op_bom_items = self.query.get_bom_items_by_consume_op(
-            wo.product_id, expected.seq)
+        op_bom_items = [
+            i for i in self._bom_items(wo)
+            if i.consume_at_operation_seq == expected.seq
+        ] if has_snapshot(wo) else self.query.get_bom_items_by_consume_op(
+            wo.product_id, expected.seq
+        )
         if op_bom_items:
             # 若本次扫的件存在不属于本工序的（带 consume_at_operation_seq 声明），
             # 让 bind_components 抛更具体的"工序 N"扫错件错误，跳过本层即时校验
             all_bom_by_comp = {
                 i.component_product_id: i
-                for i in self.query.get_active_bom_items(wo.product_id)}
+                for i in self._bom_items(wo)}
             wrong_op_scanned = any(
                 (all_bom_by_comp.get(c.component_product_id)
                  and all_bom_by_comp[c.component_product_id].consume_at_operation_seq
@@ -188,7 +222,7 @@ class OperationPassService:
                         f"物料绑定不完整，不可过站：{', '.join(missing)}")
 
         # 5d-③ 最终工序累积兜底（保留现有逻辑）
-        bom_items = self.query.get_active_bom_items(wo.product_id)
+        bom_items = self._bom_items(wo)
         is_last_op = False
         if bom_items:
             is_last_op = (expected.id == operations[-1].id) if operations else False
@@ -260,6 +294,24 @@ class OperationPassService:
                 raise
             bound_count = len(binds)
 
+        # 批次件物料消耗：绑定成功后扣减 MaterialLot 可用数量并写消耗记录。
+        material_lots = MaterialLotService(self.db)
+        for component in data.components:
+            component_product = self.query.get_product(component.component_product_id)
+            if (
+                su.batch_id is not None
+                and component_product is not None
+                and component_product.track_mode == "batch"
+                and component.component_batch_no
+            ):
+                material_lots.consume(
+                    batch_id=su.batch_id,
+                    operation_record_id=record.id,
+                    product_id=component.component_product_id,
+                    lot_code=component.component_batch_no,
+                    quantity=component.qty,
+                )
+
         # 8. 参数录入
         param_count = 0
         for pm in data.params:
@@ -284,6 +336,8 @@ class OperationPassService:
                 su.carrier_code = None
             if not su.is_counted:
                 su.is_counted = True
+                if su.batch_id is not None:
+                    BatchService(self.db).record_finished_unit(su.batch_id)
                 event_bus.publish(SerialUnitFinished(
                     serial_unit_id=su.id, sn=su.sn, work_order_id=wo.id))
                 new_qty = self.db.execute(
@@ -314,14 +368,16 @@ class OperationPassService:
         next_op_can_continue_here = False
         if remaining:
             next_op_obj = remaining[0]
-            next_info = OpInfo(seq=next_op_obj.seq, name=next_op_obj.name,
+            next_info = OpInfo(id=next_op_obj.id, seq=next_op_obj.seq,
+                               name=next_op_obj.name,
                                work_station_id=next_op_obj.default_work_station_id)
-            next_allowed = self.query.get_allowed_work_stations(next_op_obj.id)
+            next_allowed = self._allowed_work_stations(next_op_obj)
             next_allowed_ids = [w.id for w in next_allowed] or [next_op_obj.default_work_station_id]
             next_op_can_continue_here = data.work_station_id in next_allowed_ids
         return OperationPassResult(
             sn=su.sn,
-            passed_op=OpInfo(seq=expected.seq, name=expected.name,
+            passed_op=OpInfo(id=expected.id, seq=expected.seq,
+                             name=expected.name,
                              work_station_id=expected.default_work_station_id),
             next_op=next_info, is_finished=su.status == "finished",
             work_order_status=wo.status, bound_count=bound_count,
@@ -359,7 +415,7 @@ class OperationPassService:
         if wo.status not in ("released", "in_process"):
             raise BusinessRuleError(f"工单状态不允许跳站: {wo.status}")
 
-        operations = self.query.get_operations(wo.routing_id)
+        operations = self._operations(wo)
         if not operations:
             raise BusinessRuleError("工艺路径无工序")
 
@@ -379,7 +435,7 @@ class OperationPassService:
             raise NotFoundError(f"作业站不存在: {data.work_station_id}")
         if ws.line_id != wo.line_id:
             raise BusinessRuleError("当前作业站不属于本工单产线")
-        allowed = self.query.get_allowed_work_stations(expected.id)
+        allowed = self._allowed_work_stations(expected)
         allowed_ids = [w.id for w in allowed] or [expected.default_work_station_id]
         if data.work_station_id not in allowed_ids:
             names = "、".join(w.name for w in allowed) or f"作业站 #{expected.default_work_station_id}"
@@ -421,14 +477,16 @@ class OperationPassService:
         next_op_can_continue_here = False
         if remaining:
             next_op_obj = remaining[0]
-            next_info = OpInfo(seq=next_op_obj.seq, name=next_op_obj.name,
+            next_info = OpInfo(id=next_op_obj.id, seq=next_op_obj.seq,
+                               name=next_op_obj.name,
                                work_station_id=next_op_obj.default_work_station_id)
-            next_allowed = self.query.get_allowed_work_stations(next_op_obj.id)
+            next_allowed = self._allowed_work_stations(next_op_obj)
             next_allowed_ids = [w.id for w in next_allowed] or [next_op_obj.default_work_station_id]
             next_op_can_continue_here = data.work_station_id in next_allowed_ids
         return OperationSkipResult(
             sn=su.sn,
-            skipped_op=OpInfo(seq=expected.seq, name=expected.name,
+            skipped_op=OpInfo(id=expected.id, seq=expected.seq,
+                              name=expected.name,
                               work_station_id=expected.default_work_station_id),
             next_op=next_info, is_finished=False,
             work_order_status=wo.status,

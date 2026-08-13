@@ -12,10 +12,12 @@ from lightmes.modules.production.operation_pass_service import OperationPassServ
 from lightmes.modules.production.repository import (
     SerialUnitRepository, OperationParamRepository,
 )
+from lightmes.modules.production.material_lot_service import MaterialLotService
+from lightmes.modules.production.models import BatchMaterialConsumption, MaterialLot
 from lightmes.shared.errors import NotFoundError, BusinessRuleError
 
 
-def _line(db_session, n_ops=2):
+def _line(db_session, n_ops=2, *, release=True):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="PPX", name="壳", type="finished"))
     line = md.create_line(LineCreate(code="PLX", name="线"))
@@ -28,7 +30,8 @@ def _line(db_session, n_ops=2):
     rule = prod.create_sn_rule(SnRuleCreate(code="PRLX", name="r", pattern="X{SEQ:4}"))
     wo = prod.create_work_order(WorkOrderCreate(
         code="PXWO", product_id=p.id, routing_id=r.id, line_id=line.id, qty=10, sn_rule_id=rule.id))
-    prod.release_work_order(wo.id)
+    if release:
+        prod.release_work_order(wo.id)
     return p, line, ws, wo
 
 
@@ -90,7 +93,7 @@ def _line_with_op_bom(db_session, n_ops=3):
     c_op2 声明在 op2 装配，c_op3 声明在 op3 装配。
     """
     from lightmes.modules.masterdata.schemas import BomCreate, BomItemCreate
-    p, line, ws, wo = _line(db_session, n_ops=n_ops)
+    p, line, ws, wo = _line(db_session, n_ops=n_ops, release=False)
     md = MasterDataService(db_session)
     c_op2 = md.create_product(ProductCreate(code="COP2", name="op2件",
                                             type="component", track_mode="serial"))
@@ -102,6 +105,7 @@ def _line_with_op_bom(db_session, n_ops=3):
         BomItemCreate(component_product_id=c_op3.id, qty=1,
                       consume_at_operation_seq=3),
     ]))
+    ProductionService(db_session).release_work_order(wo.id)
     return p, line, ws, wo, c_op2, c_op3
 
 
@@ -163,11 +167,12 @@ def test_final_op_cumulative_check_still_blocks_missing(db_session):
     """
     from lightmes.modules.production.schemas import OperationPassInput
     from lightmes.modules.masterdata.schemas import BomCreate, BomItemCreate
-    p2, line2, ws2, wo2 = _line(db_session, n_ops=2)
+    p2, line2, ws2, wo2 = _line(db_session, n_ops=2, release=False)
     c_null = MasterDataService(db_session).create_product(
         ProductCreate(code="CNULL", name="老件", type="component", track_mode="serial"))
     MasterDataService(db_session).create_bom(BomCreate(product_id=p2.id, items=[
         BomItemCreate(component_product_id=c_null.id, qty=1)]))  # NULL seq
+    ProductionService(db_session).release_work_order(wo2.id)
     svc = OperationPassService(db_session)
     r_a = svc.pass_operation(OperationPassInput(work_station_id=ws2[0].id,
                                                  work_order_code=wo2.code))
@@ -178,21 +183,25 @@ def test_final_op_cumulative_check_still_blocks_missing(db_session):
 
 def test_station_service_filters_components_to_current_op(db_session):
     """station_view 只显示 consume_at_operation_seq IS NULL OR == 当前 op 的件。"""
-    from lightmes.modules.masterdata.models import Bom, BomItem
+    from lightmes.modules.masterdata.schemas import BomCreate, BomItemCreate
     from lightmes.modules.production.station_service import StationService
 
-    p, line, ws, wo, c_op2, c_op3 = _line_with_op_bom(db_session, n_ops=3)
-    # 加一个 NULL seq 的件到同一 active BOM（第二份 BOM 会被 create_bom 标记为 inactive）
+    p, line, ws, wo = _line(db_session, n_ops=3, release=False)
     md = MasterDataService(db_session)
-    c_null = md.create_product(ProductCreate(code="CNUL", name="老件",
+    c_op2 = md.create_product(ProductCreate(code="COP2", name="OP2 Comp",
                                              type="component", track_mode="serial"))
-    bom = db_session.execute(
-        select(Bom).where(Bom.product_id == p.id, Bom.status == "active")
-    ).scalar_one()
-    db_session.add(BomItem(
-        bom_id=bom.id, component_product_id=c_null.id, qty=1,
-        track_mode="serial", consume_at_operation_seq=None))
-    db_session.flush()
+    c_op3 = md.create_product(ProductCreate(code="COP3", name="OP3 Comp",
+                                             type="component", track_mode="serial"))
+    c_null = md.create_product(ProductCreate(code="CNUL", name="Legacy Comp",
+                                             type="component", track_mode="serial"))
+    md.create_bom(BomCreate(product_id=p.id, items=[
+        BomItemCreate(component_product_id=c_op2.id, qty=1,
+                      consume_at_operation_seq=2),
+        BomItemCreate(component_product_id=c_op3.id, qty=1,
+                      consume_at_operation_seq=3),
+        BomItemCreate(component_product_id=c_null.id, qty=1),
+    ]))
+    ProductionService(db_session).release_work_order(wo.id)
 
     svc = OperationPassService(db_session)
     r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
@@ -205,4 +214,40 @@ def test_station_service_filters_components_to_current_op(db_session):
     assert c_op2.id in comp_ids
     assert c_null.id in comp_ids
     assert c_op3.id not in comp_ids
+
+
+def test_pass_consumes_batch_component_lot(db_session):
+    """批次件扫描后扣减 MaterialLot 并生成消耗记录。"""
+    from lightmes.modules.production.schemas import ComponentInput, OperationPassInput
+    from lightmes.modules.masterdata.schemas import BomCreate, BomItemCreate
+    p, line, ws, wo = _line(db_session, n_ops=1, release=False)
+    md = MasterDataService(db_session)
+    comp = md.create_product(ProductCreate(
+        code="BATCHCOMP", name="批次件", type="component", track_mode="batch"))
+    md.create_bom(BomCreate(product_id=p.id, items=[
+        BomItemCreate(component_product_id=comp.id, qty=2)]))
+    ProductionService(db_session).release_work_order(wo.id)
+    lot = MaterialLotService(db_session).receive(
+        code="BATCH-LOT", product_id=comp.id, quantity=5)
+    MaterialLotService(db_session).release(lot.code)
+
+    svc = OperationPassService(db_session)
+    svc.pass_operation(OperationPassInput(
+        work_station_id=ws[0].id,
+        work_order_code=wo.code,
+        components=[ComponentInput(
+            component_product_id=comp.id,
+            component_batch_no="BATCH-LOT",
+            qty=2,
+        )],
+    ))
+
+    lot_after = db_session.get(MaterialLot, lot.id)
+    assert float(lot_after.available_quantity) == 3
+    consumption = db_session.execute(
+        select(BatchMaterialConsumption).where(
+            BatchMaterialConsumption.material_lot_id == lot.id
+        )
+    ).scalar_one()
+    assert float(consumption.quantity) == 2
 

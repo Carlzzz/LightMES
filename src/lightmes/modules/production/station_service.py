@@ -56,12 +56,21 @@ class StationService:
         expected = next((o for o in operations if o.seq > current_seq), None)
 
         # Resolve allowed work stations from the frozen process view.
-        op_ws_map = {}
+        all_ws_ids = {o.default_work_station_id for o in operations}
         for o in operations:
-            op_ws_map[o.id] = [
-                ws for ws_id in o.allowed_work_station_ids
-                if (ws := self.query.get_work_station(ws_id)) is not None
+            all_ws_ids.update(o.allowed_work_station_ids)
+        ws_by_id = {
+            ws_id: self.query.get_work_station(ws_id)
+            for ws_id in all_ws_ids
+        }
+        op_ws_map = {
+            o.id: [
+                ws_by_id[ws_id]
+                for ws_id in o.allowed_work_station_ids
+                if ws_by_id.get(ws_id) is not None
             ]
+            for o in operations
+        }
 
         # 取该 SN 全部 operation_records，按 operation_id 分组取 end_time 最新的 result
         latest_result_by_op: dict[int, str] = {}
@@ -88,7 +97,7 @@ class StationService:
             op_allowed = op_ws_map.get(o.id, [])
             allowed_names = [w.name for w in op_allowed]
             if not allowed_names:
-                ws = self.query.get_work_station(o.default_work_station_id)
+                ws = ws_by_id.get(o.default_work_station_id)
                 allowed_names = [ws.name if ws else f"#{o.default_work_station_id}"]
             op_views.append(StationOpView(
                 operation_id=o.id,

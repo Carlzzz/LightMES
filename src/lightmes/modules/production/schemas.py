@@ -77,6 +77,7 @@ class OperationPassInput(BaseModel):
 
 
 class OpInfo(BaseModel):
+    id: int
     seq: int
     name: str
     work_station_id: int

@@ -157,15 +157,15 @@ def get_work_order_process(db: Session, work_order: WorkOrder) -> WorkOrderProce
         )
         for op in query.get_operations(work_order.routing_id)
     ]
-    bom_items = [
-        SnapshotBomItem(
+    bom_items = []
+    for item in query.get_active_bom_items(work_order.product_id):
+        component = query.get_product(item.component_product_id)
+        bom_items.append(SnapshotBomItem(
             component_product_id=item.component_product_id,
-            component_code="",
-            component_name="",
+            component_code=component.code if component else "",
+            component_name=component.name if component else "",
             qty=float(item.qty),
             track_mode=item.track_mode,
             consume_at_operation_seq=item.consume_at_operation_seq,
-        )
-        for item in query.get_active_bom_items(work_order.product_id)
-    ]
+        ))
     return WorkOrderProcess(operations, bom_items)
