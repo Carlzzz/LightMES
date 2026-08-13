@@ -10,6 +10,7 @@ from lightmes.modules.production.schemas import (
 )
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.repository import SerialUnitRepository
+from lightmes.modules.production.material_lot_service import MaterialLotService
 from lightmes.modules.trace.rework_service import ReworkService
 from lightmes.modules.trace.trace_service import TraceService
 from lightmes.modules.trace.genealogy_service import GenealogyService
@@ -56,6 +57,9 @@ def test_rework_rolls_back_step_and_status(db_session):
 
 def test_rework_unbinds_components(db_session):
     fin, comp, w1, w2, wo = _two_step_line(db_session)
+    lot = MaterialLotService(db_session).receive(
+        code="LOT-1", product_id=comp.id, quantity=4)
+    MaterialLotService(db_session).release(lot.code)
     pass_svc = OperationPassService(db_session)
     res = pass_svc.pass_operation(OperationPassInput(
         work_station_id=w1.id, work_order_code="RWO",
