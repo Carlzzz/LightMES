@@ -6,6 +6,7 @@ from sqlalchemy import (
     Index,
     JSON,
     Numeric,
+    String,
     UniqueConstraint,
     func,
     text,
@@ -16,6 +17,12 @@ from lightmes.shared.base import Base, TimestampMixin
 
 class SnRule(Base, TimestampMixin):
     __tablename__ = "sn_rules"
+    __table_args__ = (
+        CheckConstraint(
+            "seq_reset IN ('never', 'daily', 'monthly')",
+            name="ck_sn_rules_seq_reset",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(unique=True, index=True)
@@ -31,6 +38,14 @@ class SnRule(Base, TimestampMixin):
 
 class WorkOrder(Base, TimestampMixin):
     __tablename__ = "work_orders"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('created', 'released', 'in_process', 'completed', 'cancelled')",
+            name="ck_work_orders_status",
+        ),
+        CheckConstraint("qty > 0", name="ck_work_orders_qty_positive"),
+        CheckConstraint("produced_qty >= 0", name="ck_work_orders_produced_qty_nonnegative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(unique=True, index=True)
@@ -47,6 +62,7 @@ class WorkOrder(Base, TimestampMixin):
     planned_start: Mapped[datetime | None] = mapped_column(default=None)
     planned_end: Mapped[datetime | None] = mapped_column(default=None)
     priority: Mapped[int] = mapped_column(default=5)
+    process_snapshot: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 
 class SerialUnit(Base, TimestampMixin):
@@ -56,6 +72,12 @@ class SerialUnit(Base, TimestampMixin):
             "uq_active_carrier", "carrier_code",
             unique=True, postgresql_where=text("carrier_code IS NOT NULL"),
         ),
+        CheckConstraint(
+            "status IN ('pending', 'in_process', 'reworking', 'quarantined', 'finished', 'scrapped')",
+            name="ck_serial_units_status",
+        ),
+        CheckConstraint("current_operation_seq >= 0", name="ck_serial_units_current_seq_nonnegative"),
+        CheckConstraint("version >= 0", name="ck_serial_units_version_nonnegative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -68,6 +90,9 @@ class SerialUnit(Base, TimestampMixin):
     # 是否已计入工单完工数；返工再完工不重复计数（一个物理 SN 只计一次）
     is_counted: Mapped[bool] = mapped_column(default=False, server_default="false")
     carrier_code: Mapped[str | None] = mapped_column(default=None)
+    batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("batches.id"), default=None, index=True
+    )
     # 返工时设定的预期 re-pass 站位；首次 re-pass 后清 null（service 层保证）
     rework_target_station_id: Mapped[int | None] = mapped_column(
         ForeignKey("work_stations.id"), default=None
@@ -76,6 +101,12 @@ class SerialUnit(Base, TimestampMixin):
 
 class OperationRecord(Base, TimestampMixin):
     __tablename__ = "operation_records"
+    __table_args__ = (
+        CheckConstraint(
+            "result IN ('pass', 'fail', 'skip')",
+            name="ck_operation_records_result",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     serial_unit_id: Mapped[int] = mapped_column(ForeignKey("serial_units.id"))
@@ -94,6 +125,82 @@ class OperationRecord(Base, TimestampMixin):
     )
     result: Mapped[str] = mapped_column(default="pass")
     remark: Mapped[str | None] = mapped_column(default=None)
+
+
+class Batch(Base, TimestampMixin):
+    __tablename__ = "batches"
+    __table_args__ = (
+        UniqueConstraint("work_order_id", "batch_number", name="uq_batch_work_order_number"),
+        CheckConstraint(
+            "status IN ('pending', 'in_process', 'done', 'cancelled')",
+            name="ck_batches_status",
+        ),
+        CheckConstraint("target_qty > 0", name="ck_batches_target_qty_positive"),
+        CheckConstraint("produced_qty >= 0", name="ck_batches_produced_qty_nonnegative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    batch_number: Mapped[int] = mapped_column()
+    status: Mapped[str] = mapped_column(default="pending")
+    target_qty: Mapped[int] = mapped_column()
+    produced_qty: Mapped[int] = mapped_column(default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class MaterialLot(Base, TimestampMixin):
+    __tablename__ = "material_lots"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('received', 'quarantined', 'released', 'consumed', 'rejected')",
+            name="ck_material_lots_status",
+        ),
+        CheckConstraint("quantity >= 0", name="ck_material_lots_quantity_nonnegative"),
+        CheckConstraint("available_quantity >= 0", name="ck_material_lots_available_nonnegative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(unique=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    quantity: Mapped[float] = mapped_column(Numeric(12, 3), default=0)
+    available_quantity: Mapped[float] = mapped_column(Numeric(12, 3), default=0)
+    status: Mapped[str] = mapped_column(default="received")
+    supplier_lot: Mapped[str | None] = mapped_column(default=None)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class StockMovement(Base, TimestampMixin):
+    __tablename__ = "stock_movements"
+    __table_args__ = (
+        CheckConstraint(
+            "movement_type IN ('receive', 'release', 'consume', 'return', 'adjustment')",
+            name="ck_stock_movements_type",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    material_lot_id: Mapped[int] = mapped_column(ForeignKey("material_lots.id"), index=True)
+    movement_type: Mapped[str] = mapped_column(String(20))
+    quantity: Mapped[float] = mapped_column(Numeric(12, 3))
+    source_type: Mapped[str | None] = mapped_column(String(50), default=None)
+    source_id: Mapped[int | None] = mapped_column(default=None)
+    notes: Mapped[str | None] = mapped_column(default=None)
+
+
+class BatchMaterialConsumption(Base, TimestampMixin):
+    __tablename__ = "batch_material_consumptions"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_batch_material_consumption_quantity_nonnegative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("batches.id"), index=True)
+    material_lot_id: Mapped[int] = mapped_column(ForeignKey("material_lots.id"), index=True)
+    operation_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("operation_records.id"), default=None, index=True
+    )
+    quantity: Mapped[float] = mapped_column(Numeric(12, 3), default=0)
 
 
 class OperationParam(Base, TimestampMixin):
@@ -175,6 +282,12 @@ class FirstInspectionCheckItem(Base, TimestampMixin):
 class FirstInspectionRecord(Base, TimestampMixin):
     """首检记录"""
     __tablename__ = "first_inspection_records"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'passed', 'failed', 'waived')",
+            name="ck_first_inspection_records_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     config_id: Mapped[int] = mapped_column(ForeignKey("first_inspection_configs.id"))
@@ -270,6 +383,12 @@ class TestDataField(Base, TimestampMixin):
 class TestDataRecord(Base, TimestampMixin):
     """测试数据记录"""
     __tablename__ = "test_data_records"
+    __table_args__ = (
+        CheckConstraint(
+            "overall_result IN ('pending', 'passed', 'failed')",
+            name="ck_test_data_records_overall_result",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     template_id: Mapped[int] = mapped_column(ForeignKey("test_data_templates.id"))
@@ -309,6 +428,12 @@ class TestDataValue(Base, TimestampMixin):
 class DefectType(Base, TimestampMixin):
     """缺陷类型主数据"""
     __tablename__ = "defect_types"
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('critical', 'major', 'minor')",
+            name="ck_defect_types_severity",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(unique=True, index=True)
@@ -322,6 +447,12 @@ class DefectType(Base, TimestampMixin):
 class DefectRecord(Base, TimestampMixin):
     """缺陷记录（实例）"""
     __tablename__ = "defect_records"
+    __table_args__ = (
+        CheckConstraint(
+            "handling_status IN ('pending', 'rework', 'scrap', 'concession')",
+            name="ck_defect_records_handling_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     defect_type_id: Mapped[int] = mapped_column(
