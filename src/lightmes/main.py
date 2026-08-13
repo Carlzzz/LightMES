@@ -15,6 +15,7 @@ from lightmes.modules import (
     auth,
     connectivity,
     integration,
+    issue,
     masterdata,
     production,
     trace,
@@ -57,6 +58,7 @@ app.mount(
     name="static",
 )
 auth.register(app)
+issue.register(app)
 masterdata.register(app)
 production.register(app)
 trace.register(app)
