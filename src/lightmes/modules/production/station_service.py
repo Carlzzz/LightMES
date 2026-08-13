@@ -18,6 +18,7 @@ from lightmes.modules.production.quality_service import (
 from lightmes.modules.production.models import (
     FirstInspectionConfig, TestDataTemplate, OperationRecord,
 )
+from lightmes.modules.production.process_snapshot import get_work_order_process
 from lightmes.shared.errors import NotFoundError, BusinessRuleError
 
 
@@ -46,16 +47,21 @@ class StationService:
                 raise NotFoundError(f"未找到 SN 或工单: {scan}")
 
         product = self.query.get_product(wo.product_id)
-        operations = self.query.get_operations(wo.routing_id)
+        process = get_work_order_process(self.db, wo)
+        operations = process.operations
         if not operations:
             raise BusinessRuleError("工艺路径无工序")
 
         current_seq = su.current_operation_seq if su is not None else 0
         expected = next((o for o in operations if o.seq > current_seq), None)
 
-        # 批量查询所有工序的 allowed work stations（1 次查询替代 N 次）
-        all_op_ids = [o.id for o in operations]
-        op_ws_map = self.query.batch_allowed_work_stations(all_op_ids)
+        # Resolve allowed work stations from the frozen process view.
+        op_ws_map = {}
+        for o in operations:
+            op_ws_map[o.id] = [
+                ws for ws_id in o.allowed_work_station_ids
+                if (ws := self.query.get_work_station(ws_id)) is not None
+            ]
 
         # 取该 SN 全部 operation_records，按 operation_id 分组取 end_time 最新的 result
         latest_result_by_op: dict[int, str] = {}
@@ -126,7 +132,7 @@ class StationService:
                     if operator_id else None)
                 skill_ok = (operator_skill_level is not None
                             and operator_skill_level >= (required_level or 0))
-            for item in self.query.get_active_bom_items(product.id):
+            for item in process.bom_items:
                 # 只显示本工序应装件 + NULL 兼容件
                 if (item.consume_at_operation_seq is not None
                         and item.consume_at_operation_seq != expected.seq):
