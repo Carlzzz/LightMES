@@ -6,6 +6,9 @@ from lightmes.modules.production.process_snapshot import build_process_snapshot
 
 
 def backfill_work_order_snapshots(db: Session) -> int:
+    # The JSON column stores Python None as JSON literal null, while
+    # is_(None) only matches SQL NULL. Match both so released and
+    # in-process orders missing either representation are backfilled.
     missing_snapshot = or_(
         WorkOrder.process_snapshot.is_(None),
         WorkOrder.process_snapshot.cast(String) == "null",
