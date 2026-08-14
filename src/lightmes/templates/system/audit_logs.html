@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}审计日志 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">审计日志 <small>系统操作记录</small></h1>
+
+<div class="page-header-links">
+  <a href="/" class="btn-secondary btn-sm">返回首页</a>
+</div>
+
+<div class="card">
+  <div class="card__title">筛选</div>
+  <form class="form-row" method="get" action="/system/audit-logs">
+    <div class="field">
+      <label>实体类型</label>
+      <input name="entity_type" value="{{ entity_type }}" placeholder="例如 User">
+    </div>
+    <div class="field">
+      <label>用户 ID</label>
+      <input name="user_id" value="{{ user_id }}" placeholder="数字">
+    </div>
+    <div class="field">
+      <label>动作</label>
+      <input name="action" value="{{ action }}" placeholder="created / updated / deleted">
+    </div>
+    <div class="field">
+      <label>条数</label>
+      <input name="limit" value="{{ limit }}">
+    </div>
+    <button type="submit">查询</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__title">审计记录</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>时间</th>
+        <th>实体类型</th>
+        <th>实体 ID</th>
+        <th>动作</th>
+        <th>用户 ID</th>
+        <th>变更前</th>
+        <th>变更后</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>{{ log.id }}</td>
+        <td>{{ log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "-" }}</td>
+        <td>{{ log.entity_type }}</td>
+        <td>{{ log.entity_id }}</td>
+        <td>{{ log.action }}</td>
+        <td>{{ log.user_id if log.user_id is not none else "-" }}</td>
+        <td><code>{{ log.before_state }}</code></td>
+        <td><code>{{ log.after_state }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

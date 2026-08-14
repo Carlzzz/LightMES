@@ -33,6 +33,7 @@ from lightmes.modules.api_v1.errors import register_problem_details_handler
 from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
 from lightmes.modules.issue.linkify import issue_linkify
 from lightmes.shared.audit import AuditContextMiddleware, register_audit_listeners
+from lightmes.shared.audit_router import audit_router
 from lightmes.shared.extensions import extension_registry
 from lightmes.shared.realtime import realtime_shape_registry
 from lightmes.shared.web_security import (
@@ -135,6 +136,7 @@ app.mount(
     name="static",
 )
 auth.register(app)
+app.include_router(audit_router)
 issue.register(app)
 masterdata.register(app)
 production.register(app)
