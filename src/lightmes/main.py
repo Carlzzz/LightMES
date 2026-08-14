@@ -25,6 +25,7 @@ from lightmes.modules import (
     production,
     trace,
     quality,
+    system,
 )
 from lightmes.database import engine
 from lightmes.shared.base import Base
@@ -168,6 +169,7 @@ trace.register(app)
 integration.register(app)
 inventory.register(app)
 quality.register(app)
+system.register(app)
 connectivity.register(app)
 api_v1.register(app)
 agent_gateway.register(app)
