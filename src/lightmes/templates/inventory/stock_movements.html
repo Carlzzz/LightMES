@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}库存变动 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">库存变动</h1>
+<div class="card">
+  <div class="card__title">最近变动</div>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>批次号</th>
+          <th>类型</th>
+          <th>数量</th>
+          <th>来源类型</th>
+          <th>来源 ID</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in movements %}
+        <tr>
+          <td>{{ m.movement.id }}</td>
+          <td><a href="/inventory/material-lots/{{ m.movement.material_lot_id }}">{{ m.lot_code }}</a></td>
+          <td><span class="badge">{{ m.movement.movement_type }}</span></td>
+          <td>{{ m.movement.quantity }}</td>
+          <td>{{ m.movement.source_type or '' }}</td>
+          <td>{{ m.movement.source_id or '' }}</td>
+          <td>{{ m.movement.created_at or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">暂无变动</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}生产批次 - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">生产批次</h1>
+<div class="card">
+  <div class="card__title">批次列表</div>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>工单号</th>
+          <th>批次号</th>
+          <th>状态</th>
+          <th>目标数量</th>
+          <th>已完成</th>
+          <th>开始时间</th>
+          <th>完成时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td>{{ b.batch.id }}</td>
+          <td>{{ b.work_order_code }}</td>
+          <td>{{ b.batch.batch_number }}</td>
+          <td><span class="badge">{{ b.batch.status }}</span></td>
+          <td>{{ b.batch.target_qty }}</td>
+          <td>{{ b.batch.produced_qty }}</td>
+          <td>{{ b.batch.started_at or '' }}</td>
+          <td>{{ b.batch.completed_at or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">暂无批次</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

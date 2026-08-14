@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}物料批次 {{ lot.code }} - LightMES{% endblock %}
+{% block content %}
+<h1 class="page-title">物料批次 <small>{{ lot.code }}</small></h1>
+<div class="card">
+  <div class="card__title">批次信息</div>
+  <table class="data-table">
+    <tbody>
+      <tr><th>ID</th><td>{{ lot.id }}</td></tr>
+      <tr><th>批次号</th><td>{{ lot.code }}</td></tr>
+      <tr><th>产品 ID</th><td>{{ lot.product_id }}</td></tr>
+      <tr><th>数量</th><td>{{ lot.quantity }}</td></tr>
+      <tr><th>可用数量</th><td>{{ lot.available_quantity }}</td></tr>
+      <tr><th>状态</th><td><span class="badge">{{ lot.status }}</span></td></tr>
+      <tr><th>供应商批次</th><td>{{ lot.supplier_lot or '' }}</td></tr>
+      <tr><th>收货时间</th><td>{{ lot.received_at or '' }}</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <div class="card__title">变动历史</div>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>类型</th>
+          <th>数量</th>
+          <th>来源类型</th>
+          <th>来源 ID</th>
+          <th>备注</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in movements %}
+        <tr>
+          <td>{{ m.id }}</td>
+          <td><span class="badge">{{ m.movement_type }}</span></td>
+          <td>{{ m.quantity }}</td>
+          <td>{{ m.source_type or '' }}</td>
+          <td>{{ m.source_id or '' }}</td>
+          <td>{{ m.notes or '' }}</td>
+          <td>{{ m.created_at or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">暂无变动</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<p><a href="/inventory/material-lots">返回物料批次</a></p>
+{% endblock %}

@@ -3,10 +3,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none, require_login
+from lightmes.modules.auth.dependencies import current_user_or_none, html_role_guard, require_login, require_role
 from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
@@ -24,6 +25,7 @@ from lightmes.modules.production.quality_service import (
     TestDataService,
 )
 from lightmes.modules.production.models import (
+    Batch,
     WorkOrder,
 )
 from lightmes.modules.production.repository import (
@@ -84,7 +86,7 @@ def _skip_auth_guard(request: Request, db: Session) -> User | HTMLResponse:
 def create_sn_rule(
     data: SnRuleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
+    current_user: User = Depends(require_role("admin", "supervisor")),
 ) -> SnRuleRead:
     svc = ProductionService(db)
     try:
@@ -103,7 +105,7 @@ def create_sn_rule(
 def create_work_order(
     data: WorkOrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
+    current_user: User = Depends(require_role("admin", "supervisor")),
 ) -> WorkOrderRead:
     svc = ProductionService(db)
     try:
@@ -120,7 +122,7 @@ def create_work_order(
 def release_work_order(
     work_order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_login),
+    current_user: User = Depends(require_role("admin", "supervisor")),
 ) -> WorkOrderRead:
     svc = ProductionService(db)
     try:
@@ -160,6 +162,9 @@ def scan_page():
 
 @router.get("/production/sn-rules", response_class=HTMLResponse)
 def sn_rules_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    user, auth_response = html_role_guard(request, db, "admin", "supervisor")
+    if auth_response is not None:
+        return auth_response
     rules = ProductionService(db).sn_rules.list_all()
     return templates.TemplateResponse(
         request, "production/sn_rules.html", {"rules": rules}
@@ -175,8 +180,9 @@ def sn_rules_create_page(
     seq_reset: str = Form("never"),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if current_user_or_none(request, db) is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+    _, auth_response = html_role_guard(request, db, "admin", "supervisor")
+    if auth_response is not None:
+        return auth_response
     svc = ProductionService(db)
     try:
         rule = svc.create_sn_rule(SnRuleCreate(
@@ -196,6 +202,9 @@ def wip_page(
     request: Request, work_order: str = "", db: Session = Depends(get_db)
 ) -> HTMLResponse:
     """WIP 看板：支持工单号(code)或数字 ID 查询。"""
+    user, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
+    if auth_response is not None:
+        return auth_response
     wo_id = 0
     wo_code = ""
     if work_order:
@@ -216,10 +225,60 @@ def wip_page(
     )
 
 
+@router.get("/production/batches", response_class=HTMLResponse)
+def batches_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
+    if auth_response is not None:
+        return auth_response
+    rows = db.execute(
+        select(Batch, WorkOrder.code)
+        .join(WorkOrder, WorkOrder.id == Batch.work_order_id)
+        .order_by(Batch.id.desc())
+    ).all()
+    batches = [
+        {"batch": batch, "work_order_code": work_order_code}
+        for batch, work_order_code in rows
+    ]
+    return templates.TemplateResponse(
+        request,
+        "production/batches.html",
+        {"batches": batches},
+    )
+
+
+@router.get("/api/production/batches")
+def api_batches(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_login),
+) -> list[dict]:
+    rows = db.execute(
+        select(Batch, WorkOrder.code)
+        .join(WorkOrder, WorkOrder.id == Batch.work_order_id)
+        .order_by(Batch.id.desc())
+    ).all()
+    return [
+        {
+            "id": batch.id,
+            "work_order_id": batch.work_order_id,
+            "work_order_code": work_order_code,
+            "batch_number": batch.batch_number,
+            "status": batch.status,
+            "target_qty": batch.target_qty,
+            "produced_qty": batch.produced_qty,
+            "started_at": batch.started_at.isoformat() if batch.started_at else None,
+            "completed_at": batch.completed_at.isoformat() if batch.completed_at else None,
+        }
+        for batch, work_order_code in rows
+    ]
+
+
 @router.get("/production/station", response_class=HTMLResponse)
 def station_page(
     request: Request, work_station_id: int = 0, db: Session = Depends(get_db)
 ) -> HTMLResponse:
+    user, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator")
+    if auth_response is not None:
+        return auth_response
     query = MasterDataQueryService(db)
     stations = query.list_work_stations()
     # 附产线名以便下拉显示
@@ -764,9 +823,9 @@ def planner_schedule(
     force_conflict: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = current_user_or_none(request, db)
-    if user is None:
-        return HTMLResponse("请先登录", status_code=401)
+    user, auth_response = html_role_guard(request, db, "admin", "supervisor")
+    if auth_response is not None:
+        return auth_response
     from datetime import datetime
     from lightmes.modules.production.planner_service import PlannerService
     from lightmes.shared.errors import ConflictError, BusinessRuleError, NotFoundError
@@ -795,9 +854,9 @@ def planner_unschedule(
     wo_id: int,
     db: Session = Depends(get_db),
 ):
-    user = current_user_or_none(request, db)
-    if user is None:
-        return HTMLResponse("请先登录", status_code=401)
+    user, auth_response = html_role_guard(request, db, "admin", "supervisor")
+    if auth_response is not None:
+        return auth_response
     from lightmes.modules.production.planner_service import PlannerService
     from lightmes.shared.errors import NotFoundError
     try:
