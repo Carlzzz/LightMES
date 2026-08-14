@@ -20,6 +20,8 @@ class MachineConnection(Base, TimestampMixin):
     status_message: Mapped[str | None] = mapped_column(String(500), default=None)
     last_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     messages_received: Mapped[int] = mapped_column(Integer, default=0)
+    work_station_id: Mapped[int | None] = mapped_column(
+        ForeignKey("work_stations.id"), default=None, index=True)
 
 
 class MqttConnection(Base, TimestampMixin):

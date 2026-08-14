@@ -13,6 +13,7 @@ from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F4
 from lightmes.modules.production import models as _production_models  # noqa: F401
 from lightmes.modules.api_v1 import models as _api_v1_models  # noqa: F401
 from lightmes.modules.connectivity import models as _connectivity_models  # noqa: F401
+from lightmes.modules.equipment import models as _equipment_models  # noqa: F401
 from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 

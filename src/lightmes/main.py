@@ -18,6 +18,7 @@ from lightmes.modules import (
     api_v1,
     auth,
     connectivity,
+    equipment,
     integration,
     inventory,
     issue,
@@ -61,6 +62,7 @@ async def lifespan(_: FastAPI):
     from lightmes.database import SessionLocal
     from lightmes.modules.auth.service import AuthService
     from lightmes.modules.production.defect_service import DefectService
+    from lightmes.modules.equipment import ensure_system_downtime_reasons
 
     db = SessionLocal()
     try:
@@ -69,6 +71,7 @@ async def lifespan(_: FastAPI):
         if admin_password:
             AuthService(db).ensure_admin_user(admin_password)
         DefectService(db).ensure_system_defect_types()
+        ensure_system_downtime_reasons(db)
         db.commit()
     finally:
         db.close()
@@ -171,6 +174,7 @@ inventory.register(app)
 quality.register(app)
 system.register(app)
 connectivity.register(app)
+equipment.register(app)
 api_v1.register(app)
 agent_gateway.register(app)
 

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     login_rate_limit: int = 5
     api_rate_limit: int = 300
     rate_limit_window_seconds: int = 60
+    equipment_auto_create_issue_on_fault: bool = False
 
 
 @lru_cache
