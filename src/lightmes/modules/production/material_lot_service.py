@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.models import (
     BatchMaterialConsumption,
     MaterialLot,
@@ -15,6 +16,7 @@ class MaterialLotService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.lots = MaterialLotRepository(db)
+        self.query = MasterDataQueryService(db)
 
     def receive(
         self,
@@ -26,6 +28,11 @@ class MaterialLotService:
     ) -> MaterialLot:
         if quantity <= 0:
             raise BusinessRuleError("物料批次数量必须大于 0")
+        product = self.query.get_product(product_id)
+        if product is None:
+            raise NotFoundError(f"产品不存在: {product_id}")
+        if product.track_mode != "batch":
+            raise BusinessRuleError(f"产品未启用批次跟踪: {product_id}")
         if self.lots.get_by_code(code) is not None:
             raise BusinessRuleError(f"物料批次已存在: {code}")
         lot = MaterialLot(
@@ -69,6 +76,8 @@ class MaterialLotService:
         lot_code: str,
         quantity: float,
     ) -> BatchMaterialConsumption:
+        if quantity <= 0:
+            raise BusinessRuleError("消耗数量必须大于 0")
         lot = self.lots.get_by_code(lot_code)
         if lot is None:
             raise NotFoundError(f"物料批次不存在: {lot_code}")
@@ -111,9 +120,11 @@ class MaterialLotService:
         quantity: float,
         reason: str,
     ) -> None:
+        if quantity <= 0:
+            raise BusinessRuleError("回补数量必须大于 0")
         lot = self.db.get(MaterialLot, material_lot_id)
         if lot is None:
-            raise NotFoundError(f"鐗╂枡鎵规涓嶅瓨鍦? {material_lot_id}")
+            raise NotFoundError(f"物料批次不存在: {material_lot_id}")
 
         lot.available_quantity = float(lot.available_quantity) + quantity
         lot.quantity = float(lot.quantity) + quantity
