@@ -1,5 +1,6 @@
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -51,9 +52,32 @@ try:
 except PackageNotFoundError:
     _app_version = "0.1.0"
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    if settings.environment != "production":
+        Base.metadata.create_all(bind=engine)
+
+    from lightmes.database import SessionLocal
+    from lightmes.modules.auth.service import AuthService
+    from lightmes.modules.production.defect_service import DefectService
+
+    db = SessionLocal()
+    try:
+        AuthService(db).initialize_default_roles()
+        admin_password = settings.admin_initial_password or None
+        if admin_password:
+            AuthService(db).ensure_admin_user(admin_password)
+        DefectService(db).ensure_system_defect_types()
+        db.commit()
+    finally:
+        db.close()
+
+    yield
+
 app = FastAPI(
     title=settings.app_name,
     version=_app_version,
+    lifespan=lifespan,
     description=(
         "LightMES — 轻量级制造执行系统（笔记本壳装配专线）。\n\n"
         "**API v1** (`/api/v1/*`)：JSON REST，为 ERP / BI / AI Agent 集成设计。"
@@ -213,26 +237,3 @@ def health_live() -> dict[str, str]:
 def health_ready(db: Session = Depends(get_db)) -> dict[str, str]:
     db.execute(text("SELECT 1"))
     return {"status": "ready", "app": settings.app_name}
-
-
-@app.on_event("startup")
-def on_startup():
-    """应用启动时初始化数据库和默认数据"""
-    # 生产环境只允许通过 Alembic 迁移建表；开发环境保留 create_all 便于快速启动。
-    if settings.environment != "production":
-        Base.metadata.create_all(bind=engine)
-
-    # 初始化默认角色和管理员用户
-    from lightmes.database import SessionLocal
-    from lightmes.modules.auth.service import AuthService
-    from lightmes.modules.production.defect_service import DefectService
-    db = SessionLocal()
-    try:
-        AuthService(db).initialize_default_roles()
-        admin_password = settings.admin_initial_password or None
-        if admin_password:
-            AuthService(db).ensure_admin_user(admin_password)
-        DefectService(db).ensure_system_defect_types()
-        db.commit()
-    finally:
-        db.close()
