@@ -52,8 +52,11 @@ def client(db_session):
 
 def test_api_routing_bom_responses_include_erp_fields(client, db_session):
     # 手工构造 RoutingRead/BomRead 的 API 路由必须带上新字段
-    AuthService(db_session).create_user(
-        UserCreate(username="api", password="pw12345", display_name="Api"))
+    auth = AuthService(db_session)
+    auth.initialize_default_roles()
+    admin_role = auth.role_repo.get_by_name("admin")
+    auth.create_user(
+        UserCreate(username="api", password="pw12345", display_name="Api", role_id=admin_role.id))
     db_session.flush()
     r = client.post("/login", data={"username": "api", "password": "pw12345"})
     assert r.status_code == 204

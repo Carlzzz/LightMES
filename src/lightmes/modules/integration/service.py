@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from lightmes.modules.integration.schemas import SyncResult
+from lightmes.config import get_settings
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
     BomItemUpsert,
@@ -79,7 +80,12 @@ class FileErpSyncService(ErpSyncService):
         reader = csv.DictReader(io.StringIO(source.decode("utf-8-sig")))
         parsed: list[ProductUpsert] = []
         result = SyncResult()
+        max_rows = get_settings().max_import_rows
         for n, row in enumerate(reader, start=2):  # 表头是第1行
+            if len(parsed) >= max_rows:
+                result.skipped += 1
+                result.errors.append(f"行 {n}: 超过最大导入行数 {max_rows}")
+                break
             try:
                 if not (row.get("erp_ref") or "").strip():
                     raise ValueError("缺少 erp_ref")
@@ -117,7 +123,12 @@ class FileErpSyncService(ErpSyncService):
             return result
         parsed: list[BomUpsert] = []
         result = SyncResult()
+        max_rows = get_settings().max_import_rows
         for i, rec in enumerate(records, start=1):
+            if len(parsed) >= max_rows:
+                result.skipped += 1
+                result.errors.append(f"第 {i} 条: 超过最大导入条数 {max_rows}")
+                break
             try:
                 parsed.append(BomUpsert(
                     erp_ref=rec["erp_ref"],

@@ -166,16 +166,18 @@ def compute_config_signature(config: ResolvedConnectionConfig) -> str:
         f"topics={topic_part}|"
     )
     if config.protocol == "mqtt":
+        password_digest = hashlib.sha256((config.password or "").encode()).hexdigest()
         payload += (
             f"mqtt={config.broker_host}:{config.broker_port}|"
-            f"u={config.username}|tls={config.use_tls}|qos={config.qos_default}|"
+            f"u={config.username}|p={password_digest}|tls={config.use_tls}|qos={config.qos_default}|"
             f"ka={config.keep_alive_seconds}|cs={config.clean_session}|"
             f"cid={config.client_id}"
         )
     elif config.protocol == "opcua":
+        password_digest = hashlib.sha256((config.password or "").encode()).hexdigest()
         payload += (
             f"opcua={config.server_url}|sec={config.security_mode}|"
-            f"u={config.username}|poll={config.poll_interval_seconds}"
+            f"u={config.username}|p={password_digest}|poll={config.poll_interval_seconds}"
         )
     elif config.protocol == "modbus":
         payload += (

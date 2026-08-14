@@ -11,6 +11,9 @@
   <div class="alert alert--danger pass-error-banner">✗ {{ pass_error }} <button type="button" onclick="this.parentElement.remove()" style="float:right;background:none;border:none;color:inherit;font-size:18px;cursor:pointer">×</button></div>
   <script>if(window.showErrorModal){showErrorModal("{{ pass_error|e }}");}</script>
   {% endif %}
+  {% if test_data_warning %}
+  <div class="alert alert--warning">⚠ {{ test_data_warning }}</div>
+  {% endif %}
   <!-- 顶部状态栏 -->
   <div class="station__topbar">
     <div class="station__ident">
@@ -32,7 +35,7 @@
 
   <!-- 本作业站工序范围（Layer 2 - 作业站级） -->
   {% if view.station_operations %}
-  <div class="station__path-wrap card">
+  <div class="station__path-wrap card" id="station-range-card">
     <div class="card__title">本作业站工序范围</div>
     <div class="station__path station__path--station" id="station-path-station">
       {% for o in view.station_operations %}
@@ -75,7 +78,8 @@
   <div class="alert alert--ok">该单元已完工，无待执行工序。</div>
   {% else %}
   <!-- PASS 表单：物料 + 参数一起提交 -->
-  <form hx-post="/production/station/pass" hx-target="#station-root" hx-swap="innerHTML" id="station-pass-form">
+  <form hx-post="/production/station/pass" hx-target="#station-root" hx-swap="innerHTML" id="station-pass-form"
+        data-skill-ok="{{ '1' if view.skill_ok else '0' }}">
     <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
     <input type="hidden" name="scan" value="{{ view.sn or view.work_order_code }}">
 
@@ -198,7 +202,7 @@
         </div>
         {% endif %}
 
-        <div class="card">
+        <div class="card station__bom-card">
           <div class="card__title">
             当前工序物料追溯
             <span class="badge">BOM 匹配</span>
@@ -234,26 +238,6 @@
           {% else %}<div class="nav-card__desc">当前工序无 BOM 绑定项。</div>{% endif %}
         </div>
 
-        <div class="card">
-          <div class="card__title">工艺参数采集 <span class="badge">手录</span></div>
-          <table class="data-table" id="param-table">
-            <thead><tr><th>参数名</th><th>数值</th><th>单位</th><th></th></tr></thead>
-            <tbody id="param-rows">
-              {% for i in range(3) %}
-              <tr class="param-row">
-                <td><input name="param_key" placeholder="参数名"></td>
-                <td><input name="param_value" placeholder="数值"></td>
-                <td><input name="param_unit" placeholder="单位"></td>
-                <td><button type="button" class="param-del-btn" onclick="this.closest('.param-row').remove()" title="删除">×</button></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <div class="param-toolbar">
-            <button type="button" class="btn-secondary btn-sm" id="param-add-btn">+ 添加参数行</button>
-            <span class="nav-card__desc">PLC 自动采集：暂未开放</span>
-          </div>
-        </div>
       </div>
 
       <div class="station__aside">
@@ -271,7 +255,7 @@
             {% endif %}
           </div>
         </div>
-        <div class="card">
+        <div class="card station__aside-actions-card">
           <div class="card__title">异常干预</div>
           <div class="station__aside-actions">
             <a class="btn-secondary" href="/trace/rework">申请返工</a>
@@ -291,8 +275,37 @@
       </div>
     </div>
 
+    <div class="modal" id="param-modal" style="display:none">
+      <div class="modal__body">
+        <div class="card" style="margin-bottom:0">
+          <div class="card__title">工艺参数采集 <span class="badge">手录</span></div>
+          <table class="data-table" id="param-table">
+            <thead><tr><th>参数名</th><th>数值</th><th>单位</th><th></th></tr></thead>
+            <tbody id="param-rows">
+              {% for i in range(3) %}
+              <tr class="param-row">
+                <td><input name="param_key" placeholder="参数名"></td>
+                <td><input name="param_value" placeholder="数值"></td>
+                <td><input name="param_unit" placeholder="单位"></td>
+                <td><button type="button" class="param-del-btn" onclick="this.closest('.param-row').remove()" title="删除">×</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="param-toolbar">
+            <button type="button" class="btn-secondary btn-sm" id="param-add-btn">+ 添加参数行</button>
+            <span class="nav-card__desc">PLC 自动采集：暂未开放</span>
+          </div>
+          <div class="form-actions" style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button type="button" class="btn-secondary" onclick="document.getElementById('param-modal').style.display='none'">取消</button>
+            <button type="button" class="station__pass" onclick="document.getElementById('param-modal').style.display='none'">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="station__footer">
-      <span class="station__status">{% if view.skill_ok %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
+      <span class="station__status" id="station-status">{% if view.components %}请先完成物料绑定{% elif view.skill_ok %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
       <button type="button" class="btn-secondary"
               hx-get="/production/station/andon-form"
               hx-vals='{"work_station_id": "{{ work_station_id }}", "serial_unit_id": "{{ view.sn_id or "" }}", "work_order_id": "{{ view.work_order_id or "" }}", "operation_id": "{{ view.current_op.operation_id if view.current_op else "" }}"}'
@@ -300,6 +313,7 @@
               onclick="document.getElementById('andon-modal').style.display='flex'">
         异常呼叫 (ANDON)
       </button>
+      <button type="button" class="btn-secondary" onclick="document.getElementById('param-modal').style.display='flex'">工艺参数采集</button>
       <button type="submit" class="station__pass">确认过站 (PASS)</button>
     </div>
   </form>
@@ -315,9 +329,64 @@
 </div>
 <script>
 (function () {
+  function updatePassStatus() {
+    var statusEl = document.getElementById('station-status');
+    var form = document.getElementById('station-pass-form');
+    if (!statusEl || !form) return;
+
+    var missing = [];
+    var skillOk = form.getAttribute('data-skill-ok') === '1';
+
+    document.querySelectorAll('.comp-scan').forEach(function (input) {
+      if (!input.value.trim()) missing.push('物料绑定');
+    });
+
+    var fiCard = document.getElementById('first-inspection-card');
+    if (fiCard) {
+      var fiDone = true;
+      fiCard.querySelectorAll('.fi-check').forEach(function (input) {
+        if (!input.checked) fiDone = false;
+      });
+      fiCard.querySelectorAll('.fi-input').forEach(function (input) {
+        if (!input.value.trim()) fiDone = false;
+      });
+      if (!fiDone) missing.push('首件检查');
+    }
+
+    var tdCard = document.getElementById('test-data-card');
+    if (tdCard) {
+      var tdDone = true;
+      tdCard.querySelectorAll('.td-check').forEach(function (input) {
+        if (!input.checked) tdDone = false;
+      });
+      tdCard.querySelectorAll('.td-input, .td-select').forEach(function (input) {
+        if (!input.value.trim()) tdDone = false;
+      });
+      if (!tdDone) missing.push('测试数据');
+    }
+
+    if (!skillOk) {
+      statusEl.textContent = '存在拦截风险';
+      statusEl.style.color = 'var(--danger)';
+    } else if (missing.length) {
+      statusEl.textContent = '请先完成：' + missing.join('、');
+      statusEl.style.color = 'var(--danger)';
+    } else {
+      statusEl.textContent = '就绪，可过站';
+      statusEl.style.color = 'var(--ok)';
+    }
+  }
+
   // 滚动当前工序到可视区
   var cur = document.getElementById('station-current');
   if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
+
+  document.querySelectorAll('.comp-scan, .fi-check, .fi-input, .td-check, .td-input, .td-select')
+    .forEach(function (input) {
+      input.addEventListener('input', updatePassStatus);
+      input.addEventListener('change', updatePassStatus);
+    });
+  updatePassStatus();
 
   // 组件扫码：扫完自动跳到下一行
   var compInputs = document.querySelectorAll('.comp-scan');

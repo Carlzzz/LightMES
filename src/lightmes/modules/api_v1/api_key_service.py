@@ -1,4 +1,6 @@
 import secrets
+import hashlib
+import hmac
 from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -6,11 +8,23 @@ from sqlalchemy.orm import Session
 
 from lightmes.modules.auth.models import ApiKey, User
 from lightmes.shared.security import hash_password, verify_password
+from lightmes.config import get_settings
 
 API_KEY_PREFIX_LIVE = "lmk_live_"
 API_KEY_PREFIX_TEST = "lmk_test_"
 API_KEY_RANDOM_LEN = 32
 API_KEY_PREFIX_DISPLAY_LEN = 12
+_API_KEY_HMAC_CONTEXT = b"lightmes-api-key-v1"
+
+
+def _api_key_hmac_key() -> bytes:
+    return get_settings().secret_key.encode("utf-8")
+
+
+def _digest(full_key: str) -> str:
+    return hmac.new(
+        _api_key_hmac_key(), full_key.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
 
 class ApiKeyService:
@@ -30,7 +44,7 @@ class ApiKeyService:
         random_part = secrets.token_urlsafe(API_KEY_RANDOM_LEN)[:API_KEY_RANDOM_LEN]
         full_key = prefix + random_part
         key_prefix = full_key[:API_KEY_PREFIX_DISPLAY_LEN]
-        key_hash = hash_password(full_key)
+        key_hash = _digest(full_key)
         record = ApiKey(
             name=name, key_prefix=key_prefix, key_hash=key_hash,
             user_id=user_id, scopes=scopes,
@@ -49,7 +63,17 @@ class ApiKeyService:
             select(ApiKey).where(ApiKey.key_prefix == prefix, ApiKey.is_active.is_(True))
         ).scalars().all())
         for k in candidates:
+            if hmac.compare_digest(k.key_hash, _digest(full_key)):
+                if not self._is_valid(k):
+                    raise HTTPException(status_code=401, detail="API Key 已过期或被吊销")
+                user = self.db.get(User, k.user_id)
+                if user is None or not user.is_active:
+                    raise HTTPException(status_code=401, detail="API Key 关联用户已停用")
+                return user, k
+            # 兼容旧版 Argon2 key_hash；验证通过后自动迁移为 HMAC 摘要。
             if verify_password(full_key, k.key_hash):
+                k.key_hash = _digest(full_key)
+                self.db.flush()
                 if not self._is_valid(k):
                     raise HTTPException(status_code=401, detail="API Key 已过期或被吊销")
                 user = self.db.get(User, k.user_id)

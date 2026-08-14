@@ -13,7 +13,7 @@ from lightmes.modules.auth.schemas import (
 )
 from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.dependencies import (
-    require_login, require_permission, current_user_or_none,
+    current_user_or_none, html_role_guard,
 )
 from lightmes.modules.auth.repository import UserRepository, RoleRepository
 
@@ -46,8 +46,6 @@ def api_login(
     db: Session = Depends(get_db),
 ) -> LoginResponse:
     auth_service = AuthService(db)
-    # 确保默认角色和管理员存在
-    auth_service.ensure_admin_user()
     user = auth_service.authenticate(username, password)
     if user is None:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
@@ -63,8 +61,6 @@ def api_login(
 
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    # 确保默认角色和管理员存在
-    AuthService(db).ensure_admin_user()
     return templates.TemplateResponse(request, "login.html")
 
 
@@ -82,8 +78,6 @@ def login_submit(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     auth_service = AuthService(db)
-    # 确保默认角色和管理员存在
-    auth_service.ensure_admin_user()
     user = auth_service.authenticate(username, password)
     if user is None:
         return templates.TemplateResponse(
@@ -97,7 +91,9 @@ def login_submit(
 # === 用户管理 ===
 @router.get("/system/users", response_class=HTMLResponse)
 def users_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    _, r = html_role_guard(request, db, "admin")
+    if r is not None:
+        return r
     user_repo = UserRepository(db)
     role_repo = RoleRepository(db)
     users = user_repo.list_all_with_roles()
@@ -116,7 +112,9 @@ def create_user_page(
     role_id: int = Form(None),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    _, r = html_role_guard(request, db, "admin")
+    if r is not None:
+        return r
     auth_service = AuthService(db)
     try:
         user = auth_service.create_user(
@@ -134,7 +132,9 @@ def create_user_page(
 # === 角色管理 ===
 @router.get("/system/roles", response_class=HTMLResponse)
 def roles_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    _, r = html_role_guard(request, db, "admin")
+    if r is not None:
+        return r
     role_repo = RoleRepository(db)
     perm_repo = role_repo = RoleRepository(db)  # temp
     roles = role_repo.list_all()

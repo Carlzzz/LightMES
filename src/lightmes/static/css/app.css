@@ -447,10 +447,11 @@ pre { padding: 8px 10px; overflow: auto; }
   box-sizing: border-box;
 }
 .station-ready { flex: 0 0 auto; padding: 6px 14px; margin-bottom: 6px; }
+.station-ready.is-hidden { display: none; }
 .station-ready .form-row { margin: 0; }
 .station-ready .nav-card__desc { margin-top: 6px; }
 .station-root { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.station { display: flex; flex-direction: column; min-height: 0; height: 100%; gap: 5px; }
+.station { display: flex; flex-direction: column; min-height: 0; height: 100%; gap: 5px; position: relative; }
 
 /* 工位内顶部状态条（白底，蓝 SN） */
 .station__topbar {
@@ -482,6 +483,14 @@ pre { padding: 8px 10px; overflow: auto; }
   box-shadow: var(--shadow-1);
 }
 .station__path-wrap .card__title { padding: 2px 0; font-size: 11px; margin: 0; }
+#station-range-card {
+  position: static;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  z-index: auto;
+  padding: 6px 12px;
+}
 .station__path { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 6px; align-items: center; }
 .station__step { min-width: 92px; text-align: center; opacity: .5; flex-shrink: 0; }
 .station__step--done, .station__step--current { opacity: 1; }
@@ -516,7 +525,9 @@ pre { padding: 8px 10px; overflow: auto; }
 }
 .station__main .card:nth-child(1) { flex: 1 1 auto; min-height: 0; }
 .station__main .card:nth-child(2) { flex: 0 0 auto; }
+.station__main .station__bom-card { flex: 1 1 auto; min-height: 0; }
 .station__aside .card { flex: 1 1 auto; min-height: 0; }
+.station__aside .station__aside-actions-card { flex: 0 0 auto; }
 .station__main .card .card__title,
 .station__aside .card .card__title { margin: 0 0 8px; font-size: 13px; }
 .station__main .data-table-wrap { flex: 1 1 auto; overflow: auto; min-height: 0; }
@@ -801,6 +812,14 @@ pre { padding: 8px 10px; overflow: auto; }
   max-width: 600px;
   box-shadow: var(--shadow-2);
 }
+#param-modal .modal__body {
+  width: min(880px, 92vw);
+  max-width: none;
+  max-height: 82vh;
+  overflow: auto;
+}
+#param-modal .data-table { font-size: 13px; }
+#param-modal input { min-width: 120px; }
 .skip-form h3 { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
 .skip-form .form-actions {
   display: flex;

@@ -42,6 +42,7 @@ def _prod(db_session):
 
 def test_station_page_renders(client, db_session):
     ws = _prod(db_session)
+    _login(client, db_session)
     resp = client.get(f"/production/station?work_station_id={ws.id}")
     assert resp.status_code == 200
     assert "工位作业" in resp.text

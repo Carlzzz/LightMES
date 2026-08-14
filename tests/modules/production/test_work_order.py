@@ -1,5 +1,6 @@
 import pytest
 from lightmes.modules.production.service import ProductionService
+from lightmes.modules.production.models import Batch
 from lightmes.modules.production.schemas import SnRuleCreate, WorkOrderCreate
 from lightmes.modules.masterdata.service import MasterDataService
 from lightmes.modules.masterdata.schemas import (
@@ -34,6 +35,12 @@ def test_create_and_release_work_order(db_session):
     assert wo.status == "created"
     released = svc.release_work_order(wo.id)
     assert released.status == "released"
+    assert released.process_snapshot is not None
+    assert released.process_snapshot["routing"]["id"] == r.id
+    assert len(released.process_snapshot["operations"]) == 1
+    batch = db_session.query(Batch).filter(Batch.work_order_id == wo.id).one()
+    assert batch.batch_number == 1
+    assert batch.target_qty == 10
 
 
 def test_release_non_created_rejected(db_session):

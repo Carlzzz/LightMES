@@ -3,10 +3,10 @@ services:
     image: timescale/timescaledb:latest-pg16
     environment:
       POSTGRES_USER: mes
-      POSTGRES_PASSWORD: mes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: lightmes
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,9 +16,12 @@ services:
       retries: 10
 
   mqtt:
-    image: eclipse-mosquitto:2
+    build: ./docker/mosquitto
+    environment:
+      MQTT_USER: ${MQTT_USER:?MQTT_USER is required}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?MQTT_PASSWORD is required}
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mqtt_data:/mosquitto/data
@@ -29,11 +32,32 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg://mes:mes@db:5432/lightmes
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://mes:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/lightmes
       MQTT_URL: mqtt://mqtt:1883
-      SECRET_KEY: change-me-in-prod
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  listener:
+    build: .
+    command: uv run python -m lightmes.modules.connectivity.mqtt_listener
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://mes:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/lightmes
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
+    restart: unless-stopped
 
 volumes:
   db_data:

@@ -24,7 +24,8 @@ def _login(client, db_session):
         "/login", data={"username": "md", "password": "pw12345"}).status_code == 204
 
 
-def test_lines_page_renders(client):
+def test_lines_page_renders(client, db_session):
+    _login(client, db_session)
     resp = client.get("/masterdata/lines")
     assert resp.status_code == 200
     assert "产线管理" in resp.text
@@ -53,7 +54,8 @@ def test_lines_create_dup_code_returns_error_row(client, db_session):
     assert 'colspan="4"' in resp.text
 
 
-def test_work_stations_page_renders(client):
+def test_work_stations_page_renders(client, db_session):
+    _login(client, db_session)
     resp = client.get("/masterdata/work-stations")
     assert resp.status_code == 200
     assert "作业站管理" in resp.text

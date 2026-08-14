@@ -1,0 +1,186 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "◆ LightMES" [ref=e3] [cursor=pointer]:
+      - /url: "#"
+      - generic [ref=e4]: ◆
+      - text: LightMES
+    - link "首页" [ref=e5] [cursor=pointer]:
+      - /url: "#"
+    - link "追溯" [ref=e6] [cursor=pointer]:
+      - /url: "#"
+    - link "用户" [ref=e7] [cursor=pointer]:
+      - /url: "#"
+    - link "角色" [ref=e8] [cursor=pointer]:
+      - /url: "#"
+    - link "API Keys" [ref=e9] [cursor=pointer]:
+      - /url: "#"
+    - link "数采" [ref=e10] [cursor=pointer]:
+      - /url: "#"
+    - link "数采看板" [ref=e11] [cursor=pointer]:
+      - /url: "#"
+    - link "退出" [ref=e12] [cursor=pointer]:
+      - /url: "#"
+  - main [ref=e13]:
+    - heading "生产控制台 笔记本外壳组装 MES" [level=1] [ref=e14]
+    - generic [ref=e15]:
+      - generic [ref=e16]: 主数据
+      - generic [ref=e17]:
+        - link "📦 产品管理 成品、组件、辅料" [ref=e18] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=e19]: 📦
+          - generic [ref=e20]: 产品管理
+          - generic [ref=e21]: 成品、组件、辅料
+        - link "🏭 产线管理 产线布局" [ref=e22] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=e23]: 🏭
+          - generic [ref=e24]: 产线管理
+          - generic [ref=e25]: 产线布局
+        - link "🔧 作业站管理 工位配置" [ref=e26] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=e27]: 🔧
+          - generic [ref=e28]: 作业站管理
+          - generic [ref=e29]: 工位配置
+        - link "🛠️ 工艺路径 工序编排" [ref=e30] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=e31]: 🛠️
+          - generic [ref=e32]: 工艺路径
+          - generic [ref=e33]: 工序编排
+    - generic [ref=e34]:
+      - generic [ref=e35]: 工单列表
+      - table [ref=e36]:
+        - rowgroup [ref=e37]:
+          - row [ref=e38]:
+            - columnheader "编号" [ref=e39]
+            - columnheader "状态" [ref=e40]
+            - columnheader "产品" [ref=e41]
+            - columnheader "操作" [ref=e42]
+        - rowgroup [ref=e43]:
+          - row [ref=e44]:
+            - cell [ref=e45]:
+              - link "WO-2026-001" [ref=e46] [cursor=pointer]:
+                - /url: "#"
+            - cell "已连接 连接中 错误 未连接" [ref=e47]:
+              - generic [ref=e48]: 已连接
+              - generic [ref=e49]: 连接中
+              - generic [ref=e50]: 错误
+              - generic [ref=e51]: 未连接
+            - cell [ref=e52]:
+              - code [ref=e53]: Notebook-X1
+            - cell [ref=e54]:
+              - button "启用" [ref=e55] [cursor=pointer]
+              - button "删除" [ref=e56] [cursor=pointer]
+          - row [ref=e57]:
+            - cell [ref=e58]:
+              - link "WO-2026-002" [ref=e59] [cursor=pointer]:
+                - /url: "#"
+            - cell "完成" [ref=e60]
+            - cell [ref=e62]:
+              - code [ref=e63]: Notebook-X2
+            - cell [ref=e64]:
+              - button "查看" [ref=e65] [cursor=pointer]
+              - button "编辑" [ref=e66] [cursor=pointer]
+          - row [ref=e67]:
+            - cell "暂无更多数据" [ref=e68]
+    - generic [ref=e69]:
+      - generic [ref=e70]: 表单 + 按钮
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]: 名称
+          - textbox "输入名称" [ref=e74]
+        - generic [ref=e75]:
+          - generic [ref=e76]: 类型
+          - combobox [ref=e77]:
+            - option "选项 A" [selected]
+            - option "选项 B"
+        - generic [ref=e78]:
+          - generic [ref=e79]: 数量
+          - spinbutton [ref=e80]: "10"
+        - button "提交" [ref=e81] [cursor=pointer]
+        - button "取消" [ref=e82] [cursor=pointer]
+      - generic [ref=e83]: ✓ 操作成功
+      - generic [ref=e84]: ✗ 数据校验失败
+      - generic [ref=e85]: ⚠ 该工单优先级偏低
+    - generic [ref=e86]:
+      - generic [ref=e87]: 工位 topbar（kiosk 内部状态条）
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - generic [ref=e90]:
+            - generic [ref=e91]: 当前 SN
+            - text: SNB20260813001
+          - generic [ref=e92]:
+            - generic [ref=e93]: 成品 / 工单
+            - text: Notebook-X1 / WO-2026-001
+        - generic [ref=e94]:
+          - generic [ref=e95]: 操作员
+          - text: 张三 (L3/需L3)
+      - generic [ref=e96]:
+        - generic [ref=e98]:
+          - generic [ref=e99]: 当前 SN
+          - text: SNB20260813001
+        - generic [ref=e100]:
+          - generic [ref=e101]: 操作员
+          - text: 李四 (无/需L3)
+    - generic [ref=e102]:
+      - generic [ref=e103]: WIP 看板
+      - generic [ref=e104]:
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]: 总进度
+            - generic [ref=e109]: 68%
+          - generic [ref=e110]: 170/250 已完成
+        - generic [ref=e115]:
+          - generic [ref=e116]:
+            - generic [ref=e117]: "12"
+            - generic [ref=e118]: 待开始
+          - generic [ref=e119]:
+            - generic [ref=e120]: "5"
+            - generic [ref=e121]: 在制
+          - generic [ref=e122]:
+            - generic [ref=e123]: "170"
+            - generic [ref=e124]: 完工
+          - generic [ref=e125]:
+            - generic [ref=e126]: "3"
+            - generic [ref=e127]: 报废
+          - generic [ref=e128]:
+            - generic [ref=e129]: "2"
+            - generic [ref=e130]: 返工
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - generic [ref=e134]: "1"
+            - generic [ref=e135]: 点胶
+            - generic [ref=e136]: "42"
+          - generic [ref=e137]:
+            - generic [ref=e138]: "2"
+            - generic [ref=e139]: 装配
+            - generic [ref=e140]: "18"
+          - generic [ref=e141]:
+            - generic [ref=e142]: "3"
+            - generic [ref=e143]: 测试
+            - generic [ref=e144]: "7"
+    - generic [ref=e145]:
+      - generic [ref=e146]: 追溯时间线
+      - generic [ref=e147]:
+        - generic [ref=e150]:
+          - generic [ref=e151]: 10 · 包装
+          - generic [ref=e153]: 操作员 张三 · 2026-08-13 14:23
+        - generic [ref=e156]:
+          - generic [ref=e157]: 07 · 测试
+          - generic [ref=e159]: 参数越界：电压 12.5V (规格 11.8-12.2V)
+        - generic [ref=e162]:
+          - generic [ref=e163]: 01 · 上料
+          - generic [ref=e165]: 载体码 CV001 绑定 · 2026-08-13 09:15
+    - generic [ref=e166]:
+      - generic [ref=e167]: 登录卡片
+      - generic [ref=e169]:
+        - generic [ref=e170]: ◆
+        - heading "LightMES" [level=1] [ref=e171]
+        - generic [ref=e172]: 笔记本外壳组装制造执行系统
+        - generic [ref=e173]:
+          - generic [ref=e174]:
+            - generic [ref=e175]: 用户名
+            - textbox "用户名" [ref=e176]
+          - generic [ref=e177]:
+            - generic [ref=e178]: 密码
+            - textbox "密码" [ref=e179]
+          - button "登录" [ref=e180] [cursor=pointer]
+        - generic [ref=e181]: 演示账号：admin / admin123

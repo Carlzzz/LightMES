@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -36,6 +37,7 @@ from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.shared.errors import DomainError, NotFoundError, BusinessRuleError
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
 )
@@ -476,6 +478,7 @@ def station_pass(
     passed_op_id = result.passed_op.id if result.passed_op else None
 
     # 处理测试数据
+    td_warning = None
     if td_field_id and passed_op_id:
         try:
             td_svc = TestDataService(db)
@@ -508,15 +511,21 @@ def station_pass(
                             ),
                             user.id
                         )
-        except Exception as e:
-            # 测试数据错误不影响过站，只是记录一下
-            pass
+        except Exception:
+            # 业务策略：测试数据失败不阻断过站，但必须可观测并向操作员提示，
+            # 否则会产生"过站成功但无测试数据"的孤立状态且无法诊断。
+            logger.exception(
+                "测试数据提交失败（过站已成功，sn=%s, operation_record_id=%s, work_station_id=%s）",
+                su.sn if su else None, passed_op_id, work_station_id,
+            )
+            td_warning = "过站已成功，但测试数据保存失败，请人工补录或联系管理员核对。"
 
     # 成功分流：finished → 完工片段；next_op 可在本站继续 → 刷富界面到下一工序；否则切站提示
     if result.is_finished:
         return templates.TemplateResponse(
             request, "production/partials/station_pass_result.html",
-            {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id},
+            {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id,
+             "test_data_warning": td_warning},
         )
     if result.next_op_can_continue_here and su is not None:
         # 调 load 组装下一工序富界面（scan=SN，因 SN 一定能 get_by_sn 命中）
@@ -526,18 +535,20 @@ def station_pass(
             db.rollback()
             return templates.TemplateResponse(
                 request, "production/partials/station_pass_result.html",
-                {"error": e.detail, "work_station_id": work_station_id},
+                {"error": e.detail, "work_station_id": work_station_id,
+                 "test_data_warning": td_warning},
             )
         return templates.TemplateResponse(
             request, "production/station_view.html",
             {"view": view, "work_station_id": work_station_id,
-             "just_passed": result.passed_op, "can_skip": _can_skip(user)},
+             "just_passed": result.passed_op, "can_skip": _can_skip(user),
+             "test_data_warning": td_warning},
         )
     # 下一工序不在本站 → 切站提示
     return templates.TemplateResponse(
         request, "production/partials/station_pass_result.html",
         {"result": result, "work_station_id": work_station_id, "work_order_id": wo_id,
-         "switch_station": True},
+         "switch_station": True, "test_data_warning": td_warning},
     )
 
 

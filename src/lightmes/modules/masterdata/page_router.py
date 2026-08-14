@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none
+from lightmes.modules.auth.dependencies import current_user_or_none, html_role_guard
 from lightmes.modules.auth.repository import UserRepository
 from lightmes.modules.masterdata.models import Routing
 from lightmes.modules.masterdata.schemas import (
@@ -34,10 +34,16 @@ def _login_guard(request: Request, db: Session) -> Response | None:
     return None
 
 
+def _admin_guard(request: Request, db: Session) -> Response | None:
+    _, response = html_role_guard(request, db, "admin")
+    return response
+
+
 # ---- Products ----
 
 @router.get("/masterdata/products", response_class=HTMLResponse)
 def products_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     products = MasterDataService(db).products.list_all()
     return templates.TemplateResponse(
         request, "masterdata/products.html", {"products": products}
@@ -51,7 +57,7 @@ def products_create_page(
     unit: str = Form("pcs"), track_mode: str = Form("none"),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     svc = MasterDataService(db)
     try:
         product = svc.create_product(ProductCreate(
@@ -69,6 +75,7 @@ def products_create_page(
 
 @router.get("/masterdata/lines", response_class=HTMLResponse)
 def lines_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     lines = MasterDataService(db).lines.list_all()
     return templates.TemplateResponse(
         request, "masterdata/lines.html", {"lines": lines}
@@ -81,7 +88,7 @@ def lines_create_page(
     code: str = Form(...), name: str = Form(...), description: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     svc = MasterDataService(db)
     try:
         line = svc.create_line(LineCreate(
@@ -99,6 +106,7 @@ def lines_create_page(
 
 @router.get("/masterdata/skills", response_class=HTMLResponse)
 def skills_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     skills = SkillService(db).list_skills()
     return templates.TemplateResponse(
         request, "masterdata/skills.html", {"skills": skills}
@@ -112,7 +120,7 @@ def skills_create_page(
     description: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     svc = SkillService(db)
     try:
         skill = svc.create_skill(SkillCreate(
@@ -131,6 +139,7 @@ def skills_create_page(
 
 @router.get("/masterdata/operator-skills", response_class=HTMLResponse)
 def operator_skills_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     svc = SkillService(db)
     operator_skills = svc.list_operator_skills()
     users = UserRepository(db).list_all()
@@ -147,7 +156,7 @@ def operator_skills_create_page(
     user_id: int = Form(...), skill_id: int = Form(...), level: int = Form(...),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     svc = SkillService(db)
     try:
         os = svc.set_operator_skill(user_id, skill_id, level)
@@ -164,6 +173,7 @@ def operator_skills_create_page(
 
 @router.get("/masterdata/work-stations", response_class=HTMLResponse)
 def work_stations_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     svc = MasterDataService(db)
     work_stations = svc.work_stations.list_all()
     lines = svc.lines.list_all()
@@ -180,7 +190,7 @@ def work_stations_create_page(
     line_id: int = Form(...), seq: int = Form(...),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     svc = MasterDataService(db)
     try:
         ws = svc.create_work_station(WorkStationCreate(
@@ -198,6 +208,7 @@ def work_stations_create_page(
 
 @router.get("/masterdata/routings", response_class=HTMLResponse)
 def routings_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     svc = MasterDataService(db)
     products = svc.products.list_all()
     product_map = {p.id: p for p in products}
@@ -221,7 +232,7 @@ def routings_create_page(
     op_skill: list[str] = Form(default=[]), op_level: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     svc = MasterDataService(db)
     try:
         operations = []
@@ -257,6 +268,7 @@ def routings_create_page(
 
 @router.get("/masterdata/boms", response_class=HTMLResponse)
 def boms_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if (r := _login_guard(request, db)): return r
     svc = MasterDataService(db)
     boms = svc.boms.list_all()
     products = svc.products.list_all()
@@ -370,7 +382,7 @@ def routing_update_head(
     request: Request, routing_id: int, name: str = Form(...),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     try:
         MasterDataService(db).update_routing_head(routing_id, name)
     except ValueError as e:
@@ -386,7 +398,7 @@ def routing_set_status(
     request: Request, routing_id: int, status: str = Form(...),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     try:
         MasterDataService(db).set_routing_status(routing_id, status)
     except ValueError as e:
@@ -405,7 +417,7 @@ def routing_add_operation(
     op_skill: str = Form(""), op_level: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     allowed_ids = _parse_allowed(op_allowed, op_ws)
     try:
         MasterDataService(db).add_operation(
@@ -428,7 +440,7 @@ def routing_update_operation(
     op_skill: str = Form(""), op_level: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     allowed_ids = _parse_allowed(op_allowed, op_ws)
     try:
         MasterDataService(db).update_operation(
@@ -448,7 +460,7 @@ def routing_delete_operation(
     request: Request, routing_id: int, operation_id: int,
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     try:
         MasterDataService(db).delete_operation(operation_id)
     except ValueError as e:
@@ -461,7 +473,7 @@ def routing_delete_operation(
 def routing_delete(
     request: Request, routing_id: int, db: Session = Depends(get_db),
 ):
-    if (r := _login_guard(request, db)): return r
+    if (r := _admin_guard(request, db)): return r
     try:
         MasterDataService(db).delete_routing(routing_id)
     except ValueError as e:

@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ request.state.csrf_token|default('') }}">
   <title>{% block title %}LightMES{% endblock %}</title>
   {% block extra_head %}{% endblock %}
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/app.css?v=20260814b">
   <script src="/static/vendor/htmx.min.js"></script>
 </head>
 <body>
@@ -22,6 +23,7 @@
     <a class="app-bar__link" href="/system/api-keys">API Keys</a>
     <a class="app-bar__link" href="/connectivity/connections">数采</a>
     <a class="app-bar__link" href="/connectivity/dashboard">数采看板</a>
+    <a class="app-bar__link" href="/inventory/material-lots">物料批次</a>
     <a class="app-bar__link" href="/issues">异常</a>
     <a class="app-bar__link" href="/logout">退出</a>
   </header>
@@ -30,6 +32,13 @@
     {% block content %}{% endblock %}
   </main>
 <script>
+  document.body.addEventListener('htmx:configRequest', function(e) {
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (token && token.content) {
+      e.detail.headers['X-CSRF-Token'] = token.content;
+    }
+  });
+
   // 全局错误弹窗：调用 showErrorModal(msg) 任意位置触发
   window.showErrorModal = function(msg) {
     // 移除已有弹窗

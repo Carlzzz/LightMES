@@ -6,7 +6,7 @@ def test_user_can_be_persisted(db_session):
         username="alice",
         password_hash="x",
         display_name="Alice",
-        role="admin",
+        role_id=None,
     )
     db_session.add(user)
     db_session.flush()

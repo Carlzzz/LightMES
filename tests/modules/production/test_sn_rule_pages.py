@@ -22,7 +22,8 @@ def _login(client, db_session):
         "/login", data={"username": "sn", "password": "pw12345"}).status_code == 204
 
 
-def test_sn_rules_page_renders(client):
+def test_sn_rules_page_renders(client, db_session):
+    _login(client, db_session)
     resp = client.get("/production/sn-rules")
     assert resp.status_code == 200
     assert "SN 规则管理" in resp.text

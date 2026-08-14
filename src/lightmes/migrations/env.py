@@ -10,6 +10,10 @@ from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F4
 from lightmes.modules.production import models as _production_models  # noqa: F401
 from lightmes.modules.trace import models as _trace_models  # noqa: F401
 from lightmes.modules.issue import models as _issue_models  # noqa: F401
+from lightmes.modules.connectivity import models as _connectivity_models  # noqa: F401
+from lightmes.modules.api_v1 import models as _api_v1_models  # noqa: F401
+from lightmes.shared.audit import AuditLog as _audit_log_model  # noqa: F401
+from lightmes.shared.custom_fields import CustomFieldDefinition as _custom_field_model  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

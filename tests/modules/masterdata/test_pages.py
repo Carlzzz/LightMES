@@ -43,7 +43,8 @@ def test_home_page(client, db_session):
         assert href in resp.text
 
 
-def test_products_page_renders(client):
+def test_products_page_renders(client, db_session):
+    _login(client, db_session)
     resp = client.get("/masterdata/products")
     assert resp.status_code == 200
     assert "产品管理" in resp.text

@@ -230,17 +230,21 @@ class AuthService:
 
         self.db.flush()
 
-    def ensure_admin_user(self) -> None:
-        """确保存在管理员用户"""
+    def ensure_admin_user(self, initial_password: str | None = None) -> None:
+        """确保存在管理员用户；首次创建必须显式提供初始密码。"""
         admin_role = self.role_repo.get_by_name("admin")
         if admin_role is None:
             self.initialize_default_roles()
             admin_role = self.role_repo.get_by_name("admin")
 
         if self.user_repo.get_by_username("admin") is None:
+            if not initial_password:
+                raise ValueError(
+                    "不存在管理员账户，请设置 ADMIN_INITIAL_PASSWORD 后启动"
+                )
             admin = User(
                 username="admin",
-                password_hash=hash_password("admin123"),
+                password_hash=hash_password(initial_password),
                 display_name="系统管理员",
                 role_id=admin_role.id,
             )

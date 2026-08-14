@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none, require_role
+from lightmes.modules.auth.dependencies import current_user_or_none, html_role_guard, require_role
 from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.models import Operation, WorkStation
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
@@ -57,6 +57,12 @@ def _can_manage_defect_types(request: Request, db: Session) -> bool:
     return role_name in ("admin", "supervisor")
 
 
+def _manage_guard(request: Request, db: Session) -> Response | None:
+    """首检/测试数据模板和缺陷类型配置：仅 supervisor/admin 可写。"""
+    _, response = html_role_guard(request, db, "admin", "supervisor")
+    return response
+
+
 # ========== First Inspection Routes ==========
 
 @router.get("/quality/first-inspection", response_class=HTMLResponse)
@@ -96,7 +102,7 @@ def first_inspection_create(
     sample_size: int = Form(1),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     ws_id = int(work_station_id) if work_station_id and work_station_id.isdigit() else None
 
@@ -180,7 +186,7 @@ def check_item_create(
     is_mandatory: bool = Form(True),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     try:
         check_item = FirstInspectionCheckItem(
@@ -218,7 +224,7 @@ def check_item_delete(
     item_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     item = db.get(FirstInspectionCheckItem, item_id)
     if item and item.config_id == config_id:
@@ -258,7 +264,7 @@ def test_data_create(
     description: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     ws_id = int(work_station_id) if work_station_id and work_station_id.isdigit() else None
 
@@ -335,7 +341,7 @@ def test_field_create(
     options: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     try:
         field = TestDataField(
@@ -375,7 +381,7 @@ def test_field_delete(
     field_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     field = db.get(TestDataField, field_id)
     if field and field.template_id == template_id:
@@ -391,7 +397,7 @@ def first_inspection_delete(
     config_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     config = db.get(FirstInspectionConfig, config_id)
     if config:
@@ -429,7 +435,7 @@ def first_inspection_update(
     sample_size: int = Form(1),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     ws_id = int(work_station_id) if work_station_id and work_station_id.isdigit() else None
 
@@ -468,7 +474,7 @@ def test_data_delete(
     template_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     template = db.get(TestDataTemplate, template_id)
     if template:
@@ -497,7 +503,7 @@ def test_data_update(
     description: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
+    if (r := _manage_guard(request, db)): return r
 
     ws_id = int(work_station_id) if work_station_id and work_station_id.isdigit() else None
 
@@ -544,11 +550,7 @@ def defect_type_create(
     description: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    if (r := _login_guard(request, db)): return r
-    if not _can_manage_defect_types(request, db):
-        return templates.TemplateResponse(
-            request, "quality/partials/error_row.html",
-            {"error": "仅主管/管理员可修改缺陷类型", "colspan": 6})
+    if (r := _manage_guard(request, db)): return r
     # 字段白名单校验
     cat = category if category else None
     if severity not in VALID_SEVERITIES:
@@ -584,9 +586,7 @@ def defect_type_create(
 def defect_type_delete(
     request: Request, dt_id: int, db: Session = Depends(get_db),
 ) -> Response:
-    if (r := _login_guard(request, db)): return r
-    if not _can_manage_defect_types(request, db):
-        return Response(status_code=403, content="仅主管/管理员可删除缺陷类型")
+    if (r := _manage_guard(request, db)): return r
     dt = db.get(DefectType, dt_id)
     if dt:
         dt.is_active = False  # 软删

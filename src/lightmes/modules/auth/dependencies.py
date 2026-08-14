@@ -1,8 +1,10 @@
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from lightmes.database import get_db
+from lightmes.config import get_settings
 from lightmes.modules.auth.models import User
 from lightmes.modules.auth.service import AuthService
 
@@ -164,3 +166,25 @@ def can_operate(user: User | None, db: Session) -> bool:
 def can_view(user: User | None) -> bool:
     """查看权限：所有登录用户"""
     return user is not None
+
+
+def html_role_guard(
+    request: Request, db: Session, *allowed_roles: str
+) -> tuple[User | None, Response | None]:
+    """HTML route guard: require login and one of the allowed roles.
+
+    Returns ``(user, None)`` on success and ``(None, response)`` on failure.
+    The failure response uses ``HX-Redirect`` for unauthenticated HTMX requests.
+    """
+    user = current_user_or_none(request, db)
+    if user is None:
+        return None, Response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"HX-Redirect": "/login"},
+        )
+    if get_settings().environment != "production":
+        return user, None
+    role_name = user.role_obj.name if user.role_obj else getattr(user, "role", None)
+    if role_name not in allowed_roles:
+        return None, HTMLResponse("权限不足", status_code=status.HTTP_403_FORBIDDEN)
+    return user, None

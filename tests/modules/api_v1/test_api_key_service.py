@@ -1,7 +1,7 @@
 import pytest
 from lightmes.modules.api_v1.api_key_service import ApiKeyService
 from lightmes.modules.auth.models import ApiKey, User
-from lightmes.shared.security import verify_password
+from lightmes.modules.api_v1.api_key_service import _digest
 
 
 def _user(db_session, username="apiuser"):
@@ -21,7 +21,7 @@ def test_api_key_create_returns_full_key_and_hash(db_session):
     assert record.user_id == u.id
     assert record.scopes == ["read", "write"]
     assert record.key_hash != full_key  # hash not plaintext
-    assert verify_password(full_key, record.key_hash)
+    assert record.key_hash == _digest(full_key)
     assert record.key_prefix == full_key[:12]
 
 

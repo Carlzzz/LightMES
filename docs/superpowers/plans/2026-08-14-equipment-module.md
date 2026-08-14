@@ -202,7 +202,9 @@ class WorkstationState(Base, TimestampMixin):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, default=None)
     source: Mapped[str] = mapped_column(String(20), default="machine")
-    metadata: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # SQLAlchemy reserves the attribute name `metadata` (Base.metadata); the DB
+    # column is still named "metadata" via the explicit column name below.
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, default=None)
 
 
 class ProductionDowntime(Base, TimestampMixin):
@@ -687,7 +689,7 @@ def test_same_state_noop_merges_metadata(db_session):
     sm.transition(ws.id, "RUNNING", at=T0, metadata={"a": 1})
     st = sm.transition(ws.id, "RUNNING", at=T0 + timedelta(seconds=5), metadata={"b": 2})
     # same row, no new row
-    assert st.metadata == {"a": 1, "b": 2}
+    assert st.metadata_ == {"a": 1, "b": 2}
     rows = db_session.query(type(st)).filter_by(work_station_id=ws.id).all()
     assert len(rows) == 1
 
@@ -794,7 +796,7 @@ class WorkstationStateMachine:
 
         if current is not None and current.state == new_state:
             if metadata:
-                current.metadata = {**(current.metadata or {}), **metadata}
+                current.metadata_ = {**(current.metadata_ or {}), **metadata}
             return current
 
         if current is not None:
@@ -805,7 +807,7 @@ class WorkstationStateMachine:
         line_id = self._line_id_for(work_station_id)
         state = WorkstationState(
             work_station_id=work_station_id, state=new_state,
-            started_at=at, source=source, metadata=metadata,
+            started_at=at, source=source, metadata_=metadata,
         )
         self.db.add(state)
         self.db.flush()
@@ -944,8 +946,8 @@ def test_telemetry_writes_metadata(db_session):
     ing = MachineSignalIngestor(db_session)
     ing.ingest(tag, 72.5, ws.id)
     cur = sm.current(ws.id)
-    assert cur.metadata["temp"] == 72.5
-    assert cur.metadata["temp_unit"] == "C"
+    assert cur.metadata_["temp"] == 72.5
+    assert cur.metadata_["temp_unit"] == "C"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1014,7 +1016,7 @@ class MachineSignalIngestor:
         cur = self.state_machine.current(work_station_id)
         if cur is None:
             return
-        meta = dict(cur.metadata or {})
+        meta = dict(cur.metadata_ or {})
         meta[tag.name] = value
         if tag.unit:
             meta[f"{tag.name}_unit"] = tag.unit
@@ -1026,9 +1028,9 @@ class MachineSignalIngestor:
             return
         cur = self.state_machine.current(work_station_id)
         if cur is not None:
-            meta = dict(cur.metadata or {})
+            meta = dict(cur.metadata_ or {})
             meta["alarm"] = value
-            cur.metadata = meta
+            cur.metadata_ = meta
             self.db.flush()
         from lightmes.config import get_settings
         if get_settings().equipment_auto_create_issue_on_fault:
@@ -1369,7 +1371,7 @@ class MonitorService:
         return [
             {"work_station_id": s.work_station_id, "state": s.state,
              "started_at": s.started_at, "source": s.source,
-             "metadata": s.metadata}
+             "metadata": s.metadata_}
             for s in rows
         ]
 ```

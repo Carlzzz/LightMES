@@ -6,10 +6,10 @@
   <div class="station-ready card">
     <div class="card__title">扫码进入</div>
     <form class="form-row" id="enter-form" hx-post="/production/station/enter" hx-target="#station-root" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful) document.getElementById('enter-scan').value=''">
+          hx-on::after-request="if(event.detail.successful && event.target && event.target.id === 'enter-form'){document.getElementById('enter-scan').value='';document.querySelector('.station-ready').classList.add('is-hidden');}">
       <div class="field"><label>作业站</label>
         <select id="station-ws-select" name="work_station_id" required
-                onchange="if(this.value){htmx.trigger(document.getElementById('station-wo-select'),'reset-wo'); document.getElementById('station-root').innerHTML='';}">
+                onchange="if(this.value){document.querySelector('.station-ready').classList.remove('is-hidden');document.getElementById('station-root').innerHTML='';htmx.trigger(document.getElementById('station-wo-select'),'reset-wo');}">
           <option value="" disabled selected>- 选择作业站 -</option>
           {% for s in station_options %}
           <option value="{{ s.id }}" {% if s.id == work_station_id %}selected{% endif %}>{{ s.label }}</option>
@@ -24,7 +24,7 @@
                 hx-target="this"
                 hx-swap="innerHTML"
                 hx-include="#station-ws-select"
-                onchange="document.getElementById('station-root').innerHTML='';">
+                onchange="document.querySelector('.station-ready').classList.remove('is-hidden');document.getElementById('station-root').innerHTML='';">
           <option value="" disabled selected>- 选择工单 -</option>
         </select>
       </div>

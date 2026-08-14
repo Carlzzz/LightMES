@@ -1,3 +1,6 @@
+{% if test_data_warning %}
+<div class="alert alert--warning">⚠ {{ test_data_warning }}</div>
+{% endif %}
 {% if error %}
 <div class="alert alert--danger">✗ {{ error }}</div>
 <div class="card"><div class="nav-card__desc">修正后请重新扫码。返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div></div>
