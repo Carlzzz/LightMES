@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, joinedload
 from lightmes.database import get_db
 from lightmes.modules.api_v1.api_key_service import ApiKeyService
 from lightmes.modules.auth.models import User
+from lightmes.shared.audit import set_audit_user
 
 # 写操作 scope 所需的最小角色集合（与 api_v1/dependencies.py 保持一致）
 _WRITE_REQUIRED_ROLES = {"admin", "supervisor"}
@@ -77,6 +78,7 @@ async def verify_bearer(
     request.state.user = user
     request.state.api_key = api_key
     request.state.db_session = db
+    set_audit_user(user.id)
     return user
 
 

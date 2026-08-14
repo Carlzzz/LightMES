@@ -1,11 +1,14 @@
 from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from lightmes.config import get_settings
 from lightmes.database import get_db
@@ -15,6 +18,7 @@ from lightmes.modules import (
     auth,
     connectivity,
     integration,
+    inventory,
     issue,
     masterdata,
     production,
@@ -28,11 +32,25 @@ from lightmes.modules.auth.models import User
 from lightmes.modules.api_v1.errors import register_problem_details_handler
 from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
 from lightmes.modules.issue.linkify import issue_linkify
+from lightmes.shared.audit import AuditContextMiddleware, register_audit_listeners
+from lightmes.shared.web_security import (
+    CsrfMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 settings = get_settings()
+if settings.environment == "production" and settings.secret_key == "change-me-in-prod":
+    raise RuntimeError("生产环境必须设置非默认 SECRET_KEY")
+
+try:
+    _app_version = version("lightmes")
+except PackageNotFoundError:
+    _app_version = "0.1.0"
+
 app = FastAPI(
     title=settings.app_name,
-    version="0.3.0",  # 升级到 0.3.0（D 层 Agent Gateway 上线）
+    version=_app_version,
     description=(
         "LightMES — 轻量级制造执行系统（笔记本壳装配专线）。\n\n"
         "**API v1** (`/api/v1/*`)：JSON REST，为 ERP / BI / AI Agent 集成设计。"
@@ -51,7 +69,64 @@ app = FastAPI(
         {"name": "API Keys", "description": "API Key 管理（admin only）"},
     ],
 )
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+app.add_middleware(
+    CsrfMiddleware,
+    exempt_prefixes=("/api/", "/mcp"),
+)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.secret_key,
+    same_site="lax",
+    https_only=settings.environment == "production",
+    max_age=settings.session_max_age_seconds,
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.allowed_hosts,
+)
+app.add_middleware(
+    RateLimitMiddleware,
+    login_limit=settings.login_rate_limit,
+    api_limit=settings.api_rate_limit,
+    window_seconds=settings.rate_limit_window_seconds,
+)
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    enable_hsts=settings.environment == "production",
+)
+app.add_middleware(AuditContextMiddleware)
+
+from lightmes.modules.auth import models as _auth_models
+from lightmes.modules.masterdata import models as _masterdata_models
+from lightmes.modules.production import models as _production_models
+from lightmes.modules.issue import models as _issue_models
+
+register_audit_listeners(
+    (
+        _auth_models.User,
+        _auth_models.Role,
+        _auth_models.ApiKey,
+        _masterdata_models.Product,
+        _masterdata_models.Routing,
+        _masterdata_models.Bom,
+        _masterdata_models.BomItem,
+        _masterdata_models.Line,
+        _masterdata_models.WorkStation,
+        _masterdata_models.Operation,
+        _production_models.WorkOrder,
+        _production_models.SerialUnit,
+        _production_models.OperationRecord,
+        _production_models.OperationParam,
+        _production_models.DefectType,
+        _production_models.DefectRecord,
+        _production_models.Batch,
+        _production_models.MaterialLot,
+        _production_models.StockMovement,
+        _production_models.BatchMaterialConsumption,
+        _issue_models.Issue,
+        _issue_models.IssueAction,
+    )
+)
 app.mount(
     "/static",
     StaticFiles(directory=str(Path(__file__).resolve().parent / "static")),
@@ -63,6 +138,7 @@ masterdata.register(app)
 production.register(app)
 trace.register(app)
 integration.register(app)
+inventory.register(app)
 quality.register(app)
 connectivity.register(app)
 api_v1.register(app)
@@ -109,11 +185,23 @@ def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name}
 
 
+@app.get("/health/live")
+def health_live() -> dict[str, str]:
+    return {"status": "ok", "app": settings.app_name}
+
+
+@app.get("/health/ready")
+def health_ready(db: Session = Depends(get_db)) -> dict[str, str]:
+    db.execute(text("SELECT 1"))
+    return {"status": "ready", "app": settings.app_name}
+
+
 @app.on_event("startup")
 def on_startup():
     """应用启动时初始化数据库和默认数据"""
-    # 创建所有表（如果不存在）
-    Base.metadata.create_all(bind=engine)
+    # 生产环境只允许通过 Alembic 迁移建表；开发环境保留 create_all 便于快速启动。
+    if settings.environment != "production":
+        Base.metadata.create_all(bind=engine)
 
     # 初始化默认角色和管理员用户
     from lightmes.database import SessionLocal
@@ -121,7 +209,10 @@ def on_startup():
     from lightmes.modules.production.defect_service import DefectService
     db = SessionLocal()
     try:
-        AuthService(db).ensure_admin_user()
+        AuthService(db).initialize_default_roles()
+        admin_password = settings.admin_initial_password or None
+        if admin_password:
+            AuthService(db).ensure_admin_user(admin_password)
         DefectService(db).ensure_system_defect_types()
         db.commit()
     finally:

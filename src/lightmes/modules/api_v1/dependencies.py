@@ -8,6 +8,7 @@ from lightmes.database import get_db
 from lightmes.modules.api_v1.api_key_service import ApiKeyService
 from lightmes.modules.auth.dependencies import current_user_or_none
 from lightmes.modules.auth.models import Role, User
+from lightmes.shared.audit import set_audit_user
 
 # 写操作 scope 所需的最小角色集合（spec 6.1）
 _WRITE_REQUIRED_ROLES = {"admin", "supervisor"}
@@ -62,6 +63,7 @@ def require_api_key(*scopes: str):
             # Stash for ApiCallLog middleware
             request.state.api_key_id = api_key.id
             request.state.api_key_user_id = user.id
+            set_audit_user(user.id)
             # Scope check
             granted = set(api_key.scopes or [])
             missing = required - granted
@@ -88,6 +90,7 @@ def require_api_key(*scopes: str):
                 detail="需要 Bearer token 或登录会话",
             )
         request.state.api_key_user_id = user.id
+        set_audit_user(user.id)
         # Role gate: write scope requires admin/supervisor (session path too)
         if "write" in required and not _has_write_role(user, db):
             raise HTTPException(
