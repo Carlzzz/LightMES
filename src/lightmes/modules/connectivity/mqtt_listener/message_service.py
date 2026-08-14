@@ -3,6 +3,7 @@
 Uses independent SessionLocal to avoid polluting any request-scoped session.
 Never raises — failures captured as result.error.
 """
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -15,6 +16,8 @@ from lightmes.modules.connectivity.models import (
     MachineTopic,
 )
 from lightmes.modules.connectivity.topic_match import matches_topic
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,6 +105,13 @@ def persist_message(
                     )[:500]
             else:
                 processing_status = "ok"
+
+            # 信号语义提取 + ingest（equipment 模块，函数内延迟 import 避免循环）
+            try:
+                from lightmes.modules.equipment.ingestor import ingest_topic_signals
+                ingest_topic_signals(db, matched.id, parsed_data, conn.work_station_id)
+            except Exception as e:
+                logger.warning("信号 ingest 调度失败: %s", e)
 
         # 5. 入库
         raw_payload = payload.decode("utf-8", errors="replace").replace("\x00", "")
