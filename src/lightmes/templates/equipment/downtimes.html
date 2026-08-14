@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>停机记录</h1>
+<p>停机原因人工修正入口（列出停机记录 + 原因下拉，Phase 1 简化为原因列表）。</p>
+<ul>
+  {% for r in reasons %}
+  <li>{{ r.code }} — {{ r.name }} ({{ r.kind }})</li>
+  {% endfor %}
+</ul>
+{% endblock %}

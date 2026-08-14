@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>信号标签</h1>
+<table>
+  <thead><tr><th>ID</th><th>名称</th><th>signal_type</th><th>field_path</th><th>启用</th></tr></thead>
+  <tbody>
+    {% for t in tags %}
+    <tr><td>{{ t.id }}</td><td>{{ t.name }}</td><td>{{ t.signal_type }}</td><td>{{ t.field_path }}</td><td>{{ t.is_active }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

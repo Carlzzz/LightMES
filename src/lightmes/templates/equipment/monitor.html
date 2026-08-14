@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>设备监控</h1>
+<div class="grid">
+  {% for s in states %}
+  <div class="card">
+    <div class="card__title">工位 #{{ s.work_station_id }}</div>
+    <div class="nav-card__desc">状态：<strong>{{ s.state }}</strong> · 来源 {{ s.source }}</div>
+  </div>
+  {% else %}
+  <div class="card"><div class="nav-card__desc">暂无工位状态</div></div>
+  {% endfor %}
+</div>
+{% endblock %}
