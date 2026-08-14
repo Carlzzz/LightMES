@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import html_role_guard, require_login
 from lightmes.modules.production.material_lot_service import MaterialLotService
 from lightmes.modules.production.models import MaterialLot, StockMovement
+from lightmes.modules.production.repository import MaterialLotRepository
 from lightmes.modules.inventory.schemas import MaterialLotCreate, MaterialLotRead
 
 router = APIRouter()
@@ -71,10 +72,11 @@ def material_lot_detail_page(
             .order_by(StockMovement.id.desc())
         ).scalars().all()
     )
+    usage = MaterialLotRepository(db).usage_trace(lot_id)
     return templates.TemplateResponse(
         request,
         "inventory/material_lot_detail.html",
-        {"lot": lot, "movements": movements},
+        {"lot": lot, "movements": movements, "usage": usage},
     )
 
 
@@ -129,6 +131,50 @@ def api_material_lots(
     if auth_response is not None:
         return auth_response
     return list(db.execute(select(MaterialLot).order_by(MaterialLot.id.desc())).scalars().all())
+
+
+@router.get("/api/inventory/material-lots/{lot_id}/usage")
+def api_material_lot_usage(
+    request: Request,
+    lot_id: int,
+    db: Session = Depends(get_db),
+) -> dict:
+    _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator")
+    if auth_response is not None:
+        return auth_response
+    lot = db.get(MaterialLot, lot_id)
+    if lot is None:
+        raise HTTPException(status_code=404, detail=f"material lot {lot_id} not found")
+    usage = MaterialLotRepository(db).usage_trace(lot_id)
+    return {
+        "material_lot": {
+            "id": lot.id,
+            "code": lot.code,
+            "product_id": lot.product_id,
+        },
+        "consumptions": [
+            {
+                "id": c.id,
+                "batch_id": c.batch_id,
+                "operation_record_id": c.operation_record_id,
+                "quantity": float(c.quantity),
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+            }
+            for c in usage["consumptions"]
+        ],
+        "work_orders": [
+            {"id": wo.id, "code": wo.code}
+            for wo in usage["work_orders"]
+        ],
+        "serial_units": [
+            {
+                "id": su.id,
+                "sn": su.sn,
+                "work_order_id": su.work_order_id,
+            }
+            for su in usage["serial_units"]
+        ],
+    }
 
 
 @router.get("/api/inventory/stock-movements")

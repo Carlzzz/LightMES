@@ -1,6 +1,7 @@
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 from lightmes.modules.production.models import (
+    BatchMaterialConsumption,
     OperationParam,
     OperationRecord,
     SerialUnit,
@@ -236,3 +237,56 @@ class MaterialLotRepository:
             )
             .order_by(MaterialLot.received_at, MaterialLot.id)
         ).scalars().all())
+
+    def usage_trace(self, material_lot_id: int) -> dict:
+        consumptions = list(self.db.execute(
+            select(BatchMaterialConsumption)
+            .where(BatchMaterialConsumption.material_lot_id == material_lot_id)
+            .order_by(BatchMaterialConsumption.id)
+        ).scalars().all())
+
+        work_orders: dict[int, WorkOrder] = {}
+        serial_units: dict[int, SerialUnit] = {}
+
+        # Work orders reachable directly through consumed batches.
+        for wo in self.db.execute(
+            select(WorkOrder)
+            .join(Batch, Batch.work_order_id == WorkOrder.id)
+            .join(BatchMaterialConsumption,
+                  BatchMaterialConsumption.batch_id == Batch.id)
+            .where(BatchMaterialConsumption.material_lot_id == material_lot_id)
+        ).scalars().all():
+            work_orders[wo.id] = wo
+
+        # Serial units reachable through the consumed batch.
+        for su in self.db.execute(
+            select(SerialUnit)
+            .join(Batch, Batch.id == SerialUnit.batch_id)
+            .join(BatchMaterialConsumption,
+                  BatchMaterialConsumption.batch_id == Batch.id)
+            .where(BatchMaterialConsumption.material_lot_id == material_lot_id)
+        ).scalars().all():
+            serial_units[su.id] = su
+            wo = self.db.get(WorkOrder, su.work_order_id)
+            if wo is not None:
+                work_orders[wo.id] = wo
+
+        # Serial units reachable through consumed operation records.
+        for su in self.db.execute(
+            select(SerialUnit)
+            .join(OperationRecord,
+                  OperationRecord.serial_unit_id == SerialUnit.id)
+            .join(BatchMaterialConsumption,
+                  BatchMaterialConsumption.operation_record_id == OperationRecord.id)
+            .where(BatchMaterialConsumption.material_lot_id == material_lot_id)
+        ).scalars().all():
+            serial_units[su.id] = su
+            wo = self.db.get(WorkOrder, su.work_order_id)
+            if wo is not None:
+                work_orders[wo.id] = wo
+
+        return {
+            "consumptions": consumptions,
+            "work_orders": list(work_orders.values()),
+            "serial_units": list(serial_units.values()),
+        }

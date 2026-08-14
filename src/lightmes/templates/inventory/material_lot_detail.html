@@ -50,5 +50,65 @@
     </table>
   </div>
 </div>
+<div class="card">
+  <div class="card__title">使用追溯 <a href="/api/inventory/material-lots/{{ lot.id }}/usage">JSON</a></div>
+  <h3>消耗记录</h3>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>批次 ID</th>
+          <th>工序记录 ID</th>
+          <th>数量</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in usage.consumptions %}
+        <tr>
+          <td>{{ c.id }}</td>
+          <td>{{ c.batch_id }}</td>
+          <td>{{ c.operation_record_id or '' }}</td>
+          <td>{{ c.quantity }}</td>
+          <td>{{ c.created_at or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">暂无消耗</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h3>工单</h3>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>ID</th><th>编号</th></tr>
+      </thead>
+      <tbody>
+        {% for wo in usage.work_orders %}
+        <tr><td>{{ wo.id }}</td><td>{{ wo.code }}</td></tr>
+        {% else %}
+        <tr><td colspan="2">暂无工单</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h3>序列单元</h3>
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>ID</th><th>SN</th><th>工单 ID</th></tr>
+      </thead>
+      <tbody>
+        {% for su in usage.serial_units %}
+        <tr><td>{{ su.id }}</td><td>{{ su.sn }}</td><td>{{ su.work_order_id }}</td></tr>
+        {% else %}
+        <tr><td colspan="3">暂无序列单元</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 <p><a href="/inventory/material-lots">返回物料批次</a></p>
 {% endblock %}
