@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
@@ -113,6 +114,23 @@ class MaterialLotService:
         self.db.flush()
         return record
 
+    def _consumed_quantity(self, material_lot_id: int) -> float:
+        total = self.db.execute(
+            select(func.coalesce(func.sum(BatchMaterialConsumption.quantity), 0))
+            .where(BatchMaterialConsumption.material_lot_id == material_lot_id)
+        ).scalar_one()
+        return float(total)
+
+    def _returned_quantity(self, material_lot_id: int) -> float:
+        total = self.db.execute(
+            select(func.coalesce(func.sum(StockMovement.quantity), 0))
+            .where(
+                StockMovement.material_lot_id == material_lot_id,
+                StockMovement.movement_type == "return",
+            )
+        ).scalar_one()
+        return float(total)
+
     def return_consumed(
         self,
         *,
@@ -125,6 +143,14 @@ class MaterialLotService:
         lot = self.db.get(MaterialLot, material_lot_id)
         if lot is None:
             raise NotFoundError(f"物料批次不存在: {material_lot_id}")
+
+        consumed = self._consumed_quantity(material_lot_id)
+        already_returned = self._returned_quantity(material_lot_id)
+        if already_returned + quantity > consumed:
+            raise BusinessRuleError(
+                f"回补数量超过已消耗数量: 已消耗 {consumed}, "
+                f"已回补 {already_returned}, 本次回补 {quantity}"
+            )
 
         lot.available_quantity = float(lot.available_quantity) + quantity
         lot.quantity = float(lot.quantity) + quantity

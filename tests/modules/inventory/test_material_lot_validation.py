@@ -113,6 +113,25 @@ def test_return_consumed_rejects_missing_lot(db_session):
     assert "物料批次不存在" in str(exc.value)
 
 
+def test_return_consumed_rejects_over_return(db_session):
+    product, batch = _batch(db_session, suffix="F")
+    service = MaterialLotService(db_session)
+    lot = service.receive(code="LOT-OVERRETURN", product_id=product.id, quantity=10)
+    service.release(lot.code)
+
+    service.consume(
+        batch_id=batch.id,
+        operation_record_id=None,
+        product_id=product.id,
+        lot_code=lot.code,
+        quantity=3,
+    )
+    service.return_consumed(material_lot_id=lot.id, quantity=1, reason="第一次回补")
+
+    with pytest.raises(BusinessRuleError, match="超过已消耗数量"):
+        service.return_consumed(material_lot_id=lot.id, quantity=3, reason="超退回补")
+
+
 def test_receive_rejects_missing_product(db_session):
     service = MaterialLotService(db_session)
 
