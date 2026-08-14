@@ -31,6 +31,10 @@ def ensure_system_downtime_reasons(db) -> None:
 
 
 def register(app: FastAPI) -> None:
+    import importlib.util
+
+    if importlib.util.find_spec("lightmes.modules.equipment.router") is None:
+        return
     from lightmes.modules.equipment.router import router
 
     app.include_router(router)
