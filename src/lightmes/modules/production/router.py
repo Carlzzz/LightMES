@@ -17,6 +17,7 @@ from lightmes.modules.production.schemas import (
     TestDataRecordSubmitInput, TestDataValueInput,
 )
 from lightmes.modules.production.service import ProductionService
+from lightmes.modules.production.batch_service import BatchService
 from lightmes.modules.production.station_service import StationService
 from lightmes.modules.production.operation_pass_service import OperationPassService
 from lightmes.modules.production.wip_service import WipService
@@ -246,30 +247,70 @@ def batches_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespons
     )
 
 
+def _batch_to_dict(batch: Batch, work_order_code: str | None = None) -> dict:
+    return {
+        "id": batch.id,
+        "work_order_id": batch.work_order_id,
+        "work_order_code": work_order_code,
+        "batch_number": batch.batch_number,
+        "status": batch.status,
+        "target_qty": batch.target_qty,
+        "produced_qty": batch.produced_qty,
+        "started_at": batch.started_at.isoformat() if batch.started_at else None,
+        "completed_at": batch.completed_at.isoformat() if batch.completed_at else None,
+    }
+
+
+def _work_order_code(db: Session, work_order_id: int) -> str | None:
+    wo = db.get(WorkOrder, work_order_id)
+    return wo.code if wo is not None else None
+
+
 @router.get("/api/production/batches")
 def api_batches(
+    work_order_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_login),
 ) -> list[dict]:
-    rows = db.execute(
-        select(Batch, WorkOrder.code)
-        .join(WorkOrder, WorkOrder.id == Batch.work_order_id)
-        .order_by(Batch.id.desc())
-    ).all()
+    batches = BatchService(db).list_batches(work_order_id)
+    if not batches:
+        return []
+    work_order_ids = {batch.work_order_id for batch in batches}
+    code_by_id = {
+        wo.id: wo.code
+        for wo in db.execute(
+            select(WorkOrder).where(WorkOrder.id.in_(work_order_ids))
+        ).scalars().all()
+    }
     return [
-        {
-            "id": batch.id,
-            "work_order_id": batch.work_order_id,
-            "work_order_code": work_order_code,
-            "batch_number": batch.batch_number,
-            "status": batch.status,
-            "target_qty": batch.target_qty,
-            "produced_qty": batch.produced_qty,
-            "started_at": batch.started_at.isoformat() if batch.started_at else None,
-            "completed_at": batch.completed_at.isoformat() if batch.completed_at else None,
-        }
-        for batch, work_order_code in rows
+        _batch_to_dict(batch, code_by_id.get(batch.work_order_id))
+        for batch in batches
     ]
+
+
+@router.post("/api/production/batches/{batch_id}/cancel")
+def api_batch_cancel(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "supervisor")),
+) -> dict:
+    batch = BatchService(db).cancel_batch(batch_id)
+    db.commit()
+    db.refresh(batch)
+    return _batch_to_dict(batch, _work_order_code(db, batch.work_order_id))
+
+
+@router.post("/api/production/batches/{batch_id}/complete")
+def api_batch_complete(
+    batch_id: int,
+    produced_qty: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "supervisor")),
+) -> dict:
+    batch = BatchService(db).complete_batch(batch_id, produced_qty)
+    db.commit()
+    db.refresh(batch)
+    return _batch_to_dict(batch, _work_order_code(db, batch.work_order_id))
 
 
 @router.get("/production/station", response_class=HTMLResponse)

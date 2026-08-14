@@ -16,6 +16,7 @@
           <th>已完成</th>
           <th>开始时间</th>
           <th>完成时间</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody>
@@ -29,9 +30,27 @@
           <td>{{ b.batch.produced_qty }}</td>
           <td>{{ b.batch.started_at or '' }}</td>
           <td>{{ b.batch.completed_at or '' }}</td>
+          <td>
+            {% if b.batch.status in ('pending', 'in_process') %}
+            <div class="batch-actions" style="display:flex; gap:6px; align-items:center;">
+              <form hx-post="/api/production/batches/{{ b.batch.id }}/cancel"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) window.location.reload()">
+                <button type="submit" class="btn-danger">取消</button>
+              </form>
+              <form hx-post="/api/production/batches/{{ b.batch.id }}/complete"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) window.location.reload()">
+                <input type="number" name="produced_qty" min="0"
+                       value="{{ b.batch.target_qty }}" aria-label="完成数量" />
+                <button type="submit" class="btn-secondary">完成</button>
+              </form>
+            </div>
+            {% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="8">暂无批次</td></tr>
+        <tr><td colspan="9">暂无批次</td></tr>
         {% endfor %}
       </tbody>
     </table>

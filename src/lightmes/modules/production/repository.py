@@ -7,6 +7,8 @@ from lightmes.modules.production.models import (
     SnRule,
     WorkOrder,
     CarrierBinding,
+    Batch,
+    MaterialLot,
 )
 
 
@@ -177,3 +179,60 @@ class CarrierBindingRepository:
                 CarrierBinding.unbound_at.is_(None))
             .order_by(CarrierBinding.id.desc()).limit(1)
         ).scalar_one_or_none()
+
+
+class BatchRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, batch: Batch) -> Batch:
+        self.db.add(batch)
+        self.db.flush()
+        return batch
+
+    def get(self, batch_id: int) -> Batch | None:
+        return self.db.get(Batch, batch_id)
+
+    def list_all(self) -> list[Batch]:
+        return list(self.db.execute(
+            select(Batch).order_by(Batch.id.desc())
+        ).scalars().all())
+
+    def list_by_work_order(self, work_order_id: int) -> list[Batch]:
+        return list(self.db.execute(
+            select(Batch)
+            .where(Batch.work_order_id == work_order_id)
+            .order_by(Batch.id.desc())
+        ).scalars().all())
+
+    def next_number(self, work_order_id: int) -> int:
+        current = self.db.execute(
+            select(func.max(Batch.batch_number)).where(Batch.work_order_id == work_order_id)
+        ).scalar_one()
+        return (current or 0) + 1
+
+
+class MaterialLotRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def add(self, lot: MaterialLot) -> MaterialLot:
+        self.db.add(lot)
+        self.db.flush()
+        return lot
+
+    def get_by_code(self, code: str) -> MaterialLot | None:
+        return self.db.execute(
+            select(MaterialLot).where(MaterialLot.code == code)
+        ).scalar_one_or_none()
+
+    def list_available(self, product_id: int) -> list[MaterialLot]:
+        return list(self.db.execute(
+            select(MaterialLot)
+            .where(
+                MaterialLot.product_id == product_id,
+                MaterialLot.status == "released",
+                MaterialLot.available_quantity > 0,
+            )
+            .order_by(MaterialLot.received_at, MaterialLot.id)
+        ).scalars().all())
