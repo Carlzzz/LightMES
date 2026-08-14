@@ -1,11 +1,47 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 from sqlalchemy import JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.shared.base import Base, TimestampMixin
+
+
+class CustomFieldType(StrEnum):
+    text = "text"
+    number = "number"
+    integer = "integer"
+    boolean = "boolean"
+
+
+_TRUE = {"true", "1", "yes", "on"}
+_FALSE = {"false", "0", "no", "off"}
+
+
+def _coerce_basic(value):
+    """Coerce a scalar using conservative string/number/boolean rules."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        lowered = stripped.lower()
+        if lowered in _TRUE:
+            return True
+        if lowered in _FALSE:
+            return False
+        try:
+            return int(stripped)
+        except ValueError:
+            try:
+                return float(stripped)
+            except ValueError:
+                return stripped
+    return value
 
 
 class CustomFieldDefinition(Base, TimestampMixin):
@@ -52,3 +88,35 @@ class CustomFieldService:
             }
             for d in self.definitions(entity_type)
         ]
+
+    def cast_values(self, entity_type: str, values: dict) -> dict:
+        """Coerce submitted scalar values to their declared custom field types."""
+        types = {d.key: d.type for d in self.definitions(entity_type)}
+        return {
+            key: self._coerce_value(types.get(key), value)
+            for key, value in values.items()
+        }
+
+    @staticmethod
+    def _coerce_value(field_type: str | None, value):
+        if value is None:
+            return None
+        if field_type == CustomFieldType.text:
+            return str(value)
+        if field_type == CustomFieldType.number:
+            return float(value)
+        if field_type == CustomFieldType.integer:
+            if isinstance(value, int):
+                return value
+            return int(float(value))
+        if field_type == CustomFieldType.boolean:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in _TRUE:
+                    return True
+                if normalized in _FALSE:
+                    return False
+            return bool(value)
+        return _coerce_basic(value)

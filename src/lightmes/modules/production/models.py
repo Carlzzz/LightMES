@@ -63,6 +63,7 @@ class WorkOrder(Base, TimestampMixin):
     planned_end: Mapped[datetime | None] = mapped_column(default=None)
     priority: Mapped[int] = mapped_column(default=5)
     process_snapshot: Mapped[dict | None] = mapped_column(JSON, default=None)
+    custom_fields: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 
 class SerialUnit(Base, TimestampMixin):
@@ -168,6 +169,7 @@ class MaterialLot(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(default="received")
     supplier_lot: Mapped[str | None] = mapped_column(default=None)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    custom_fields: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 
 class StockMovement(Base, TimestampMixin):
