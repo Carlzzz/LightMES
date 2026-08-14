@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import (
     CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lightmes.shared.base import Base, TimestampMixin
 
@@ -92,6 +92,8 @@ class ProductionDowntime(Base, TimestampMixin):
     duration_minutes: Mapped[int | None] = mapped_column(Integer, default=None)
     notes: Mapped[str | None] = mapped_column(Text, default=None)
     is_planned: Mapped[bool] = mapped_column(default=False)
+
+    downtime_reason: Mapped["DowntimeReason | None"] = relationship("DowntimeReason")
 
 
 class DowntimeReason(Base, TimestampMixin):
