@@ -10,8 +10,9 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import html_role_guard, require_role
 from lightmes.modules.equipment.downtime_service import DowntimeService
 from lightmes.modules.equipment.monitor_service import MonitorService
-from lightmes.modules.equipment.models import DowntimeReason, MachineTag
+from lightmes.modules.equipment.models import ALL_STATES, DowntimeReason, MachineTag
 from lightmes.modules.equipment.schemas import TagCreate, TagUpdate
+from lightmes.modules.equipment.state_machine import WorkstationStateMachine
 from lightmes.modules.equipment.tag_service import TagService
 
 router = APIRouter()
@@ -25,9 +26,30 @@ def monitor_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespons
     _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
     if auth_response is not None:
         return auth_response
-    states = MonitorService(db).current_states()
+    board = MonitorService(db).monitor_board()
     return templates.TemplateResponse(
-        request, "equipment/monitor.html", {"states": states})
+        request, "equipment/monitor.html",
+        {"board": board, "all_states": ALL_STATES})
+
+
+@router.get("/equipment/monitor/partial", response_class=HTMLResponse)
+def monitor_partial(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
+    if auth_response is not None:
+        return auth_response
+    board = MonitorService(db).monitor_board()
+    return templates.TemplateResponse(
+        request, "equipment/partials/monitor_board.html",
+        {"board": board, "all_states": ALL_STATES})
+
+
+@router.post("/equipment/monitor/{work_station_id}/transition")
+def monitor_transition(work_station_id: int, state: str = Form(...),
+                       db: Session = Depends(get_db),
+                       _=Depends(require_role("admin", "supervisor"))):
+    WorkstationStateMachine(db).transition(work_station_id, state, source="manual")
+    db.commit()
+    return RedirectResponse("/equipment/monitor", status_code=303)
 
 
 @router.get("/equipment/downtimes", response_class=HTMLResponse)
