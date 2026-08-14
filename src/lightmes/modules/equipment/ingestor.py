@@ -75,8 +75,36 @@ class MachineSignalIngestor:
             self._create_alarm_issue(tag, value, work_station_id)
 
     def _create_alarm_issue(self, tag, value, work_station_id):
-        # Task 8 fills this in; placeholder-free stub raises nothing for now.
-        logger.info("alarm auto-issue enabled but not yet implemented (tag=%s)", tag.name)
+        from sqlalchemy import select
+
+        from lightmes.modules.auth.models import User
+        from lightmes.modules.issue.repository import IssueTypeRepository
+        from lightmes.modules.issue.service import IssueService
+
+        issue_type = IssueTypeRepository(self.db).get_by_code("equipment")
+        if issue_type is None:
+            logger.warning("缺少 equipment issue type，跳过自动建 issue")
+            return
+        # reported_by_id 是 NOT NULL FK；机器上报无真人，复用 _system_machine 占位用户
+        user = self.db.execute(
+            select(User).where(User.username == "_system_machine")
+        ).scalar_one_or_none()
+        if user is None:
+            user = User(
+                username="_system_machine", password_hash="!",
+                display_name="设备自动上报", is_active=True,
+            )
+            self.db.add(user)
+            self.db.flush()
+        IssueService(self.db).create_issue(
+            issue_type_id=issue_type.id,
+            title=f"设备告警: {tag.name} = {value}",
+            description=f"工位 {work_station_id} 告警：{tag.name}={value}",
+            source="station_andon",
+            work_station_id=work_station_id,
+            reported_by_id=user.id,
+        )
+        self.db.flush()
 
 
 def ingest_topic_signals(db: Session, topic_id: int, parsed_data: dict,
