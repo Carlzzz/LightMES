@@ -96,9 +96,12 @@ class MachineSignalIngestor:
             )
             self.db.add(user)
             self.db.flush()
+        title = f"设备告警: {tag.name} = {value}"
+        if len(title) > 200:
+            title = title[:200]
         IssueService(self.db).create_issue(
             issue_type_id=issue_type.id,
-            title=f"设备告警: {tag.name} = {value}",
+            title=title,
             description=f"工位 {work_station_id} 告警：{tag.name}={value}",
             source="station_andon",
             work_station_id=work_station_id,

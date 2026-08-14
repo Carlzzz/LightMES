@@ -30,7 +30,7 @@ def _shift_duration_seconds(shift: Shift) -> float:
         return int(h) * 3600 + int(m) * 60
     start = to_secs(shift.start_time)
     end = to_secs(shift.end_time)
-    if shift.end_time < shift.start_time:  # cross-midnight
+    if end < start:  # cross-midnight
         return (24 * 3600 - start) + end
     return end - start
 
