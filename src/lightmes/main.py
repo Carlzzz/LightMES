@@ -33,6 +33,8 @@ from lightmes.modules.api_v1.errors import register_problem_details_handler
 from lightmes.modules.api_v1.middleware import ApiCallLogMiddleware, TraceIdMiddleware
 from lightmes.modules.issue.linkify import issue_linkify
 from lightmes.shared.audit import AuditContextMiddleware, register_audit_listeners
+from lightmes.shared.extensions import extension_registry
+from lightmes.shared.realtime import realtime_shape_registry
 from lightmes.shared.web_security import (
     CsrfMiddleware,
     RateLimitMiddleware,
@@ -176,8 +178,23 @@ def home(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
             "user": user,
             "issue_open_count": open_count,
             "issue_blocking_count": blocking_count,
+            "widgets": extension_registry.all_widgets(),
         },
     )
+
+
+@app.get("/api/realtime/shapes")
+def realtime_shapes() -> dict:
+    registry = realtime_shape_registry
+    return {
+        name: {
+            "table": shape.table,
+            "columns": list(shape.columns),
+            "where": shape.where,
+        }
+        for name in registry.names()
+        if (shape := registry.find(name)) is not None
+    }
 
 
 @app.get("/health")

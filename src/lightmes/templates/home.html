@@ -128,5 +128,27 @@
     </a>
   </div>
 </div>
+
+{% if widgets %}
+<div class="card">
+  <div class="card__title">扩展组件</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>接口</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for widget in widgets %}
+      <tr>
+        <td>{{ widget.title }}</td>
+        <td><code>{{ widget.endpoint }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 </div>
 {% endblock %}
