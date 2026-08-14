@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
+from lightmes.modules.production.models import BatchMaterialConsumption
 from lightmes.modules.production.material_lot_service import MaterialLotService
 from lightmes.modules.production.repository import MaterialLotRepository
 from lightmes.modules.trace.events import GenealogyBound, GenealogyUnbound
@@ -96,11 +98,16 @@ class GenealogyService:
             lot = MaterialLotRepository(self.db).get_by_code(bind.component_batch_no)
             if lot is None:
                 raise NotFoundError(f"物料批次不存在: {bind.component_batch_no}")
-            self.return_batch_consumption(
-                material_lot_id=lot.id,
-                quantity=float(bind.qty or 0),
-                reason=reason or "",
-            )
+            consumed = self.db.execute(
+                select(func.coalesce(func.sum(BatchMaterialConsumption.quantity), 0))
+                .where(BatchMaterialConsumption.material_lot_id == lot.id)
+            ).scalar_one()
+            if float(consumed) > 0:
+                self.return_batch_consumption(
+                    material_lot_id=lot.id,
+                    quantity=float(bind.qty or 0),
+                    reason=reason or "",
+                )
         self.db.flush()
         event_bus.publish(GenealogyUnbound(
             bind_id=bind.id, parent_sn_id=bind.parent_sn_id, reason=reason,
