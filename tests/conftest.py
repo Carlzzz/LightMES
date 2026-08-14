@@ -5,7 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 import lightmes.database as db_module
-from lightmes.database import SessionLocal, engine
+from lightmes.config import get_settings
+from lightmes.database import create_engine
 # 注册所有模型到 Base.metadata，保证跨模块 FK 在隔离测试中也能解析
 from lightmes.modules.auth import models as _auth_models  # noqa: F401
 from lightmes.modules.masterdata import models as _masterdata_models  # noqa: F401
@@ -15,18 +16,35 @@ from lightmes.modules.connectivity import models as _connectivity_models  # noqa
 from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 
+_settings = get_settings()
+if _settings.test_database_url and _settings.environment != "production":
+    _test_engine = create_engine(_settings.test_database_url, pool_pre_ping=True)
+    _test_session_local = sessionmaker(
+        bind=_test_engine, autoflush=False, expire_on_commit=False
+    )
+    _using_dedicated_test_db = True
+else:
+    _test_engine = db_module.engine
+    _test_session_local = db_module.SessionLocal
+    _using_dedicated_test_db = False
+
+db_module.engine = _test_engine
+db_module.SessionLocal = _test_session_local
+
+
 @pytest.fixture(scope="session", autouse=True)
 def clean_test_database():
     from sqlalchemy import text
 
-    from lightmes.config import get_settings
-    from lightmes.database import engine
     from lightmes.shared.base import Base
 
     if get_settings().environment == "production":
         pytest.fail("Refusing to truncate a production database")
 
-    with engine.begin() as conn:
+    if _using_dedicated_test_db:
+        Base.metadata.create_all(bind=_test_engine)
+
+    with _test_engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
     os.environ["LIGHTMES_TEST_DB_TRUNCATED"] = "1"
@@ -48,7 +66,7 @@ def db_session(monkeypatch):
     persist_message / reconcile）也能加入同一事务，看到 fixture 的 savepoint
     已提交数据，且不会污染真实数据库。
     """
-    connection = engine.connect()
+    connection = _test_engine.connect()
     trans = connection.begin()
     test_sessionmaker = sessionmaker(
         bind=connection, join_transaction_mode="create_savepoint",
