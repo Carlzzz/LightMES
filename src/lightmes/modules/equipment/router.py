@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -10,15 +11,61 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import html_role_guard, require_role
 from lightmes.modules.equipment.downtime_service import DowntimeService
 from lightmes.modules.equipment.monitor_service import MonitorService
-from lightmes.modules.equipment.models import ALL_STATES, DowntimeReason, MachineTag
+from lightmes.modules.equipment.models import (
+    ALL_STATES, DowntimeReason, MachineTag, ProductionDowntime,
+)
+from lightmes.modules.equipment.oee_service import (
+    OeeService, _shift_duration_seconds, compute_availability, compute_oee,
+)
 from lightmes.modules.equipment.schemas import TagCreate, TagUpdate
 from lightmes.modules.equipment.state_machine import WorkstationStateMachine
 from lightmes.modules.equipment.tag_service import TagService
+from lightmes.modules.masterdata.models import WorkStation
+from lightmes.modules.production.models import WorkOrder
+from lightmes.modules.production.shift_service import ShiftService
 
 router = APIRouter()
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parent.parent.parent / "templates")
 )
+
+
+def _oee_rows(db: Session) -> list[dict]:
+    now = datetime.now(timezone.utc)
+    oee_svc = OeeService(db)
+    sm = WorkstationStateMachine(db)
+    shift_svc = ShiftService(db)
+
+    stations = list(db.execute(
+        select(WorkStation).where(WorkStation.is_active.is_(True))
+        .order_by(WorkStation.line_id, WorkStation.seq)
+    ).scalars().all())
+
+    rows = []
+    for ws in stations:
+        shift = shift_svc.current_at(ws.line_id, now)
+        duration = _shift_duration_seconds(shift) if shift is not None else 8 * 3600
+        since = now - timedelta(seconds=duration)
+        unplanned = oee_svc.unplanned_downtime_seconds(ws.id, since, now)
+        availability = compute_availability(duration, unplanned)
+
+        wo = db.execute(
+            select(WorkOrder).where(WorkOrder.line_id == ws.line_id)
+            .order_by(WorkOrder.id.desc()).limit(1)
+        ).scalars().first()
+        quality = oee_svc.quality_for_work_order(wo.id) if wo is not None else None
+
+        cur = sm.current(ws.id)
+        oee = compute_oee(availability, quality if quality is not None else 0.0)
+        rows.append({
+            "code": ws.code,
+            "name": ws.name,
+            "state": cur.state if cur is not None else "未采集",
+            "availability": availability,
+            "quality": quality,
+            "oee": oee,
+        })
+    return rows
 
 
 @router.get("/equipment/monitor", response_class=HTMLResponse)
@@ -57,11 +104,22 @@ def downtimes_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespo
     _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
     if auth_response is not None:
         return auth_response
+    rows = db.execute(
+        select(ProductionDowntime, DowntimeReason.code, DowntimeReason.name, WorkStation.code)
+        .outerjoin(DowntimeReason, ProductionDowntime.downtime_reason_id == DowntimeReason.id)
+        .join(WorkStation, ProductionDowntime.work_station_id == WorkStation.id)
+        .order_by(ProductionDowntime.started_at.desc())
+    ).all()
+    downtimes = [
+        {"dt": dt, "reason_code": r_code, "reason_name": r_name, "station_code": ws_code}
+        for dt, r_code, r_name, ws_code in rows
+    ]
     reasons = list(db.execute(
-        select(DowntimeReason).where(DowntimeReason.is_active.is_(True))
+        select(DowntimeReason).where(DowntimeReason.is_active.is_(True)).order_by(DowntimeReason.id)
     ).scalars().all())
     return templates.TemplateResponse(
-        request, "equipment/downtimes.html", {"reasons": reasons})
+        request, "equipment/downtimes.html",
+        {"downtimes": downtimes, "reasons": reasons})
 
 
 @router.get("/equipment/oee", response_class=HTMLResponse)
@@ -69,7 +127,8 @@ def oee_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
     if auth_response is not None:
         return auth_response
-    return templates.TemplateResponse(request, "equipment/oee.html", {})
+    rows = _oee_rows(db)
+    return templates.TemplateResponse(request, "equipment/oee.html", {"rows": rows})
 
 
 @router.get("/equipment/tags", response_class=HTMLResponse)

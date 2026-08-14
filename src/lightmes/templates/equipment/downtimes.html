@@ -1,10 +1,29 @@
 {% extends "base.html" %}
+{% block title %}停机记录 - LightMES{% endblock %}
 {% block content %}
-<h1>停机记录</h1>
-<p>停机原因人工修正入口（列出停机记录 + 原因下拉，Phase 1 简化为原因列表）。</p>
-<ul>
-  {% for r in reasons %}
-  <li>{{ r.code }} — {{ r.name }} ({{ r.kind }})</li>
+<div class="page-head"><h1>停机记录</h1></div>
+<table>
+  <thead><tr><th>ID</th><th>工位</th><th>开始</th><th>结束</th><th>当前原因</th><th>修正原因</th></tr></thead>
+  <tbody>
+  {% for d in downtimes %}
+  <tr>
+    <td>{{ d.dt.id }}</td>
+    <td>{{ d.station_code }}</td>
+    <td>{{ d.dt.started_at }}</td>
+    <td>{{ d.dt.ended_at or "进行中" }}</td>
+    <td>{{ d.reason_name or "未分配" }}</td>
+    <td>
+      <form hx-post="/equipment/downtimes/{{ d.dt.id }}/reason" hx-swap="none">
+        <select name="reason_id">
+          {% for r in reasons %}
+          <option value="{{ r.id }}" {% if d.reason_code == r.code %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">分配</button>
+      </form>
+    </td>
+  </tr>
   {% endfor %}
-</ul>
+  </tbody>
+</table>
 {% endblock %}

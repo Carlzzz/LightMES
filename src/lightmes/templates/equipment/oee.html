@@ -1,5 +1,19 @@
 {% extends "base.html" %}
+{% block title %}OEE 看板 - LightMES{% endblock %}
 {% block content %}
-<h1>OEE 看板</h1>
-<p>Phase 1：可用率 × 质量率（性能率待主数据 ideal_cycle_time 就绪后加入）。</p>
+<div class="page-head"><h1>OEE 看板</h1></div>
+<table>
+  <thead><tr><th>工位</th><th>当前状态</th><th>可用率</th><th>质量率</th><th>OEE</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.code }} {{ r.name }}</td>
+    <td>{{ r.state }}</td>
+    <td>{{ "%.1f%%"|format(r.availability * 100) }}</td>
+    <td>{% if r.quality is not none %}{{ "%.1f%%"|format(r.quality * 100) }}{% else %}N/A{% endif %}</td>
+    <td>{{ "%.1f%%"|format(r.oee * 100) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endblock %}
