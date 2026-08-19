@@ -1,6 +1,7 @@
 
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -9,13 +10,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none, html_role_guard, require_role
+from lightmes.modules.auth.dependencies import (
+    current_user_or_none, html_role_guard, login_redirect, require_role,
+)
 from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.models import Operation, WorkStation
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.models import (
     DefectRecord, DefectType,
     FirstInspectionConfig, FirstInspectionCheckItem,
+    FirstInspectionRecord,
+    SerialUnit,
     TestDataTemplate, TestDataField,
     WorkOrder,
 )
@@ -26,6 +31,7 @@ from lightmes.modules.production.quality_service import (
 from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.production.schemas import (
     FirstInspectionConfigCreate, FirstInspectionCheckItemCreate,
+    FirstInspectionReleaseInput,
     TestDataTemplateCreate, TestDataFieldCreate,
 )
 from lightmes.shared.errors import DomainError
@@ -42,9 +48,9 @@ templates = Jinja2Templates(
 
 
 def _login_guard(request: Request, db: Session) -> Response | None:
-    """登录守卫：返回 None 表示通过，返回 Response 表示拒绝（401 跳登录）。"""
+    """登录守卫：返回 None 表示通过，返回 Response 表示拒绝（带 next 跳登录）。"""
     if current_user_or_none(request, db) is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+        return login_redirect(request)
     return None
 
 
@@ -61,6 +67,16 @@ def _manage_guard(request: Request, db: Session) -> Response | None:
     """首检/测试数据模板和缺陷类型配置：仅 supervisor/admin 可写。"""
     _, response = html_role_guard(request, db, "admin", "supervisor")
     return response
+
+
+def _back(path: str, error: str | None = None) -> Response:
+    """POST 失败统一回跳：303 回原页带 ?error=，页面顶部横幅呈现。"""
+    if error:
+        sep = "&" if "?" in path else "?"
+        return Response(
+            status_code=303,
+            headers={"Location": f"{path}{sep}error={quote(error)}"})
+    return Response(status_code=303, headers={"Location": path})
 
 
 # ========== First Inspection Routes ==========
@@ -128,26 +144,14 @@ def first_inspection_create(
         db.commit()
     except ValueError as e:
         db.rollback()
-        configs = db.execute(select(FirstInspectionConfig).order_by(FirstInspectionConfig.id)).scalars().all()
-        operations = db.execute(select(Operation)).scalars().all()
-        workstations = db.execute(select(WorkStation)).scalars().all()
-        op_map = {op.id: op for op in operations}
-        ws_map = {ws.id: ws for ws in workstations}
         return templates.TemplateResponse(
-            request, "quality/first_inspection_list.html",
-            {"configs": configs, "operations": operations, "workstations": workstations,
-             "op_map": op_map, "ws_map": ws_map, "error": str(e)}
+            request, "quality/partials/form_error.html",
+            {"error": str(e)}
         )
 
-    configs = db.execute(select(FirstInspectionConfig).order_by(FirstInspectionConfig.id)).scalars().all()
-    operations = db.execute(select(Operation)).scalars().all()
-    workstations = db.execute(select(WorkStation)).scalars().all()
-    op_map = {op.id: op for op in operations}
-    ws_map = {ws.id: ws for ws in workstations}
-    return templates.TemplateResponse(
-        request, "quality/first_inspection_list.html",
-        {"configs": configs, "operations": operations, "workstations": workstations,
-         "op_map": op_map, "ws_map": ws_map}
+    return HTMLResponse(
+        "",
+        headers={"HX-Redirect": f"/quality/first-inspection/{config.id}"},
     )
 
 
@@ -167,7 +171,8 @@ def first_inspection_detail(request: Request, config_id: int, db: Session = Depe
         request, "quality/first_inspection_detail.html",
         {"config": config, "check_items": check_items,
          "operations": operations, "workstations": workstations,
-         "op_map": op_map, "ws_map": ws_map}
+         "op_map": op_map, "ws_map": ws_map,
+         "error": request.query_params.get("error")}
     )
 
 
@@ -281,26 +286,14 @@ def test_data_create(
         db.commit()
     except ValueError as e:
         db.rollback()
-        templates_list = db.execute(select(TestDataTemplate).order_by(TestDataTemplate.id)).scalars().all()
-        operations = db.execute(select(Operation)).scalars().all()
-        workstations = db.execute(select(WorkStation)).scalars().all()
-        op_map = {op.id: op for op in operations}
-        ws_map = {ws.id: ws for ws in workstations}
         return templates.TemplateResponse(
-            request, "quality/test_data_list.html",
-            {"templates": templates_list, "operations": operations, "workstations": workstations,
-             "op_map": op_map, "ws_map": ws_map, "error": str(e)}
+            request, "quality/partials/form_error.html",
+            {"error": str(e)}
         )
 
-    templates_list = db.execute(select(TestDataTemplate).order_by(TestDataTemplate.id)).scalars().all()
-    operations = db.execute(select(Operation)).scalars().all()
-    workstations = db.execute(select(WorkStation)).scalars().all()
-    op_map = {op.id: op for op in operations}
-    ws_map = {ws.id: ws for ws in workstations}
-    return templates.TemplateResponse(
-        request, "quality/test_data_list.html",
-        {"templates": templates_list, "operations": operations, "workstations": workstations,
-         "op_map": op_map, "ws_map": ws_map}
+    return HTMLResponse(
+        "",
+        headers={"HX-Redirect": f"/quality/test-data/{template.id}"},
     )
 
 
@@ -320,7 +313,8 @@ def test_data_detail(request: Request, template_id: int, db: Session = Depends(g
         request, "quality/test_data_detail.html",
         {"template": template, "fields": fields,
          "operations": operations, "workstations": workstations,
-         "op_map": op_map, "ws_map": ws_map}
+         "op_map": op_map, "ws_map": ws_map,
+         "error": request.query_params.get("error")}
     )
 
 
@@ -464,6 +458,8 @@ def first_inspection_update(
         db.commit()
     except ValueError as e:
         db.rollback()
+        return Response(status_code=303, headers={
+            "Location": f"/quality/first-inspection/{config_id}?error={quote(str(e))}"})
 
     return Response(status_code=303, headers={"Location": f"/quality/first-inspection/{config_id}"})
 
@@ -523,6 +519,8 @@ def test_data_update(
         db.commit()
     except ValueError as e:
         db.rollback()
+        return Response(status_code=303, headers={
+            "Location": f"/quality/test-data/{template_id}?error={quote(str(e))}"})
 
     return Response(status_code=303, headers={"Location": f"/quality/test-data/{template_id}"})
 
@@ -643,7 +641,7 @@ def defect_log_submit(
             {"types": types, "sn": sn, "error": "登记失败，请稍后重试或联系管理员"})
     return templates.TemplateResponse(
         request, "quality/partials/defect_log_success.html",
-        {"record": record})
+        {"record": record, "sn": sn})
 
 
 # ========== Defect List / Detail / Handling Routes ==========
@@ -652,13 +650,27 @@ def defect_log_submit(
 def defect_list_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     if (r := _login_guard(request, db)): return r
     status_filter = request.query_params.get("status", "")
+    sn_filter = request.query_params.get("sn", "").strip()
     q = select(DefectRecord).order_by(DefectRecord.discovered_at.desc())
     if status_filter:
         q = q.where(DefectRecord.handling_status == status_filter)
+    if sn_filter:
+        q = q.join(SerialUnit, DefectRecord.serial_unit_id == SerialUnit.id).where(
+            SerialUnit.sn == sn_filter)
     records = db.execute(q).scalars().all()
+    sn_ids = [r.serial_unit_id for r in records if r.serial_unit_id]
+    sn_map = {}
+    if sn_ids:
+        sn_map = {
+            su.id: su.sn
+            for su in db.execute(
+                select(SerialUnit).where(SerialUnit.id.in_(sn_ids))
+            ).scalars().all()
+        }
     return templates.TemplateResponse(
         request, "quality/defect_list.html",
-        {"records": records, "status_filter": status_filter})
+        {"records": records, "status_filter": status_filter,
+         "sn_filter": sn_filter, "sn_map": sn_map})
 
 
 @router.get("/quality/defects/{record_id}", response_class=HTMLResponse)
@@ -669,13 +681,18 @@ def defect_detail_page(request: Request, record_id: int, db: Session = Depends(g
         return Response(status_code=404)
     su = SerialUnitRepository(db).get(record.serial_unit_id)
     wo = db.get(WorkOrder, record.work_order_id)
+    ws = db.get(WorkStation, record.work_station_id) if record.work_station_id else None
     # 工序列表（用于返工 target_seq 下拉）
     operations = MasterDataQueryService(db).get_operations(wo.routing_id) if wo else []
     user = current_user_or_none(request, db)
     can_handle = user is not None and user.role_obj is not None and user.role_obj.name in ("admin", "supervisor")
+    is_first_inspection_fail = "首检不合格" in (record.remark or "")
     return templates.TemplateResponse(
         request, "quality/defect_detail.html",
-        {"record": record, "su": su, "operations": operations, "can_handle": can_handle})
+        {"record": record, "su": su, "wo": wo, "ws": ws,
+         "operations": operations, "can_handle": can_handle,
+         "is_first_inspection_fail": is_first_inspection_fail,
+         "error": request.query_params.get("error")})
 
 
 @router.get("/quality/defects/{record_id}/rework-stations", response_class=HTMLResponse)
@@ -723,10 +740,10 @@ def defect_handle_rework(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=422, content=e.detail)
+        return _back(f"/quality/defects/{record_id}", e.detail)
     except Exception:
         db.rollback()
-        return Response(status_code=422, content="处理失败，请稍后重试")
+        return _back(f"/quality/defects/{record_id}", "处理失败，请稍后重试")
     return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
 
 
@@ -743,10 +760,10 @@ def defect_handle_scrap(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=422, content=e.detail)
+        return _back(f"/quality/defects/{record_id}", e.detail)
     except Exception:
         db.rollback()
-        return Response(status_code=422, content="处理失败，请稍后重试")
+        return _back(f"/quality/defects/{record_id}", "处理失败，请稍后重试")
     return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
 
 
@@ -763,10 +780,58 @@ def defect_handle_concession(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=422, content=e.detail)
+        return _back(f"/quality/defects/{record_id}", e.detail)
     except Exception:
         db.rollback()
-        return Response(status_code=422, content="处理失败，请稍后重试")
+        return _back(f"/quality/defects/{record_id}", "处理失败，请稍后重试")
+    return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
+
+
+@router.post("/quality/defects/{record_id}/release-inspection", response_class=HTMLResponse)
+def defect_release_inspection(
+    request: Request, record_id: int,
+    release_remark: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "supervisor")),
+) -> HTMLResponse:
+    """首检不合格的授权放行：record status failed → waived，SN 解除隔离。
+
+    仅适用于缺陷来源为首检不合格（record.remark 含"首检不合格"）且
+    关联 FirstInspectionRecord 未被放行过的记录。
+    """
+    record = db.get(DefectRecord, record_id)
+    if record is None:
+        return Response(status_code=404)
+    if (record.remark or "").find("首检不合格") < 0:
+        return _back(f"/quality/defects/{record_id}", "该缺陷不是首检不合格，不适用豁免放行")
+    fi_record = db.execute(
+        select(FirstInspectionRecord).where(
+            FirstInspectionRecord.serial_unit_id == record.serial_unit_id,
+            FirstInspectionRecord.status == "failed",
+            FirstInspectionRecord.released_at.is_(None),
+        ).order_by(FirstInspectionRecord.id.desc()).limit(1)
+    ).scalars().first()
+    if fi_record is None:
+        return _back(f"/quality/defects/{record_id}", "未找到待放行的首检记录（可能已放行）")
+    try:
+        FirstInspectionService(db).release_inspection(
+            FirstInspectionReleaseInput(
+                record_id=fi_record.id, release_remark=release_remark or None),
+            release_by_id=user.id)
+        # SN 解除隔离回 in_process，与缺陷让步接收路径一致
+        su = SerialUnitRepository(db).get(record.serial_unit_id)
+        if su is not None and su.status == "quarantined":
+            su.status = "in_process"
+        db.commit()
+    except DomainError as e:
+        db.rollback()
+        return _back(f"/quality/defects/{record_id}", e.detail)
+    except ValueError as e:
+        db.rollback()
+        return _back(f"/quality/defects/{record_id}", str(e))
+    except Exception:
+        db.rollback()
+        return _back(f"/quality/defects/{record_id}", "放行失败，请稍后重试")
     return Response(status_code=303, headers={"Location": f"/quality/defects/{record_id}"})
 
 

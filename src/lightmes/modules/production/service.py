@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import Line, Product, Routing
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
@@ -28,6 +29,39 @@ class ProductionService:
             seq_reset=data.seq_reset, product_id=data.product_id,
         )
         return self.sn_rules.add(rule)
+
+    def update_sn_rule(self, rule_id: int, *, code: str, name: str,
+                       pattern: str, seq_reset: str,
+                       product_id: int | None = None) -> SnRule:
+        from sqlalchemy import select, func
+        rule = self.sn_rules.get(rule_id)
+        if rule is None:
+            raise ValueError(f"SN 规则不存在: {rule_id}")
+        validate_pattern(pattern)
+        dup = self.sn_rules.get_by_code(code)
+        if dup is not None and dup.id != rule_id:
+            raise ValueError(f"SN 规则编码已存在: {code}")
+        rule.code = code
+        rule.name = name
+        rule.pattern = pattern
+        rule.seq_reset = seq_reset
+        rule.product_id = product_id
+        self.db.flush()
+        return rule
+
+    def delete_sn_rule(self, rule_id: int) -> None:
+        from sqlalchemy import select, func
+        rule = self.sn_rules.get(rule_id)
+        if rule is None:
+            raise ValueError(f"SN 规则不存在: {rule_id}")
+        refs = self.db.execute(
+            select(func.count()).select_from(WorkOrder)
+            .where(WorkOrder.sn_rule_id == rule_id)
+        ).scalar_one()
+        if refs > 0:
+            raise ValueError(f"该 SN 规则被 {refs} 个工单引用，不可删除")
+        self.db.delete(rule)
+        self.db.flush()
 
     def create_work_order(self, data: WorkOrderCreate) -> WorkOrder:
         if data.qty <= 0:
@@ -83,5 +117,40 @@ class ProductionService:
             self.serial_units.add(SerialUnit(
                 sn=new_sn, work_order_id=wo.id, product_id=wo.product_id,
                 status="pending", current_operation_seq=0, batch_id=batch.id))
+        self.db.flush()
+        return wo
+
+    def cancel_work_order(self, work_order_id: int, reason: str, *, user_id: int,
+                          force: bool = False) -> WorkOrder | tuple[WorkOrder, int]:
+        """取消工单。返回 (wo, wip_count) 当存在在制品且未 force；成功返回 wo。
+
+        规则：
+        - created/released/in_process 可取消；completed/cancelled 不可
+        - pending SN 置 scrapped（未投产直接作废，不计 scrap_qty —— 未投产无数量口径）
+        - 在制（in_process/reworking/quarantined）SN 保留原状态，但工单取消后
+          过站校验会拒绝（过站要求工单 released/in_process）→ 需先走报废/让步清理，
+          force=True 表示主管确认带走在制品强行关闭
+        - finished SN 保留（产量已计入）
+        """
+        wo = self.work_orders.get(work_order_id)
+        if wo is None:
+            raise ValueError(f"工单不存在: {work_order_id}")
+        if wo.status in ("completed", "cancelled"):
+            raise ValueError(f"工单已 {wo.status}，不可取消")
+        if not reason.strip():
+            raise ValueError("取消原因不可为空")
+        wip = self.serial_units.count_by_wo_status(
+            work_order_id, ("in_process", "reworking", "quarantined"))
+        if wip > 0 and not force:
+            return wo, wip
+        # 未投产 pending SN 全部作废
+        pending = self.db.execute(
+            select(SerialUnit).where(
+                SerialUnit.work_order_id == work_order_id,
+                SerialUnit.status == "pending")
+        ).scalars().all()
+        for su in pending:
+            su.status = "scrapped"
+        wo.status = "cancelled"
         self.db.flush()
         return wo

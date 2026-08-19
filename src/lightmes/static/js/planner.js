@@ -103,8 +103,9 @@
     blocks.forEach(function (block) {
       var woId = block.dataset.woId;
 
-      // 整块拖动（改 start，保持 duration）
+      // 整块拖动（改 start，保持 duration）；block._moved 供 click 区分拖动/点击
       var dragStart = null;
+      block._moved = false;
       block.addEventListener('mousedown', function (e) {
         if (e.target.classList.contains('planner-gantt__resize-handle')) return;  // resize 接管
         dragStart = {
@@ -112,11 +113,13 @@
           origLeft: parseInt(block.style.left, 10) || 0,
           origWidth: parseInt(block.style.width, 10) || 60
         };
+        block._moved = false;
         e.preventDefault();
       });
       document.addEventListener('mousemove', function (e) {
         if (!dragStart) return;
         var dx = e.clientX - dragStart.x;
+        if (Math.abs(dx) > 3) block._moved = true;
         var newLeft = Math.max(0, Math.min(24 * 60 - dragStart.origWidth, dragStart.origLeft + dx));
         block.style.left = newLeft + 'px';
       });
@@ -146,6 +149,7 @@
         document.addEventListener('mousemove', function (e) {
           if (!resizeStart) return;
           var dx = e.clientX - resizeStart.x;
+          if (Math.abs(dx) > 3) block._moved = true;
           var newWidth = Math.max(30, resizeStart.origWidth + dx);
           block.style.width = newWidth + 'px';
         });
@@ -159,6 +163,25 @@
           updateWoSchedule(woId, lineId, date, leftMin, leftMin + widthMin);
         });
       }
+    });
+  });
+})();
+
+// ===== Work order detail (click) =====
+(function () {
+  function go(id) { window.location.href = '/production/work-orders/' + id; }
+  // 周视图卡片/backlog：HTML5 拖拽完成后浏览器不触发 click，直接绑定即可
+  document.querySelectorAll('.planner-card, .planner-backlog__item').forEach(function (el) {
+    el.title = '点击查看工单详情';
+    el.addEventListener('click', function () { go(el.dataset.woId); });
+  });
+  // 日视图块：自定义 mousedown 拖动/resize 后仍会触发 click，
+  // 拖拽闭包把位移写入 block._moved，click 检查后消费
+  document.querySelectorAll('.planner-gantt__block').forEach(function (block) {
+    block.title = '点击查看工单详情（拖动改时间）';
+    block.addEventListener('click', function () {
+      if (block._moved) { block._moved = false; return; }
+      go(block.dataset.woId);
     });
   });
 })();
@@ -200,6 +223,9 @@
           var msg = (d && d.error) || 'undo 失败';
           if (window.showErrorModal) window.showErrorModal(msg); else alert(msg);
         });
+      })
+      .catch(function (e) {
+        if (window.showErrorModal) window.showErrorModal('网络错误: ' + e); else alert('网络错误: ' + e);
       });
   };
 

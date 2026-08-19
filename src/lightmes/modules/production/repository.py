@@ -97,6 +97,13 @@ class SerialUnitRepository:
                 SerialUnit.status.notin_(("finished", "scrapped")))
         ).scalar_one()
 
+    def count_by_wo_status(self, work_order_id: int, statuses: tuple[str, ...]) -> int:
+        return self.db.execute(
+            select(func.count()).select_from(SerialUnit).where(
+                SerialUnit.work_order_id == work_order_id,
+                SerialUnit.status.in_(statuses))
+        ).scalar_one()
+
     def get_active_by_carrier(self, carrier_code: str) -> SerialUnit | None:
         return self.db.execute(
             select(SerialUnit).where(

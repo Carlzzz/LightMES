@@ -2,6 +2,7 @@
 {% block title %}{{ conn.name }} — 数采连接{% endblock %}
 {% block content %}
 <h1 class="page-title">{{ conn.name }} <small>{{ conn.protocol|upper }} · {{ conn.endpoint }}</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
   <div class="card__title">基本信息</div>

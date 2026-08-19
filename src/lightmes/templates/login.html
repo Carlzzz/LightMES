@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}登录 - LightMES{% endblock %}
-{% block chrome %}{% endblock %}
-{% block content %}
+{% block shell %}
+<main class="auth-page">
 <div class="auth-wrap">
   <div class="auth-card">
     <div class="auth-card__logo">◆</div>
     <h1>LightMES</h1>
     <div class="auth-card__sub">笔记本外壳组装制造执行系统</div>
     <form hx-post="/login" hx-target="#result" hx-swap="innerHTML">
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <div class="field">
         <label>用户名</label>
         <input type="text" name="username" placeholder="请输入用户名" required autofocus>
@@ -21,4 +22,5 @@
     <div id="result" class="result-slot"></div>
   </div>
 </div>
+</main>
 {% endblock %}

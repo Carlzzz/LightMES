@@ -128,6 +128,8 @@ class Operation(Base, TimestampMixin):
         ForeignKey("work_stations.id")
     )
     is_mandatory: Mapped[bool] = mapped_column(default=True)
+    require_material_binding: Mapped[bool] = mapped_column(default=False)
+    require_param_collection: Mapped[bool] = mapped_column(default=False)
     # 预留（P2c/P2d 填逻辑，本期仅建列）
     required_skill_id: Mapped[int | None] = mapped_column(
         ForeignKey("skill.id"), default=None)

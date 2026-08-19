@@ -13,7 +13,7 @@ from lightmes.modules.auth.schemas import (
 )
 from lightmes.modules.auth.service import AuthService
 from lightmes.modules.auth.dependencies import (
-    current_user_or_none, html_role_guard,
+    current_user_or_none, html_role_guard, login_redirect,
 )
 from lightmes.modules.auth.repository import UserRepository, RoleRepository
 
@@ -25,7 +25,7 @@ templates = Jinja2Templates(
 
 def _login_guard(request: Request, db: Session) -> Response | None:
     if current_user_or_none(request, db) is None:
-        return Response(status_code=302, headers={"Location": "/login"})
+        return login_redirect(request)
     return None
 
 
@@ -60,8 +60,13 @@ def api_login(
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    return templates.TemplateResponse(request, "login.html")
+def login_page(
+    request: Request, next: str = "", db: Session = Depends(get_db),
+) -> HTMLResponse:
+    # 仅接受站内相对路径，防开放重定向
+    safe_next = next if next.startswith("/") and not next.startswith("//") else ""
+    return templates.TemplateResponse(
+        request, "login.html", {"next": safe_next})
 
 
 @router.get("/logout")
@@ -75,6 +80,7 @@ def login_submit(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    next: str = Form(""),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     auth_service = AuthService(db)
@@ -84,8 +90,9 @@ def login_submit(
             request, "partials/login_result.html", {"user": None}
         )
     request.session["user_id"] = user.id
-    # 登录成功：让 HTMX 整页跳转到首页
-    return Response(status_code=204, headers={"HX-Redirect": "/"})
+    # 登录成功：让 HTMX 整页跳转（有 next 回原页，否则首页）
+    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    return Response(status_code=204, headers={"HX-Redirect": target})
 
 
 # === 用户管理 ===

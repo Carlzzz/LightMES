@@ -8,7 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none, html_role_guard, require_login, require_role
+from lightmes.modules.auth.dependencies import (
+    current_user_or_none, html_role_guard, login_redirect,
+    require_login, require_role,
+)
 from lightmes.modules.auth.models import User
 from lightmes.modules.production.schemas import (
     SnRuleCreate, SnRuleRead, OperationPassInput, OperationPassResult, WorkOrderCreate,
@@ -18,6 +21,7 @@ from lightmes.modules.production.schemas import (
     TestDataRecordSubmitInput, TestDataValueInput,
 )
 from lightmes.modules.production.service import ProductionService
+from lightmes.modules.production.defect_service import DefectService
 from lightmes.modules.production.batch_service import BatchService
 from lightmes.modules.production.station_service import StationService
 from lightmes.modules.production.operation_pass_service import OperationPassService
@@ -73,7 +77,7 @@ def _skip_auth_guard(request: Request, db: Session) -> User | HTMLResponse:
     """跳站路由登录+角色守卫；返回 User 或错误片段 Response。"""
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+        return login_redirect(request)
     if not _can_skip(user):
         return templates.TemplateResponse(
             request, "production/partials/station_enter_error.html",
@@ -135,6 +139,36 @@ def release_work_order(
     return WorkOrderRead.model_validate(wo)
 
 
+@router.post("/production/work-orders/{work_order_id}/cancel")
+def cancel_work_order(
+    request: Request,
+    work_order_id: int,
+    reason: str = Form(...),
+    force: bool = Form(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "supervisor")),
+):
+    """取消工单（HTML）。存在在制品且未 force 时返回 409 + 提示。"""
+    svc = ProductionService(db)
+    try:
+        result = svc.cancel_work_order(
+            work_order_id, reason, user_id=current_user.id, force=force)
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        return Response(status_code=409, content=str(e))
+    if isinstance(result, tuple):
+        _, wip = result
+        db.rollback()
+        return Response(
+            status_code=409,
+            content=(
+                f"工单还有 {wip} 个在制/隔离中的 SN。"
+                f"请先在缺陷处理中报废或让步这些 SN，或勾选\"强制取消\"确认带走在制品。"),
+        )
+    return Response(status_code=303, headers={"Location": "/production/planner"})
+
+
 @router.get(
     "/api/production/work-orders/{work_order_id}", response_model=WorkOrderRead
 )
@@ -157,10 +191,56 @@ def api_pass_operation(
     return OperationPassService(db).pass_operation(data)  # DomainError→全局handler
 
 
-@router.get("/production/scan")
-def scan_page():
-    """已废弃：重定向到工位作业页。"""
-    return Response(status_code=302, headers={"Location": "/production/station"})
+@router.get("/production/work-orders/{work_order_id}", response_class=HTMLResponse)
+def work_order_detail_page(
+    request: Request, work_order_id: int, db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """工单详情：SN 汇总/批次/缺陷/异常Issue 聚合视图（planner 卡片点击进入）。"""
+    _, auth_response = html_role_guard(
+        request, db, "admin", "supervisor", "operator", "viewer")
+    if auth_response is not None:
+        return auth_response
+    wo = WorkOrderRepository(db).get(work_order_id)
+    if wo is None:
+        return Response(status_code=404, content="工单不存在")
+
+    from lightmes.modules.masterdata.models import Line, Product, Routing
+    product = db.get(Product, wo.product_id)
+    routing = db.get(Routing, wo.routing_id)
+    line = db.get(Line, wo.line_id)
+
+    sns = SerialUnitRepository(db).list_by_work_order(wo.id)
+    status_counts: dict[str, int] = {}
+    for su in sns:
+        status_counts[su.status] = status_counts.get(su.status, 0) + 1
+    recent_sns = sorted(sns, key=lambda s: s.id, reverse=True)[:30]
+
+    from lightmes.modules.production.models import DefectRecord
+    from lightmes.modules.production.repository import BatchRepository
+    batches = BatchRepository(db).list_by_work_order(wo.id)
+    defects = list(db.execute(
+        select(DefectRecord).where(DefectRecord.work_order_id == wo.id)
+        .order_by(DefectRecord.id.desc()).limit(20)
+    ).scalars().all())
+
+    from lightmes.modules.issue.models import Issue
+    issues = list(db.execute(
+        select(Issue).where(Issue.work_order_id == wo.id)
+        .order_by(Issue.status, Issue.id.desc()).limit(20)
+    ).scalars().all())
+
+    user = current_user_or_none(request, db)
+    can_manage = user is not None and user.role_obj is not None and \
+        user.role_obj.name in ("admin", "supervisor")
+
+    return templates.TemplateResponse(
+        request, "production/work_order_detail.html",
+        {"wo": wo, "product": product, "routing": routing, "line": line,
+         "status_counts": status_counts, "recent_sns": recent_sns,
+         "batches": batches, "defects": defects, "issues": issues,
+         "can_manage": can_manage,
+         "error": request.query_params.get("error")},
+    )
 
 
 @router.get("/production/sn-rules", response_class=HTMLResponse)
@@ -170,8 +250,18 @@ def sn_rules_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespon
         return auth_response
     rules = ProductionService(db).sn_rules.list_all()
     return templates.TemplateResponse(
-        request, "production/sn_rules.html", {"rules": rules}
+        request, "production/sn_rules.html",
+        {"rules": rules, "error": request.query_params.get("error")}
     )
+
+
+def _sn_rules_back(error: str | None = None):
+    from urllib.parse import quote
+    from fastapi.responses import RedirectResponse
+    url = "/production/sn-rules"
+    if error:
+        url += f"?error={quote(error)}"
+    return RedirectResponse(url, status_code=303)
 
 
 @router.post("/production/sn-rules", response_class=HTMLResponse)
@@ -186,18 +276,53 @@ def sn_rules_create_page(
     _, auth_response = html_role_guard(request, db, "admin", "supervisor")
     if auth_response is not None:
         return auth_response
-    svc = ProductionService(db)
     try:
-        rule = svc.create_sn_rule(SnRuleCreate(
+        ProductionService(db).create_sn_rule(SnRuleCreate(
             code=code, name=name, pattern=pattern,
             seq_reset=seq_reset, product_id=None))
+        db.commit()
     except ValueError as e:
-        return templates.TemplateResponse(
-            request, "masterdata/partials/error_row.html",
-            {"error": str(e), "colspan": 5})
-    return templates.TemplateResponse(
-        request, "production/partials/sn_rule_row.html", {"r": rule}
-    )
+        db.rollback()
+        return _sn_rules_back(str(e))
+    return _sn_rules_back()
+
+
+@router.post("/production/sn-rules/{rule_id}/update", response_class=HTMLResponse)
+def sn_rules_update_page(
+    rule_id: int, request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    pattern: str = Form(...),
+    seq_reset: str = Form("never"),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    _, auth_response = html_role_guard(request, db, "admin", "supervisor")
+    if auth_response is not None:
+        return auth_response
+    try:
+        ProductionService(db).update_sn_rule(
+            rule_id, code=code, name=name, pattern=pattern, seq_reset=seq_reset)
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        return _sn_rules_back(str(e))
+    return _sn_rules_back()
+
+
+@router.post("/production/sn-rules/{rule_id}/delete", response_class=HTMLResponse)
+def sn_rules_delete_page(
+    rule_id: int, request: Request, db: Session = Depends(get_db),
+) -> HTMLResponse:
+    _, auth_response = html_role_guard(request, db, "admin", "supervisor")
+    if auth_response is not None:
+        return auth_response
+    try:
+        ProductionService(db).delete_sn_rule(rule_id)
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        return _sn_rules_back(str(e))
+    return _sn_rules_back()
 
 
 @router.get("/production/wip", response_class=HTMLResponse)
@@ -317,7 +442,10 @@ def api_batch_complete(
 
 @router.get("/production/station", response_class=HTMLResponse)
 def station_page(
-    request: Request, work_station_id: int = 0, db: Session = Depends(get_db)
+    request: Request,
+    work_station_id: int = 0,
+    work_order_id: int = 0,
+    db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator")
     if auth_response is not None:
@@ -331,7 +459,11 @@ def station_page(
     ]
     return templates.TemplateResponse(
         request, "production/station.html",
-        {"work_station_id": work_station_id, "station_options": station_options},
+        {
+            "work_station_id": work_station_id,
+            "work_order_id": work_order_id,
+            "station_options": station_options,
+        },
     )
 
 
@@ -344,7 +476,7 @@ def station_load(
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+        return login_redirect(request)
     try:
         view = StationService(db).load(scan, work_station_id, user.id)
     except DomainError as e:
@@ -389,7 +521,7 @@ def station_pass(
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+        return login_redirect(request)
     operator_id = user.id
     # 组件：收集 serial (component_sn) 和 batch (component_batch) 两种
     components = []
@@ -503,17 +635,36 @@ def station_pass(
                         test_values.append(test_value)
                     # 提交测试数据
                     if test_values:
-                        td_svc.submit_test_data(
-                            TestDataRecordSubmitInput(
-                                operation_record_id=latest_op_record.id,
-                                values=test_values,
-                                remark=td_overall_remark or None,
-                            ),
-                            user.id
-                        )
+                        # SAVEPOINT：失败只回滚测试数据本身，过站写入不受影响
+                        nested = db.begin_nested()
+                        try:
+                            td_record = td_svc.submit_test_data(
+                                TestDataRecordSubmitInput(
+                                    operation_record_id=latest_op_record.id,
+                                    values=test_values,
+                                    remark=td_overall_remark or None,
+                                ),
+                                user.id
+                            )
+                            nested.commit()
+                        except Exception:
+                            nested.rollback()
+                            raise
+                        # 质量闸门：测试判定 failed → 隔离 SN + 自动建缺陷单
+                        if td_record.overall_result == "failed" and su is not None:
+                            defect = DefectService(db).log_defect_from_test_data(
+                                td_record=td_record, sn=su.sn,
+                                discovered_by=user.id,
+                                remark=f"测试数据不合格（模板 {td_template.name}）")
+                            if defect is not None:
+                                td_warning = (
+                                    f"测试判定 NG：SN {su.sn} 已隔离，"
+                                    f"缺陷记录 #{defect.id} 已创建，请前往 /quality/defects/{defect.id} 处理。")
         except Exception:
             # 业务策略：测试数据失败不阻断过站，但必须可观测并向操作员提示，
             # 否则会产生"过站成功但无测试数据"的孤立状态且无法诊断。
+            # 测试数据包在 SAVEPOINT 内提交，失败只回滚 savepoint：
+            # 既保住过站写入，又避免在 aborted 事务上继续查询导致 500。
             logger.exception(
                 "测试数据提交失败（过站已成功，sn=%s, operation_record_id=%s, work_station_id=%s）",
                 su.sn if su else None, passed_op_id, work_station_id,
@@ -586,7 +737,7 @@ def station_andon_form(
 ):
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=302, headers={"Location": "/login"})
+        return login_redirect(request)
     from lightmes.modules.issue.repository import IssueTypeRepository
     types = IssueTypeRepository(db).list_active()
     return templates.TemplateResponse(
@@ -642,18 +793,23 @@ def station_skip(
 
 @router.get("/production/station/work-orders", response_class=HTMLResponse)
 def station_work_orders(
-    request: Request, work_station_id: int = Query(...), db: Session = Depends(get_db),
+    request: Request, work_station_id: int = Query(0), db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
-    ws = MasterDataQueryService(db).get_work_station(work_station_id)
+        return login_redirect(request)
+    ws = MasterDataQueryService(db).get_work_station(work_station_id) if work_station_id else None
     if ws is None:
-        return HTMLResponse("")  # 作业站不存在 → 空片段
+        # 未选作业站（页面初始 load）/作业站不存在 → 保持占位，不清空下拉
+        return templates.TemplateResponse(
+            request, "production/partials/station_wo_options.html",
+            {"wo_list": []},
+        )
     wo_repo = ProductionService(db).work_orders
     su_repo = SerialUnitRepository(db)
     wo_list = [
-        {"id": w.id, "code": w.code, "remaining": su_repo.count_pending_by_work_order(w.id)}
+        {"id": w.id, "code": w.code,
+         "remaining": su_repo.count_by_wo_status(w.id, ("pending",))}
         for w in wo_repo.selectable_for_station(ws.line_id)
     ]
     return templates.TemplateResponse(
@@ -672,7 +828,7 @@ def station_enter(
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=401, headers={"HX-Redirect": "/login"})
+        return login_redirect(request)
     su_repo = SerialUnitRepository(db)
     load_svc = StationService(db)
     try:
@@ -721,14 +877,15 @@ def station_enter(
 def shifts_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     user = current_user_or_none(request, db)
     if user is None:
-        return HTMLResponse("请先登录", status_code=401)
+        return login_redirect(request)
     from lightmes.modules.production.shift_service import ShiftService
     from lightmes.modules.masterdata.repository import LineRepository
     shifts = ShiftService(db).list_all()
     lines = LineRepository(db).list_all()
     return templates.TemplateResponse(
         request, "production/shifts.html",
-        {"shifts": shifts, "lines": lines},
+        {"shifts": shifts, "lines": lines,
+         "error": request.query_params.get("error")},
     )
 
 
@@ -745,8 +902,10 @@ def shift_create(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     user = current_user_or_none(request, db)
-    if user is None or not _can_skip(user):  # 复用 admin/supervisor 守卫
-        return HTMLResponse("权限不足", status_code=403)
+    if user is None:
+        return login_redirect(request)
+    if not _can_skip(user):  # 复用 admin/supervisor 守卫
+        return HTMLResponse("权限不足：需要 admin/supervisor", status_code=403)
     from lightmes.modules.production.shift_service import ShiftService
     from lightmes.modules.production.schemas import ShiftCreate
     dows = (
@@ -759,7 +918,10 @@ def shift_create(
             days_of_week=dows, line_id=line_id, sort_order=sort_order))
         db.commit()
     except Exception as e:
-        return HTMLResponse(f"创建失败: {e}", status_code=400)
+        db.rollback()
+        from urllib.parse import quote as _quote
+        return RedirectResponse(
+            url=f"/production/shifts?error={_quote(str(e))}", status_code=303)
     return RedirectResponse(url="/production/shifts", status_code=303)
 
 

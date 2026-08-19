@@ -2,64 +2,96 @@
 {% block title %}BOM 详情 #{{ bom.id }}{% endblock %}
 {% block content %}
 <h1 class="page-title">BOM 详情 <small>#{{ bom.id }}</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
 <div class="card">
   <div class="card__title">
     {{ bom.product_code }} {{ bom.product_name }} — 版本 {{ bom.version }}
-    <span class="badge">{{ bom.status }}</span>
+    {% if bom.status == 'active' %}<span class="badge badge--ok">active</span>{% else %}<span class="badge">inactive</span>{% endif %}
     {% if bom.source == "erp" %}<span class="badge">ERP</span>{% else %}<span class="badge">本地</span>{% endif %}
+    {% if routing %}· 工艺路线 <a href="/masterdata/routings/{{ routing.id }}">{{ routing.code }} {{ routing.name }}</a>{% endif %}
+    <span style="float:right;white-space:nowrap">
+      <form method="post" action="/masterdata/boms/{{ bom.id }}/toggle-active" style="display:inline"
+            onsubmit="return confirm({% if bom.status == 'active' %}'停用后该产品无启用 BOM。确认？'{% else %}'启用本版本将停用其他版本。确认？'{% endif %})">
+        <button type="submit" class="btn-secondary">{% if bom.status == 'active' %}停用{% else %}启用{% endif %}</button>
+      </form>
+      {% if bom.status != 'active' %}
+      <form method="post" action="/masterdata/boms/{{ bom.id }}/delete" style="display:inline"
+            onsubmit="return confirm('确认删除该 BOM 及全部组件行？')">
+        <button type="submit" class="btn-danger">删除 BOM</button>
+      </form>
+      {% endif %}
+    </span>
   </div>
+  <p class="nav-card__desc" style="margin-bottom:10px">
+    <strong>消耗工序</strong>：该组件在哪道工序装配并校验绑定——工序开启"强制绑料"后，未绑齐本工序组件将无法过站；
+    选"仅最终校验"表示不指定工序，只在末工序统一校验（多工序产线建议明确指定）。
+  </p>
+
+  <div class="data-table-wrap">
   <table class="data-table" id="bom-items-table">
-    <thead><tr><th>组件</th><th>track_mode</th><th>qty</th><th>消耗工序</th><th></th></tr></thead>
+    <thead><tr><th>组件</th><th>track_mode</th><th>用量</th><th>消耗工序</th><th>操作</th></tr></thead>
     <tbody>
       {% for item in bom['items'] %}
       <tr data-item-id="{{ item.id }}">
         <td>{{ item.component_code }} {{ item.component_name }}</td>
         <td>{{ item.track_mode }}</td>
-        <td>{{ item.qty }}</td>
         <td>
-          <select name="consume_at_operation_seq"
-                  onchange="updateConsumeOp({{ item.id }}, this.value)">
-            <option value="">仅最终校验（老行为）</option>
-            {% for op in operations %}
-            <option value="{{ op.seq }}"
-                    {% if item.consume_at_operation_seq == op.seq %}selected{% endif %}>
-              工序 {{ op.seq }} — {{ op.code }} {{ op.name }}
-            </option>
-            {% endfor %}
-          </select>
+          <form method="post" action="/masterdata/boms/{{ bom.id }}/items/{{ item.id }}/update" style="display:flex;gap:6px;align-items:center">
+            <input type="number" name="qty" step="0.001" min="0.001" value="{{ item.qty|int }}" style="width:80px">
+            <select name="consume_at_operation_seq">
+              <option value="">仅最终校验</option>
+              {% for op in operations %}
+              <option value="{{ op.seq }}" {% if item.consume_at_operation_seq == op.seq %}selected{% endif %}>
+                工序 {{ op.seq }} — {{ op.code }} {{ op.name }}
+              </option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn-secondary">保存</button>
+          </form>
         </td>
-        <td><span class="badge update-status" style="display:none"></span></td>
+        <td>
+          {% if item.consume_at_operation_seq is none %}<span class="badge badge--warn">未指定</span>
+          {% else %}<span class="badge">工序 {{ item.consume_at_operation_seq }}</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/masterdata/boms/{{ bom.id }}/items/{{ item.id }}/delete"
+                onsubmit="return confirm('确认移除组件 {{ item.component_code }}？')">
+            <button type="submit" class="btn-danger">移除</button>
+          </form>
+        </td>
       </tr>
+      {% else %}
+      <tr><td colspan="5">暂无组件行</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
-<p><a href="/masterdata/boms">返回 BOM 列表</a></p>
-<script>
-function updateConsumeOp(itemId, seqStr) {
-  var seq = seqStr ? parseInt(seqStr, 10) : null;
-  var row = document.querySelector('tr[data-item-id="' + itemId + '"]');
-  var status = row.querySelector('.update-status');
-  status.style.display = 'inline-block';
-  status.textContent = '保存中...';
-  fetch('/api/masterdata/bom-items/' + itemId + '/consume-op', {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({consume_at_operation_seq: seq}),
-  }).then(function(r) {
-    if (r.ok) {
-      status.textContent = '已保存';
-      setTimeout(function() { status.style.display = 'none'; }, 1500);
-    } else {
-      return r.json().then(function(d) {
-        status.textContent = '失败：' + (d.detail || r.status);
-        alert('更新失败：' + (d.detail || r.status) + '\n请刷新页面');
-      });
-    }
-  }).catch(function(e) {
-    status.textContent = '网络错误';
-    alert('网络错误：' + e);
-  });
-}
-</script>
+
+<div class="card">
+  <div class="card__title">添加组件</div>
+  <form method="post" action="/masterdata/boms/{{ bom.id }}/items" class="form-row">
+    <div class="field" style="min-width:260px"><label>组件（非成品）</label>
+      <select name="component_product_id" required>
+        <option value="">-- 选择组件 --</option>
+        {% for c in component_candidates %}
+        <option value="{{ c.id }}">{{ c.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>用量</label><input type="number" name="qty" step="0.001" min="0.001" value="1" required></div>
+    <div class="field"><label>消耗工序</label>
+      <select name="consume_at_operation_seq">
+        <option value="">仅最终校验</option>
+        {% for op in operations %}
+        <option value="{{ op.seq }}">工序 {{ op.seq }} — {{ op.code }} {{ op.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>&nbsp;</label><button type="submit">添加</button></div>
+  </form>
+</div>
+
+<p><a href="/masterdata/boms">← 返回 BOM 列表</a></p>
 {% endblock %}

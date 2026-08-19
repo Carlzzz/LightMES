@@ -1,1 +1,1 @@
-<div class="alert alert--ok">✓ 缺陷 <strong>{{ record.defect_type_code }} {{ record.defect_type_name }}</strong> 已登记（记录 #{{ record.id }}），SN <strong>{{ record.serial_unit_id }}</strong> 已隔离。请前往 <a href="/quality/defects/{{ record.id }}">缺陷详情</a> 处理。</div>
+<div class="alert alert--ok">✓ 缺陷 <strong>{{ record.defect_type_code }} {{ record.defect_type_name }}</strong> 已登记（记录 #{{ record.id }}），SN <strong>{{ sn }}</strong> 已隔离。请前往 <a href="/quality/defects/{{ record.id }}">缺陷详情</a> 处理，或查看 <a href="/trace/query?type=history&value={{ sn | urlencode }}">该 SN 履历</a>。</div>

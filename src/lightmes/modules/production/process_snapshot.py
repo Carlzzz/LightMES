@@ -18,8 +18,10 @@ class SnapshotOperation:
     allowed_work_station_ids: list[int]
     required_skill_id: int | None
     required_level: int | None
-    sop_text: str | None
-    sop_url: str | None
+    require_material_binding: bool = False
+    require_param_collection: bool = False
+    sop_text: str | None = None
+    sop_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,8 @@ def build_process_snapshot(db: Session, work_order: WorkOrder) -> dict:
                 "allowed_work_station_ids": allowed_ids,
                 "required_skill_id": op.required_skill_id,
                 "required_level": op.required_level,
+                "require_material_binding": bool(getattr(op, "require_material_binding", False)),
+                "require_param_collection": bool(getattr(op, "require_param_collection", False)),
                 "sop_text": op.sop_text,
                 "sop_url": op.sop_url,
             }
@@ -107,6 +111,8 @@ def snapshot_operations(work_order: WorkOrder) -> list[SnapshotOperation]:
             allowed_work_station_ids=op["allowed_work_station_ids"],
             required_skill_id=op.get("required_skill_id"),
             required_level=op.get("required_level"),
+            require_material_binding=bool(op.get("require_material_binding", False)),
+            require_param_collection=bool(op.get("require_param_collection", False)),
             sop_text=op.get("sop_text"),
             sop_url=op.get("sop_url"),
         )
@@ -152,6 +158,8 @@ def get_work_order_process(db: Session, work_order: WorkOrder) -> WorkOrderProce
             ] or [op.default_work_station_id],
             required_skill_id=op.required_skill_id,
             required_level=op.required_level,
+            require_material_binding=bool(getattr(op, "require_material_binding", False)),
+            require_param_collection=bool(getattr(op, "require_param_collection", False)),
             sop_text=op.sop_text,
             sop_url=op.sop_url,
         )

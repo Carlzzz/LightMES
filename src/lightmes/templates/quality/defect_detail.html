@@ -2,14 +2,16 @@
 {% block title %}缺陷详情 #{{ record.id }}{% endblock %}
 {% block content %}
 <h1 class="page-title">缺陷详情 <small>#{{ record.id }}</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
   <div class="card__title">基本信息</div>
   <table class="data-table">
     <tr><th>缺陷类型</th><td>{{ record.defect_type_code }} {{ record.defect_type_name }}</td></tr>
     <tr><th>严重度</th><td><span class="badge severity-{{ record.severity }}">{{ record.severity }}</span></td></tr>
-    <tr><th>SN ID</th><td>{{ record.serial_unit_id }}</td></tr>
-    <tr><th>SN 状态</th><td>{{ su.status if su else '-' }}</td></tr>
+    <tr><th>SN</th><td>{% if su %}<a href="/trace/query?type=history&value={{ su.sn | urlencode }}">{{ su.sn }}</a> <span class="badge">{{ su.status }}</span>{% else %}-{% endif %}</td></tr>
+    <tr><th>工单</th><td>{% if wo %}{{ wo.code }}（{{ wo.status }}，产出 {{ wo.produced_qty }}/{{ wo.qty }}）{% else %}-{% endif %}</td></tr>
+    <tr><th>发现工位</th><td>{% if ws %}{{ ws.code }} {{ ws.name }}{% elif record.work_station_id %}#{{ record.work_station_id }}{% else %}-{% endif %}</td></tr>
     <tr><th>位置</th><td>{{ record.position or '-' }}</td></tr>
     <tr><th>发现时间</th><td>{{ record.discovered_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
     <tr><th>处理状态</th><td><span class="badge status-{{ record.handling_status }}">{{ record.handling_status }}</span></td></tr>
@@ -28,7 +30,7 @@
   {% if can_handle %}
   <details>
     <summary><strong>返工</strong>（SN 回到 target_seq 工序重做）</summary>
-    <form hx-post="/quality/defects/{{ record.id }}/handle-rework" class="form-row" style="margin-top:12px"
+    <form method="post" action="/quality/defects/{{ record.id }}/handle-rework" class="form-row" style="margin-top:12px"
           onsubmit="return confirm('确认返工？')">
       <div class="field"><label>回退到工序</label>
         <select name="target_seq" required
@@ -66,6 +68,17 @@
       <button type="submit">确认让步</button>
     </form>
   </details>
+
+  {% if is_first_inspection_fail %}
+  <details>
+    <summary><strong>首检豁免放行</strong>（waived：首检结果保持记录，授权跳过本次首检要求）</summary>
+    <form method="post" action="/quality/defects/{{ record.id }}/release-inspection" class="form-row" style="margin-top:12px"
+          onsubmit="return confirm('确认豁免放行？首检 failed 记录将标记为 waived')">
+      <div class="field" style="flex:1"><label>放行说明（必填）</label><input name="release_remark" required></div>
+      <button type="submit">确认放行</button>
+    </form>
+  </details>
+  {% endif %}
   {% else %}
   <p class="nav-card__desc">处理决策（返工/报废/让步）需 supervisor/admin 角色</p>
   {% endif %}

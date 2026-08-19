@@ -45,6 +45,7 @@ class WorkOrder(Base, TimestampMixin):
         ),
         CheckConstraint("qty > 0", name="ck_work_orders_qty_positive"),
         CheckConstraint("produced_qty >= 0", name="ck_work_orders_produced_qty_nonnegative"),
+        CheckConstraint("scrap_qty >= 0", name="ck_work_orders_scrap_qty_nonnegative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -59,6 +60,7 @@ class WorkOrder(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(default="created")
     source: Mapped[str] = mapped_column(default="manual")
     produced_qty: Mapped[int] = mapped_column(default=0)
+    scrap_qty: Mapped[int] = mapped_column(default=0)
     planned_start: Mapped[datetime | None] = mapped_column(default=None)
     planned_end: Mapped[datetime | None] = mapped_column(default=None)
     priority: Mapped[int] = mapped_column(default=5)
@@ -83,7 +85,9 @@ class SerialUnit(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sn: Mapped[str] = mapped_column(unique=True, index=True)
-    work_order_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id"))
+    # 工单件必填；唯一件组件的入库档案无工单（料号校验依赖组件 SN → product 解析）
+    work_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("work_orders.id"), default=None)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     status: Mapped[str] = mapped_column(default="in_process")
     current_operation_seq: Mapped[int] = mapped_column(default=0)

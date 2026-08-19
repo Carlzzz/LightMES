@@ -147,6 +147,7 @@ def rework_submit(
     return templates.TemplateResponse(
         request, "trace/partials/rework_success.html",
         {"su": su, "station_name": station_name,
+         "expected_repass_station_id": expected_repass_station_id,
          "target_seq": target_seq,
          "first_repass_op_seq": first_repass_op.seq if first_repass_op else None,
          "first_repass_op_name": first_repass_op.name if first_repass_op else None})

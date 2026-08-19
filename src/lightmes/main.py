@@ -102,7 +102,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CsrfMiddleware,
-    exempt_prefixes=("/api/", "/mcp"),
+    exempt_prefixes=("/mcp",),
 )
 app.add_middleware(
     SessionMiddleware,

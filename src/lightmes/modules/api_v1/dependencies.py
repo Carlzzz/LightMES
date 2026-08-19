@@ -80,6 +80,9 @@ def require_api_key(*scopes: str):
                 )
             return user
         # Path 2: Session cookie fallback (for browser admin UI)
+        # 仅允许 GET（读操作）：CSRF 中间件对写方法要求 X-CSRF-Token 头，
+        # 程序化客户端不带 cookie 也拿不到该头；若放行写方法，恶意页面可借
+        # 管理员浏览器跨站 POST /api/v1/* 绕过 CSRF 防护。
         # 防御：若 SessionMiddleware 未装（如独立 FastAPI 实例测试），跳过 session 路径
         user = None
         if "session" in request.scope:
@@ -88,6 +91,11 @@ def require_api_key(*scopes: str):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="需要 Bearer token 或登录会话",
+            )
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="写操作需使用 Bearer API Key（session 仅支持读）",
             )
         request.state.api_key_user_id = user.id
         set_audit_user(user.id)

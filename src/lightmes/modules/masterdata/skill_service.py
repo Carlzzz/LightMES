@@ -44,6 +44,58 @@ class SkillService:
     def list_operator_skills(self) -> list[OperatorSkill]:
         return self.operator_skills.list_all()
 
+    def update_skill(self, skill_id: int, *, code: str, name: str,
+                     max_level: int, description: str | None = None) -> Skill:
+        skill = self.skills.get(skill_id)
+        if skill is None:
+            raise ValueError(f"技能不存在: {skill_id}")
+        dup = self.skills.get_by_code(code)
+        if dup is not None and dup.id != skill_id:
+            raise ValueError(f"技能编码已存在: {code}")
+        # 等级下调时校验既有档案不越界
+        from sqlalchemy import select, func
+        over = self.db.execute(
+            select(func.count()).select_from(OperatorSkill).where(
+                OperatorSkill.skill_id == skill_id,
+                OperatorSkill.level > max_level)
+        ).scalar_one()
+        if over > 0:
+            raise ValueError(f"有 {over} 条人员档案等级超过新上限 {max_level}，请先调整")
+        skill.code = code
+        skill.name = name
+        skill.max_level = max_level
+        skill.description = description
+        self.db.flush()
+        return skill
+
+    def delete_skill(self, skill_id: int) -> None:
+        from sqlalchemy import select, func
+        from lightmes.modules.masterdata.models import Operation
+        skill = self.skills.get(skill_id)
+        if skill is None:
+            raise ValueError(f"技能不存在: {skill_id}")
+        op_refs = self.db.execute(
+            select(func.count()).select_from(Operation).where(
+                Operation.required_skill_id == skill_id)
+        ).scalar_one()
+        if op_refs > 0:
+            raise ValueError(f"该技能被 {op_refs} 道工序引用，不可删除")
+        used = self.db.execute(
+            select(func.count()).select_from(OperatorSkill).where(
+                OperatorSkill.skill_id == skill_id)
+        ).scalar_one()
+        if used > 0:
+            raise ValueError(f"有 {used} 条人员档案使用该技能，请先删除档案")
+        self.db.delete(skill)
+        self.db.flush()
+
+    def delete_operator_skill(self, os_id: int) -> None:
+        os = self.db.get(OperatorSkill, os_id)
+        if os is None:
+            raise ValueError(f"人员技能档案不存在: {os_id}")
+        self.db.delete(os)
+        self.db.flush()
+
     def get_operator_level(self, user_id: int, skill_id: int) -> int | None:
         os = self.operator_skills.get_by_user_skill(user_id, skill_id)
         return os.level if os is not None else None

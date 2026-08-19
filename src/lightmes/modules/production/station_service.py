@@ -232,4 +232,6 @@ class StationService:
             first_inspection=first_inspection_view,
             test_data=test_data_view,
             blocking_issue=blocking_issue,
+            require_material_binding=bool(getattr(expected, "require_material_binding", False)) if expected is not None else False,
+            require_param_collection=bool(getattr(expected, "require_param_collection", False)) if expected is not None else False,
         )

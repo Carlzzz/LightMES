@@ -28,7 +28,7 @@ def material_lots_page(request: Request, db: Session = Depends(get_db)) -> HTMLR
     return templates.TemplateResponse(
         request,
         "inventory/material_lots.html",
-        {"lots": lots},
+        {"lots": lots, "error": request.query_params.get("error")},
     )
 
 
@@ -102,7 +102,9 @@ def material_lots_create(
         db.commit()
     except Exception as e:
         db.rollback()
-        return HTMLResponse(f"创建失败: {e}", status_code=400)
+        from urllib.parse import quote as _quote
+        return RedirectResponse(
+            url=f"/inventory/material-lots?error={_quote(str(e))}", status_code=303)
     return RedirectResponse(url="/inventory/material-lots", status_code=303)
 
 

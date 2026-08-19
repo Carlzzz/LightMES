@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Issue #{{ issue.id }}{% endblock %}
 {% block content %}
-<h1 class="page-title">#{{ issue.id }} <small>{{ issue.title }}</small></h1>
+<h1 class="page-title">#{{ issue.id }} <small>{{ issue.title }} · <a href="/issues">← 返回看板</a></small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
   <div class="card__title">概要</div>
@@ -17,10 +18,10 @@
 
 <div class="card">
   <div class="card__title">关联上下文</div>
-  <p>SN: {% if issue.serial_unit_id %}<a href="/trace/query?sn={{ issue.serial_unit_id }}">#{{ issue.serial_unit_id }}</a>{% else %}—{% endif %} ·
-  WO: {% if issue.work_order_id %}#{{ issue.work_order_id }}{% else %}—{% endif %} ·
-  工位: {% if issue.work_station_id %}#{{ issue.work_station_id }}{% else %}—{% endif %} ·
-  工序: {% if issue.operation_id %}#{{ issue.operation_id }}{% else %}—{% endif %}
+  <p>SN: {% if serial_unit_sn %}<a href="/trace/query?type=history&value={{ serial_unit_sn | urlencode }}">{{ serial_unit_sn }}</a>{% else %}—{% endif %} ·
+  WO: {% if wo %}<a href="/production/work-orders/{{ wo.id }}">{{ wo.code }}</a>（{{ wo.status }}）{% else %}—{% endif %} ·
+  工位: {% if station %}{{ station.code }} {{ station.name }}{% else %}—{% endif %} ·
+  工序: {% if operation %}{{ operation.seq }} {{ operation.name }}{% else %}—{% endif %}
   {% if issue.defect_id %}· <a href="/quality/defects/{{ issue.defect_id }}">关联缺陷 #{{ issue.defect_id }}</a>{% endif %}</p>
   <p style="color:var(--text-soft);font-size:12px">上报 #{{ issue.reported_by_id }} @ {{ issue.reported_at }}
     {% if issue.acknowledged_at %} · 确认 #{{ issue.acknowledged_by_id }} @ {{ issue.acknowledged_at }}{% endif %}
@@ -50,8 +51,26 @@
           <option value="hold">暂存 (hold)</option>
         </select>
       </div>
+      {% if issue.defect_id %}
+      <div class="field" style="flex:1"><label style="color:var(--warn)">关联缺陷 #{{ issue.defect_id }} 未处理时，处置将同步执行到缺陷单</label></div>
+      {% endif %}
+      <div class="field" id="issue-rework-params" style="display:none">
+        <label>返工参数（缺陷联动必填）</label>
+        <input name="target_seq" type="number" min="0" placeholder="回退到工序 seq">
+        <input name="expected_repass_station_id" type="number" min="1" placeholder="首站重做站位 ID">
+      </div>
       <div class="field" style="flex:1"><label>处置备注</label><input name="resolution_notes"></div>
       <button type="submit">提交处置</button>
+      <script>
+      (function () {
+        var sel = document.querySelector('form[action*="/resolve"] select[name="disposition"]');
+        var box = document.getElementById('issue-rework-params');
+        if (!sel || !box) return;
+        sel.addEventListener('change', function () {
+          box.style.display = sel.value === 'rework' ? '' : 'none';
+        });
+      })();
+      </script>
     </form>
   </details>
   {% elif issue.status == 'resolved' %}

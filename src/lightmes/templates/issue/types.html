@@ -2,6 +2,7 @@
 {% block title %}Issue 类型字典{% endblock %}
 {% block content %}
 <h1 class="page-title">Issue 类型字典 <small>Admin only</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
   <div class="card__title">新建类型</div>

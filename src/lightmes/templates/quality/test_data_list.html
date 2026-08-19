@@ -52,7 +52,7 @@
 
 <div class="card">
   <div class="card__title">新建模板</div>
-  <form class="form-row" hx-post="/quality/test-data" hx-target="body" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+  <form class="form-row" hx-post="/quality/test-data" hx-target="#create-result" hx-swap="innerHTML" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
     <div class="field" style="min-width: 180px;">
       <label>模板名称</label>
       <input type="text" name="name" required placeholder="如：OP30测试">
@@ -92,5 +92,6 @@
     </div>
     <button type="submit">创建模板</button>
   </form>
+  <div id="create-result" class="result-slot"></div>
 </div>
 {% endblock %}

@@ -2,16 +2,52 @@
 {% block title %}BOM 管理{% endblock %}
 {% block content %}
 <h1 class="page-title">BOM 管理 <small>ERP 同步 / 本地</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
+<div class="card">
+  <div class="card__title">新建 BOM</div>
+  <form method="post" action="/masterdata/boms" class="form-row">
+    <div class="field"><label>成品产品</label>
+      <select name="product_id" required>
+        <option value="">-- 选择成品 --</option>
+        {% for p in products %}
+        <option value="{{ p.id }}">{{ p.code }} {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>版本</label><input name="version" value="1" required></div>
+    <div class="field"><label>&nbsp;</label><button type="submit">创建</button></div>
+  </form>
+  <p class="nav-card__desc">创建后进入详情添加组件；同产品已有启用版本时新 BOM 为 inactive。</p>
+</div>
+
 <div class="card">
   <div class="card__title">BOM 列表</div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>成品</th><th>版本</th><th>状态</th><th>来源</th></tr></thead>
+    <thead><tr><th>ID</th><th>成品</th><th>版本</th><th>状态</th><th>来源</th><th>操作</th></tr></thead>
     <tbody>
       {% for b in boms %}
-      <tr><td><a href="/masterdata/boms/{{ b.id }}">#{{ b.id }}</a></td>
-      <td>{% set p = product_map.get(b.product_id) %}{{ p.code if p else b.product_id }} {{ p.name if p else '' }}</td>
-      <td>{{ b.version }}</td><td>{{ b.status }}</td>
-      <td>{% if b.source=="erp" %}<span class="badge">ERP</span>{% else %}<span class="badge">本地</span>{% endif %}</td></tr>
+      <tr>
+        <td><a href="/masterdata/boms/{{ b.id }}">#{{ b.id }}</a></td>
+        <td>{% set p = product_map.get(b.product_id) %}{{ p.code if p else b.product_id }} {{ p.name if p else '' }}</td>
+        <td>{{ b.version }}</td>
+        <td>{% if b.status == 'active' %}<span class="badge badge--ok">active</span>{% else %}<span class="badge">inactive</span>{% endif %}</td>
+        <td>{% if b.source=="erp" %}<span class="badge">ERP</span>{% else %}<span class="badge">本地</span>{% endif %}</td>
+        <td style="white-space:nowrap">
+          <form method="post" action="/masterdata/boms/{{ b.id }}/toggle-active" style="display:inline"
+                onsubmit="return confirm({% if b.status == 'active' %}'停用后该产品无启用 BOM，新工单将无物料校验。确认停用？'{% else %}'启用本版本将自动停用该产品的其他版本。确认启用？'{% endif %})">
+            <button type="submit" class="btn-secondary">{% if b.status == 'active' %}停用{% else %}启用{% endif %}</button>
+          </form>
+          {% if b.status != 'active' %}
+          <form method="post" action="/masterdata/boms/{{ b.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除该 BOM 及其全部组件行？')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">暂无 BOM</td></tr>
       {% endfor %}
     </tbody>
   </table>

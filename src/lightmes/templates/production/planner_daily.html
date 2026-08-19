@@ -3,7 +3,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/planner.css">
 {% endblock %}
-{% block container_class %}--planner{% endblock %}
+{% block container_class %} container--planner{% endblock %}
 {% block content %}
 <div class="planner-root">
   <div class="planner-toolbar">
@@ -36,7 +36,7 @@
           <div class="planner-gantt__block planner-gantt__block--{{ wo_card_status(wo) }}"
                data-wo-id="{{ wo.id }}"
                style="left: {{ left_px }}px; width: {{ width_px }}px;">
-            <div class="planner-gantt__block-label">{{ wo.code }} ({{ wo.produced_qty }}/{{ wo.qty }})</div>
+            <div class="planner-gantt__block-label">{{ wo.code }} (产出 {{ wo.produced_qty }}/{{ wo.qty }})</div>
             <div class="planner-gantt__resize-handle"></div>
           </div>
           {% endif %}

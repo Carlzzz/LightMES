@@ -313,13 +313,19 @@ class FirstInspectionService:
         if record is None:
             raise ValueError(f"首检记录不存在: {data.record_id}")
 
+        if record.status not in ("failed", "passed"):
+            raise ValueError(f"当前状态 {record.status} 不可放行")
+
         config = self.db.get(FirstInspectionConfig, record.config_id)
 
         if config.require_authorization:
-            # 检查用户角色权限
+            # 检查用户角色权限（role 是 FK 关系 role_obj，非 User 字段）
             user = self.db.get(User, release_by_id)
-            if config.authorized_roles and user.role not in config.authorized_roles:
-                raise ValueError(f"用户角色 {user.role} 无权放行")
+            if user is None:
+                raise ValueError(f"用户不存在: {release_by_id}")
+            role_name = user.role_obj.name if user.role_obj else None
+            if config.authorized_roles and role_name not in config.authorized_roles:
+                raise ValueError(f"用户角色 {role_name} 无权放行")
 
         record.released_by_id = release_by_id
         record.released_at = datetime.now()

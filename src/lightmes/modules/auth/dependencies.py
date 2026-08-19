@@ -34,14 +34,52 @@ def current_user_or_none(request: Request, db: Session) -> User | None:
     return user
 
 
+def _safe_next(request: Request) -> str:
+    """登录后的回跳目标：当前完整路径（含 query），仅接受站内相对路径。"""
+    from urllib.parse import quote
+    path = request.url.path
+    if request.url.query:
+        path = f"{path}?{request.url.query}"
+    if not path.startswith("/") or path.startswith("//"):
+        path = "/"
+    return quote(path, safe="")
+
+
+def login_redirect(request: Request) -> Response:
+    """统一未登录跳转：HTMX → 401+HX-Redirect（htmx 触发浏览器跳转），
+    普通导航 → 302。均携带 ?next= 供登录后回跳原页。"""
+    from urllib.parse import quote
+    next_target = _safe_next(request)
+    login_url = f"/login?next={next_target}"
+    if request.headers.get("HX-Request") == "true":
+        return Response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"HX-Redirect": login_url},
+        )
+    return Response(status_code=302, headers={"Location": login_url})
+
+
+def login_url_for(request: Request) -> str:
+    """构造带 return-to 的登录 URL（供 HTTPException headers 使用）。"""
+    return f"/login?next={_safe_next(request)}"
+
+
 def require_login(request: Request, db: Session = Depends(get_db)) -> User:
     """FastAPI dependency: require an authenticated session, return the current User.
 
     Raises 401 if no valid session. Use on JSON API write endpoints.
+    对 HTMX 表单（如 trace 查询）附带 HX-Redirect 头，避免 401 被静默吞掉。
     """
     user = current_user_or_none(request, db)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="需要登录")
+        headers = {}
+        if request.headers.get("HX-Request") == "true":
+            headers = {"HX-Redirect": login_url_for(request)}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要登录",
+            headers=headers,
+        )
     return user
 
 
@@ -178,10 +216,7 @@ def html_role_guard(
     """
     user = current_user_or_none(request, db)
     if user is None:
-        return None, Response(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"HX-Redirect": "/login"},
-        )
+        return None, login_redirect(request)
     if get_settings().environment != "production":
         return user, None
     role_name = user.role_obj.name if user.role_obj else getattr(user, "role", None)

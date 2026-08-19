@@ -91,5 +91,21 @@ class ReworkService:
                 binding.unbound_reason = "scrap"
             su.carrier_code = None
         su.status = "scrapped"
+        # 报废扣数：工单 scrap_qty +1；产出+报废 >= 计划量时工单完工
+        # （报废件不再可能 finished，欠产工单借此路径收尾）
+        if su.work_order_id is not None:
+            wo = self.db.get(WorkOrder, su.work_order_id)
+            if wo is not None and wo.status in ("released", "in_process"):
+                new_scrap = self.db.execute(
+                    update(WorkOrder)
+                    .where(WorkOrder.id == wo.id)
+                    .values(scrap_qty=WorkOrder.scrap_qty + 1)
+                    .returning(WorkOrder.scrap_qty)
+                ).scalar_one()
+                if wo.produced_qty + new_scrap >= wo.qty:
+                    self.db.execute(
+                        update(WorkOrder).where(WorkOrder.id == wo.id)
+                        .values(status="completed"))
+                self.db.refresh(wo)
         self.db.flush()
         return su

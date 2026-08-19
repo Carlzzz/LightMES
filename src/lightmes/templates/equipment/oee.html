@@ -7,7 +7,7 @@
   <tbody>
   {% for r in rows %}
   <tr>
-    <td>{{ r.code }} {{ r.name }}</td>
+    <td>{{ r.code }} {{ r.name }} <a href="/equipment/downtimes?station_id={{ r.id }}" style="font-size:12px">停机 →</a></td>
     <td>{{ r.state }}</td>
     <td>{{ "%.1f%%"|format(r.availability * 100) }}</td>
     <td>{% if r.quality is not none %}{{ "%.1f%%"|format(r.quality * 100) }}{% else %}N/A{% endif %}</td>

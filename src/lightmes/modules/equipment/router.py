@@ -16,6 +16,7 @@ from lightmes.modules.equipment.models import (
 )
 from lightmes.modules.equipment.oee_service import (
     OeeService, _shift_duration_seconds, compute_availability, compute_oee,
+    shift_window,
 )
 from lightmes.modules.equipment.schemas import TagCreate, TagUpdate
 from lightmes.modules.equipment.state_machine import WorkstationStateMachine
@@ -44,20 +45,28 @@ def _oee_rows(db: Session) -> list[dict]:
     rows = []
     for ws in stations:
         shift = shift_svc.current_at(ws.line_id, now)
-        duration = _shift_duration_seconds(shift) if shift is not None else 8 * 3600
-        since = now - timedelta(seconds=duration)
+        if shift is not None:
+            # 以班次实际开始时间为窗口起点，已运行时长做分母——
+            # 避免 now-整班时长 回溯覆盖上一班的停机
+            since, duration = shift_window(shift, now)
+        else:
+            since = now - timedelta(seconds=8 * 3600)
+            duration = 8 * 3600
         unplanned = oee_svc.unplanned_downtime_seconds(ws.id, since, now)
         availability = compute_availability(duration, unplanned)
 
         wo = db.execute(
-            select(WorkOrder).where(WorkOrder.line_id == ws.line_id)
-            .order_by(WorkOrder.id.desc()).limit(1)
+            select(WorkOrder).where(
+                WorkOrder.line_id == ws.line_id,
+                WorkOrder.status.in_(("released", "in_process")),
+            ).order_by(WorkOrder.id.desc()).limit(1)
         ).scalars().first()
         quality = oee_svc.quality_for_work_order(wo.id) if wo is not None else None
 
         cur = sm.current(ws.id)
         oee = compute_oee(availability, quality if quality is not None else 0.0)
         rows.append({
+            "id": ws.id,
             "code": ws.code,
             "name": ws.name,
             "state": cur.state if cur is not None else "未采集",
@@ -100,16 +109,22 @@ def monitor_transition(work_station_id: int, state: str = Form(...),
 
 
 @router.get("/equipment/downtimes", response_class=HTMLResponse)
-def downtimes_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+def downtimes_page(
+    request: Request, station_id: int | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
     _, auth_response = html_role_guard(request, db, "admin", "supervisor", "operator", "viewer")
     if auth_response is not None:
         return auth_response
-    rows = db.execute(
+    q = (
         select(ProductionDowntime, DowntimeReason.code, DowntimeReason.name, WorkStation.code)
         .outerjoin(DowntimeReason, ProductionDowntime.downtime_reason_id == DowntimeReason.id)
         .join(WorkStation, ProductionDowntime.work_station_id == WorkStation.id)
         .order_by(ProductionDowntime.started_at.desc())
-    ).all()
+    )
+    if station_id is not None:
+        q = q.where(ProductionDowntime.work_station_id == station_id)
+    rows = db.execute(q).all()
     downtimes = [
         {"dt": dt, "reason_code": r_code, "reason_name": r_name, "station_code": ws_code}
         for dt, r_code, r_name, ws_code in rows
@@ -117,9 +132,14 @@ def downtimes_page(request: Request, db: Session = Depends(get_db)) -> HTMLRespo
     reasons = list(db.execute(
         select(DowntimeReason).where(DowntimeReason.is_active.is_(True)).order_by(DowntimeReason.id)
     ).scalars().all())
+    stations = list(db.execute(
+        select(WorkStation).where(WorkStation.is_active.is_(True))
+        .order_by(WorkStation.line_id, WorkStation.seq)
+    ).scalars().all())
     return templates.TemplateResponse(
         request, "equipment/downtimes.html",
-        {"downtimes": downtimes, "reasons": reasons})
+        {"downtimes": downtimes, "reasons": reasons,
+         "stations": stations, "station_id": station_id})
 
 
 @router.get("/equipment/oee", response_class=HTMLResponse)

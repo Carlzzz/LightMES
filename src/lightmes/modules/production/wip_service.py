@@ -17,8 +17,10 @@ class WipService:
         self.query = MasterDataQueryService(db)
 
     def wip_by_work_order(self, work_order_id: int) -> list[WipItem]:
+        """未完工单元：在制 + 返工中 + 隔离（与状态分布对齐，口径可对账）。"""
         units = self.serial_units.list_by_work_order(work_order_id)
-        return [WipItem.model_validate(u) for u in units if u.status == "in_process"]
+        return [WipItem.model_validate(u) for u in units
+                if u.status in ("in_process", "reworking", "quarantined")]
 
     def summary_by_work_order(self, work_order_id: int) -> dict:
         """工单级 WIP 概要：状态分布 + 完工进度。"""

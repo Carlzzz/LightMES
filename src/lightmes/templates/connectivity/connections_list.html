@@ -2,6 +2,7 @@
 {% block title %}数采连接{% endblock %}
 {% block content %}
 <h1 class="page-title">数采连接 <small>MQTT / OPC-UA / Modbus</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
   <div class="card__title">新建连接</div>

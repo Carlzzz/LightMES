@@ -18,9 +18,12 @@
   <div class="station__topbar">
     <div class="station__ident">
       <div><span class="station__label">当前 SN</span>
-        <span class="station__sn">{{ view.sn or "（首件待生成）" }}</span></div>
+        <span class="station__sn">{{ view.sn or "（首件待生成）" }}</span>
+        {% if view.sn %}<a href="/quality/defects?sn={{ view.sn | urlencode }}" style="font-size:12px">缺陷记录 →</a>
+        <a href="/trace/query?type=history&value={{ view.sn | urlencode }}" style="font-size:12px">履历 →</a>{% endif %}</div>
       <div><span class="station__label">成品 / 工单</span>
-        <span>{{ view.product_code }} {{ view.product_name }} / {{ view.work_order_code }}</span></div>
+        <span>{{ view.product_code }} {{ view.product_name }} /
+        {% if view.work_order_id %}<a href="/production/work-orders/{{ view.work_order_id }}">{{ view.work_order_code }}</a>{% else %}{{ view.work_order_code }}{% endif %}</span></div>
     </div>
     <div class="station__operator {% if view.skill_ok %}is-ok{% else %}is-bad{% endif %}">
       <span class="station__label">操作员</span>
@@ -79,7 +82,9 @@
   {% else %}
   <!-- PASS 表单：物料 + 参数一起提交 -->
   <form hx-post="/production/station/pass" hx-target="#station-root" hx-swap="innerHTML" id="station-pass-form"
-        data-skill-ok="{{ '1' if view.skill_ok else '0' }}">
+        data-skill-ok="{{ '1' if view.skill_ok else '0' }}"
+        data-req-material="{{ '1' if view.require_material_binding else '0' }}"
+        data-req-param="{{ '1' if view.require_param_collection else '0' }}">
     <input type="hidden" name="work_station_id" value="{{ work_station_id }}">
     <input type="hidden" name="scan" value="{{ view.sn or view.work_order_code }}">
 
@@ -305,7 +310,7 @@
     </div>
 
     <div class="station__footer">
-      <span class="station__status" id="station-status">{% if view.components %}请先完成物料绑定{% elif view.skill_ok %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
+      <span class="station__status" id="station-status">{% if view.require_material_binding and view.components %}请先完成物料绑定{% elif view.require_param_collection %}需采集工艺参数{% elif view.skill_ok %}就绪，可过站{% else %}存在拦截风险{% endif %}</span>
       <button type="button" class="btn-secondary"
               hx-get="/production/station/andon-form"
               hx-vals='{"work_station_id": "{{ work_station_id }}", "serial_unit_id": "{{ view.sn_id or "" }}", "work_order_id": "{{ view.work_order_id or "" }}", "operation_id": "{{ view.current_op.operation_id if view.current_op else "" }}"}'
@@ -336,10 +341,28 @@
 
     var missing = [];
     var skillOk = form.getAttribute('data-skill-ok') === '1';
+    var reqMaterial = form.getAttribute('data-req-material') === '1';
+    var reqParam = form.getAttribute('data-req-param') === '1';
 
-    document.querySelectorAll('.comp-scan').forEach(function (input) {
-      if (!input.value.trim()) missing.push('物料绑定');
-    });
+    // 物料绑定：仅在工序开启强制绑料时作为过站门槛（去重，不再按行重复提示）
+    if (reqMaterial) {
+      var matMissing = false;
+      document.querySelectorAll('.comp-scan').forEach(function (input) {
+        if (!input.value.trim()) matMissing = true;
+      });
+      if (matMissing) missing.push('物料绑定');
+    }
+
+    // 工艺参数：工序开启强制采集时，至少一行 参数名+数值 均非空
+    if (reqParam) {
+      var paramDone = false;
+      document.querySelectorAll('#param-rows .param-row').forEach(function (tr) {
+        var k = tr.querySelector('[name="param_key"]');
+        var v = tr.querySelector('[name="param_value"]');
+        if (k && v && k.value.trim() && v.value.trim()) paramDone = true;
+      });
+      if (!paramDone) missing.push('工艺参数');
+    }
 
     var fiCard = document.getElementById('first-inspection-card');
     if (fiCard) {
@@ -381,7 +404,7 @@
   var cur = document.getElementById('station-current');
   if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
 
-  document.querySelectorAll('.comp-scan, .fi-check, .fi-input, .td-check, .td-input, .td-select')
+  document.querySelectorAll('.comp-scan, .fi-check, .fi-input, .td-check, .td-input, .td-select, [name="param_key"], [name="param_value"]')
     .forEach(function (input) {
       input.addEventListener('input', updatePassStatus);
       input.addEventListener('change', updatePassStatus);

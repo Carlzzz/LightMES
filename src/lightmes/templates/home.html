@@ -1,154 +1,104 @@
 {% extends "base.html" %}
-{% block title %}LightMES 控制台{% endblock %}
-{% block container_class %}--wide{% endblock %}
+{% block title %}生产控制台 · LightMES{% endblock %}
+{% block container_class %} container--wide{% endblock %}
 {% block content %}
-<h1 class="page-title">生产控制台 <small>笔记本外壳组装 MES</small></h1>
-
-<div class="home-grid">
-<div class="card">
-  <div class="card__title">主数据</div>
-  <div class="nav-grid">
-    <a class="nav-card" href="/masterdata/products">
-      <span class="nav-card__icon">📦</span>
-      <div class="nav-card__name">产品管理</div>
-      <div class="nav-card__desc">成品、组件、辅料</div>
-    </a>
-    <a class="nav-card" href="/masterdata/lines">
-      <span class="nav-card__icon">🏭</span>
-      <div class="nav-card__name">产线管理</div>
-      <div class="nav-card__desc">产线布局</div>
-    </a>
-    <a class="nav-card" href="/masterdata/work-stations">
-      <span class="nav-card__icon">🔧</span>
-      <div class="nav-card__name">作业站管理</div>
-      <div class="nav-card__desc">工位配置</div>
-    </a>
-    <a class="nav-card" href="/masterdata/routings">
-      <span class="nav-card__icon">🛠️</span>
-      <div class="nav-card__name">工艺路径</div>
-      <div class="nav-card__desc">工序编排</div>
-    </a>
-    <a class="nav-card" href="/masterdata/boms">
-      <span class="nav-card__icon">📋</span>
-      <div class="nav-card__name">BOM 管理</div>
-      <div class="nav-card__desc">物料清单</div>
-    </a>
-    <a class="nav-card" href="/masterdata/skills"><span class="nav-card__icon">🎓</span>
-      <div class="nav-card__name">技能管理</div><div class="nav-card__desc">技能与等级定义</div></a>
-    <a class="nav-card" href="/masterdata/operator-skills"><span class="nav-card__icon">👷</span>
-      <div class="nav-card__name">人员技能</div><div class="nav-card__desc">操作员资格档案</div></a>
-    <a class="nav-card" href="/production/sn-rules">
-      <span class="nav-card__icon">🔢</span>
-      <div class="nav-card__name">SN 规则</div>
-      <div class="nav-card__desc">编码规则</div>
-    </a>
-    <a class="nav-card" href="/integration/import">
-      <span class="nav-card__icon">📥</span>
-      <div class="nav-card__name">ERP 导入</div>
-      <div class="nav-card__desc">主数据下发</div>
-    </a>
+<div class="home-page">
+  <div class="home-header">
+    <div>
+      <h1 class="page-title">生产控制台 <small>笔记本外壳组装 MES</small></h1>
+      <p class="home-subtitle">当前用户：{{ user.display_name or user.username }} · 通过左侧导航进入各业务模块</p>
+    </div>
+    <div class="home-actions">
+      <a class="btn" href="/production/station?work_station_id=0">进入工位作业</a>
+      <a class="btn btn--ghost" href="/production/wip">WIP 看板</a>
+      <a class="btn btn--ghost" href="/production/planner">生产计划</a>
+    </div>
   </div>
-</div>
 
-<div class="card">
-  <div class="card__title">生产执行</div>
-  <div class="nav-grid">
-    <a class="nav-card" href="/production/station?work_station_id=0">
-      <span class="nav-card__icon">🖥️</span>
-      <div class="nav-card__name">工位作业</div>
-      <div class="nav-card__desc">工位主界面 · 路径/物料/参数/过站</div>
-    </a>
-    <a class="nav-card" href="/production/wip?work_order=">
-      <span class="nav-card__icon">📊</span>
-      <div class="nav-card__name">WIP 看板</div>
-      <div class="nav-card__desc">在制品实时状态</div>
-    </a>
-  </div>
-</div>
+  <section class="home-kpis" aria-label="关键指标">
+    <div class="home-kpi">
+      <div class="home-kpi__label">未关闭异常</div>
+      <div class="home-kpi__value">{{ issue_open_count }}</div>
+      <div class="home-kpi__hint">需持续跟踪的 Issue</div>
+    </div>
+    <div class="home-kpi home-kpi--danger">
+      <div class="home-kpi__label">阻断异常</div>
+      <div class="home-kpi__value">{{ issue_blocking_count }}</div>
+      <div class="home-kpi__hint">可能影响过站</div>
+    </div>
+    <div class="home-kpi">
+      <div class="home-kpi__label">扩展组件</div>
+      <div class="home-kpi__value">{{ widgets|length }}</div>
+      <div class="home-kpi__hint">已注册的扩展入口</div>
+    </div>
+  </section>
 
-<div class="card">
-  <div class="card__title">追溯管理</div>
-  <div class="nav-grid">
-    <a class="nav-card" href="/trace/query">
-      <span class="nav-card__icon">🔍</span>
-      <div class="nav-card__name">追溯查询</div>
-      <div class="nav-card__desc">履历 · 正向 · 反向召回</div>
-    </a>
-    <a class="nav-card" href="/trace/rework">
-      <span class="nav-card__icon">🔧</span>
-      <div class="nav-card__name">返工 / 拆解</div>
-      <div class="nav-card__desc">回退工序、解绑组件</div>
-    </a>
-    <a class="nav-card" href="/trace/carrier-unbind">
-      <span class="nav-card__icon">🔗</span>
-      <div class="nav-card__name">载体码解绑</div>
-      <div class="nav-card__desc">解除 SN 与载体码绑定</div>
-    </a>
-  </div>
-</div>
+  <section class="home-workspace">
+    <div class="section-head">
+      <h2>生产现场</h2>
+      <span class="section-head__meta">高频操作入口</span>
+    </div>
+    <div class="quick-actions">
+      <a class="quick-action" href="/production/station?work_station_id=0">
+        <span class="quick-action__index">01</span>
+        <span class="quick-action__body">
+          <strong>工位作业</strong>
+          <small>扫码进入工位，完成路径、物料、参数和过站确认</small>
+        </span>
+        <span class="quick-action__arrow">→</span>
+      </a>
+      <a class="quick-action" href="/production/wip?work_order=">
+        <span class="quick-action__index">02</span>
+        <span class="quick-action__body">
+          <strong>WIP 看板</strong>
+          <small>查看工单在制状态和工序分布</small>
+        </span>
+        <span class="quick-action__arrow">→</span>
+      </a>
+      <a class="quick-action" href="/trace/query">
+        <span class="quick-action__index">03</span>
+        <span class="quick-action__body">
+          <strong>追溯查询</strong>
+          <small>按 SN 查询履历、正向与反向召回</small>
+        </span>
+        <span class="quick-action__arrow">→</span>
+      </a>
+      <a class="quick-action" href="/issues">
+        <span class="quick-action__index">04</span>
+        <span class="quick-action__body">
+          <strong>异常看板</strong>
+          <small>处理未关闭异常和阻断项</small>
+        </span>
+        <span class="quick-action__arrow">→</span>
+      </a>
+    </div>
+  </section>
 
-<div class="card">
-  <div class="card__title">质量管理</div>
-  <div class="nav-grid">
-    <a class="nav-card" href="/quality/first-inspection">
-      <span class="nav-card__icon">✅</span>
-      <div class="nav-card__name">首检配置</div>
-      <div class="nav-card__desc">关键工位首件检查规则</div>
-    </a>
-    <a class="nav-card" href="/quality/test-data">
-      <span class="nav-card__icon">📝</span>
-      <div class="nav-card__name">测试数据</div>
-      <div class="nav-card__desc">测试工位数据录入模板</div>
-    </a>
-    <a class="nav-card" href="/quality/defect-types">
-      <span class="nav-card__icon">🐞</span>
-      <div class="nav-card__name">缺陷类型</div>
-      <div class="nav-card__desc">缺陷分类主数据</div>
-    </a>
-    <a class="nav-card" href="/quality/defects/log">
-      <span class="nav-card__icon">📝</span>
-      <div class="nav-card__name">缺陷登记</div>
-      <div class="nav-card__desc">记录发现的不良</div>
-    </a>
-    <a class="nav-card" href="/quality/defects">
-      <span class="nav-card__icon">📋</span>
-      <div class="nav-card__name">缺陷记录</div>
-      <div class="nav-card__desc">缺陷列表与处理</div>
-    </a>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card__title">异常管理</div>
-  <div class="nav-grid">
-    <a class="nav-card" href="/issues">
-      <span class="nav-card__icon">🚨</span>
-      <div class="nav-card__name">Issue 看板</div>
-      <div class="nav-card__desc">未关闭: <strong>{{ issue_open_count }}</strong>{% if issue_blocking_count %} <span class="badge badge--danger">阻断 {{ issue_blocking_count }}</span>{% endif %}</div>
-    </a>
-  </div>
-</div>
-
-{% if widgets %}
-<div class="card">
-  <div class="card__title">扩展组件</div>
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>名称</th>
-        <th>接口</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for widget in widgets %}
-      <tr>
-        <td>{{ widget.title }}</td>
-        <td><code>{{ widget.endpoint }}</code></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
+  {% if widgets %}
+  <section class="home-workspace">
+    <div class="section-head">
+      <h2>扩展组件</h2>
+      <span class="section-head__meta">Widgets</span>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>接口</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for widget in widgets %}
+          <tr>
+            <td>{{ widget.title }}</td>
+            <td><code>{{ widget.endpoint }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

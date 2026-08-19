@@ -5,84 +5,380 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ request.state.csrf_token|default('') }}">
   <title>{% block title %}LightMES{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css?v=20260814c">
   {% block extra_head %}{% endblock %}
-  <link rel="stylesheet" href="/static/css/app.css?v=20260814b">
   <script src="/static/vendor/htmx.min.js"></script>
 </head>
 <body>
-  {% block chrome %}
-  <header class="app-bar">
-    <a class="app-bar__brand" href="/">
-      <span class="app-bar__logo">◆</span> LightMES
-    </a>
-    <span class="app-bar__spacer"></span>
-    <a class="app-bar__link" href="/">首页</a>
-    <a class="app-bar__link" href="/trace/query">追溯</a>
-    <a class="app-bar__link" href="/system/users">用户</a>
-    <a class="app-bar__link" href="/system/roles">角色</a>
-    <a class="app-bar__link" href="/system/api-keys">API Keys</a>
-    <a class="app-bar__link" href="/connectivity/connections">数采</a>
-    <a class="app-bar__link" href="/connectivity/dashboard">数采看板</a>
-    <a class="app-bar__link" href="/inventory/material-lots">物料批次</a>
-    <a class="app-bar__link" href="/issues">异常</a>
-    <a class="app-bar__link" href="/logout">退出</a>
-  </header>
-  {% endblock %}
-  <main class="container{% block container_class %}{% endblock %}">
-    {% block content %}{% endblock %}
-  </main>
-<script>
-  document.body.addEventListener('htmx:configRequest', function(e) {
-    var token = document.querySelector('meta[name="csrf-token"]');
-    if (token && token.content) {
-      e.detail.headers['X-CSRF-Token'] = token.content;
-    }
-  });
+  {% set path = request.url.path %}
+  {% block shell %}
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__header">
+        <a class="sidebar__brand" href="/">
+          <span class="sidebar__logo">◆</span>
+          <span class="sidebar__brand-text">LightMES</span>
+        </a>
+        <button class="sidebar__close" type="button" onclick="document.body.classList.remove('sidebar-open')" aria-label="关闭菜单">×</button>
+      </div>
 
-  // 全局错误弹窗：调用 showErrorModal(msg) 任意位置触发
-  window.showErrorModal = function(msg) {
-    // 移除已有弹窗
-    var existing = document.querySelector('.error-modal-overlay');
-    if (existing) existing.remove();
-    var overlay = document.createElement('div');
-    overlay.className = 'error-modal-overlay';
-    overlay.innerHTML =
-      '<div class="error-modal">' +
-        '<div class="error-modal__header">✗ 错误</div>' +
-        '<div class="error-modal__body">' + msg + '</div>' +
-        '<div class="error-modal__footer"><button onclick="this.closest(\'.error-modal-overlay\').remove()">确定</button></div>' +
-      '</div>';
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) overlay.remove();
-    });
-    document.body.appendChild(overlay);
-  };
-  // ESC 关闭弹窗
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      var m = document.querySelector('.error-modal-overlay');
-      if (m) m.remove();
-    }
-  });
-  // HTMX 响应包含错误时自动弹窗（HX-Retarget 错误片段 / 422 / 400 等）
-  document.body.addEventListener('htmx:afterRequest', function(e) {
-    var xhr = e.detail.xhr;
-    if (!xhr) return;
-    // 如果响应包含 alert--danger 且目标是 station-root 或 result，提取文本弹窗
-    var ct = xhr.getResponseHeader('content-type') || '';
-    if (ct.indexOf('html') < 0) return;
-    var html = xhr.responseText || '';
-    if (html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0) {
-      // 提取第一个 alert--danger 的文本内容
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      var alertEl = tmp.querySelector('.alert--danger');
-      if (alertEl) {
-        var msg = alertEl.textContent.replace(/^✗\s*/, '').trim();
-        if (msg) window.showErrorModal(msg);
+      <div class="sidebar__search">
+        <input id="nav-search" type="search" autocomplete="off" placeholder="搜索菜单..." aria-label="搜索菜单">
+      </div>
+
+      <nav class="sidebar__nav" id="sidebar-nav">
+        <a class="nav-link{% if path == '/' %} is-active{% endif %}" href="/" data-label="首页 控制台">
+          <span class="nav-link__mark"></span>
+          <span class="nav-link__label">控制台</span>
+        </a>
+
+        <details class="nav-group{% if path.startswith('/production/station') or path.startswith('/production/wip') or path.startswith('/production/batches') %} is-open{% endif %}"{% if path.startswith('/production/station') or path.startswith('/production/wip') or path.startswith('/production/batches') %} open{% endif %}>
+          <summary>生产执行</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path.startswith('/production/station') %} is-active{% endif %}" href="/production/station?work_station_id=0" data-label="工位作业">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">工位作业</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/production/wip') %} is-active{% endif %}" href="/production/wip" data-label="WIP 看板">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">WIP 看板</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/production/batches') %} is-active{% endif %}" href="/production/batches" data-label="批次管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">批次管理</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/production/planner') or path.startswith('/production/shifts') %} is-open{% endif %}"{% if path.startswith('/production/planner') or path.startswith('/production/shifts') %} open{% endif %}>
+          <summary>计划排程</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path == '/production/planner' %} is-active{% endif %}" href="/production/planner" data-label="生产计划">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">周计划</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/production/planner/daily') %} is-active{% endif %}" href="/production/planner/daily" data-label="日计划">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">日计划</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/production/shifts') %} is-active{% endif %}" href="/production/shifts" data-label="班次管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">班次管理</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/masterdata') or path.startswith('/integration/import') or path.startswith('/production/sn-rules') %} is-open{% endif %}"{% if path.startswith('/masterdata') or path.startswith('/integration/import') or path.startswith('/production/sn-rules') %} open{% endif %}>
+          <summary>主数据</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path.startswith('/masterdata/products') %} is-active{% endif %}" href="/masterdata/products" data-label="产品管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">产品管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/masterdata/lines') %} is-active{% endif %}" href="/masterdata/lines" data-label="产线管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">产线管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/masterdata/work-stations') %} is-active{% endif %}" href="/masterdata/work-stations" data-label="作业站管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">作业站管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/masterdata/routings') %} is-active{% endif %}" href="/masterdata/routings" data-label="工艺路径">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">工艺路径</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/masterdata/boms') %} is-active{% endif %}" href="/masterdata/boms" data-label="BOM 管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">BOM 管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/masterdata/skills') %} is-active{% endif %}" href="/masterdata/skills" data-label="技能管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">技能管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/masterdata/operator-skills') %} is-active{% endif %}" href="/masterdata/operator-skills" data-label="人员技能">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">人员技能</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/production/sn-rules') %} is-active{% endif %}" href="/production/sn-rules" data-label="SN 规则">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">SN 规则</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/integration/import') %} is-active{% endif %}" href="/integration/import" data-label="ERP 导入">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">ERP 导入</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/trace') %} is-open{% endif %}"{% if path.startswith('/trace') %} open{% endif %}>
+          <summary>追溯管理</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path.startswith('/trace/query') %} is-active{% endif %}" href="/trace/query" data-label="追溯查询">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">追溯查询</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/trace/rework') %} is-active{% endif %}" href="/trace/rework" data-label="返工 拆解">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">返工 / 拆解</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/trace/carrier-unbind') %} is-active{% endif %}" href="/trace/carrier-unbind" data-label="载体码解绑">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">载体码解绑</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/quality') %} is-open{% endif %}"{% if path.startswith('/quality') %} open{% endif %}>
+          <summary>质量管理</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path.startswith('/quality/first-inspection') %} is-active{% endif %}" href="/quality/first-inspection" data-label="首检配置">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">首检配置</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/quality/test-data') %} is-active{% endif %}" href="/quality/test-data" data-label="测试数据">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">测试数据</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/quality/defect-types') %} is-active{% endif %}" href="/quality/defect-types" data-label="缺陷类型">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">缺陷类型</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/quality/defects/log') %} is-active{% endif %}" href="/quality/defects/log" data-label="缺陷登记">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">缺陷登记</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/quality/defects') %} is-active{% endif %}" href="/quality/defects" data-label="缺陷记录">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">缺陷记录</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/inventory') %} is-open{% endif %}"{% if path.startswith('/inventory') %} open{% endif %}>
+          <summary>库存物流</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path.startswith('/inventory/material-lots') %} is-active{% endif %}" href="/inventory/material-lots" data-label="物料批次">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">物料批次</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/inventory/stock-movements') %} is-active{% endif %}" href="/inventory/stock-movements" data-label="库存流水">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">库存流水</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/connectivity') or path.startswith('/equipment') %} is-open{% endif %}"{% if path.startswith('/connectivity') or path.startswith('/equipment') %} open{% endif %}>
+          <summary>数采与设备</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path == '/connectivity' %} is-active{% endif %}" href="/connectivity" data-label="数采总览">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">数采总览</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/connectivity/connections') %} is-active{% endif %}" href="/connectivity/connections" data-label="连接管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">连接管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/connectivity/dashboard') %} is-active{% endif %}" href="/connectivity/dashboard" data-label="数采看板">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">数采看板</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/equipment/monitor') %} is-active{% endif %}" href="/equipment/monitor" data-label="设备监控">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">设备监控</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/equipment/downtimes') %} is-active{% endif %}" href="/equipment/downtimes" data-label="设备停机">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">设备停机</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/equipment/oee') %} is-active{% endif %}" href="/equipment/oee" data-label="OEE">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">OEE</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/equipment/tags') %} is-active{% endif %}" href="/equipment/tags" data-label="数据标签">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">数据标签</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/equipment/downtime-reasons') %} is-active{% endif %}" href="/equipment/downtime-reasons" data-label="停机原因">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">停机原因</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/issues') %} is-open{% endif %}"{% if path.startswith('/issues') %} open{% endif %}>
+          <summary>异常管理</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path == '/issues' or (path.startswith('/issues/') and not path.startswith('/issues/types')) %} is-active{% endif %}" href="/issues" data-label="Issue 看板">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">Issue 看板</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/issues/types') %} is-active{% endif %}" href="/issues/types" data-label="异常类型">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">异常类型</span>
+            </a>
+          </div>
+        </details>
+
+        <details class="nav-group{% if path.startswith('/system') %} is-open{% endif %}"{% if path.startswith('/system') %} open{% endif %}>
+          <summary>系统管理</summary>
+          <div class="nav-group__children">
+            <a class="nav-link{% if path.startswith('/system/users') %} is-active{% endif %}" href="/system/users" data-label="用户管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">用户管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/system/roles') %} is-active{% endif %}" href="/system/roles" data-label="角色管理">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">角色管理</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/system/api-keys') %} is-active{% endif %}" href="/system/api-keys" data-label="API Keys">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">API Keys</span>
+            </a>
+            <a class="nav-link{% if path.startswith('/system/audit-logs') %} is-active{% endif %}" href="/system/audit-logs" data-label="审计日志">
+              <span class="nav-link__mark"></span>
+              <span class="nav-link__label">审计日志</span>
+            </a>
+          </div>
+        </details>
+      </nav>
+
+      <div class="sidebar__footer">
+        <a class="sidebar__logout" href="/logout">退出登录</a>
+      </div>
+    </aside>
+
+    <button class="sidebar-backdrop" type="button" onclick="document.body.classList.remove('sidebar-open')" aria-label="关闭菜单"></button>
+
+    <div class="app-shell__main">
+      <header class="topbar">
+        <button class="topbar__menu" type="button" onclick="document.body.classList.add('sidebar-open')" aria-label="打开菜单">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="topbar__title" id="topbar-title">控制台</div>
+        <span class="topbar__spacer"></span>
+      </header>
+
+      <main class="container{% block container_class %}{% endblock %}">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% endblock %}
+
+  <script>
+    document.body.addEventListener('htmx:configRequest', function(e) {
+      var token = document.querySelector('meta[name="csrf-token"]');
+      if (token && token.content) {
+        e.detail.headers['X-CSRF-Token'] = token.content;
       }
+    });
+
+    // fetch() 不经过 htmx:configRequest，手动为所有非 GET fetch 附加 CSRF 头
+    var _origFetch = window.fetch;
+    window.fetch = function(input, init) {
+      init = init || {};
+      var method = (init.method || (input && input.method) || 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') {
+        var token = document.querySelector('meta[name="csrf-token"]');
+        if (token && token.content) {
+          var headers = new Headers(init.headers || (input && input.headers) || {});
+          if (!headers.has('X-CSRF-Token')) {
+            headers.set('X-CSRF-Token', token.content);
+            if (input instanceof Request) {
+              input = new Request(input, { headers: headers });
+              init = undefined;
+            } else {
+              init.headers = headers;
+            }
+          }
+        }
+      }
+      return _origFetch.call(this, input, init);
+    };
+
+    document.querySelectorAll('.nav-link').forEach(function(link) {
+      link.addEventListener('click', function() {
+        document.body.classList.remove('sidebar-open');
+      });
+    });
+
+    var searchInput = document.getElementById('nav-search');
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.nav-link'));
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        var q = searchInput.value.trim().toLowerCase();
+        navLinks.forEach(function(link) {
+          var label = (link.getAttribute('data-label') || '').toLowerCase();
+          var match = !q || label.indexOf(q) >= 0;
+          link.style.display = match ? '' : 'none';
+        });
+        document.querySelectorAll('.nav-group').forEach(function(group) {
+          if (!q) {
+            group.style.display = '';
+            if (group.classList.contains('is-open')) group.open = true;
+            return;
+          }
+          var visibleChild = Array.prototype.some.call(group.querySelectorAll('.nav-link'), function(link) {
+            return link.style.display !== 'none';
+          });
+          group.style.display = visibleChild ? '' : 'none';
+          if (visibleChild) {
+            group.open = true;
+          }
+        });
+      });
     }
-  });
-</script>
+
+    function syncTopbarTitle() {
+      var active = document.querySelector('.nav-link.is-active');
+      var title = document.getElementById('topbar-title');
+      if (!active || !title) return;
+      var label = active.querySelector('.nav-link__label');
+      var group = active.closest('.nav-group');
+      var groupLabel = group ? group.querySelector('summary').textContent.trim() : '';
+      title.textContent = groupLabel ? groupLabel + ' / ' + label.textContent.trim() : label.textContent.trim();
+    }
+    syncTopbarTitle();
+
+    window.showErrorModal = function(msg) {
+      var existing = document.querySelector('.error-modal-overlay');
+      if (existing) existing.remove();
+      var overlay = document.createElement('div');
+      overlay.className = 'error-modal-overlay';
+      overlay.innerHTML =
+        '<div class="error-modal">' +
+          '<div class="error-modal__header">✗ 错误</div>' +
+          '<div class="error-modal__body">' + msg + '</div>' +
+          '<div class="error-modal__footer"><button onclick="this.closest(\'.error-modal-overlay\').remove()">确定</button></div>' +
+        '</div>';
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.remove();
+      });
+      document.body.appendChild(overlay);
+    };
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        var m = document.querySelector('.error-modal-overlay');
+        if (m) m.remove();
+      }
+    });
+    document.body.addEventListener('htmx:afterRequest', function(e) {
+      var xhr = e.detail.xhr;
+      if (!xhr) return;
+      var ct = xhr.getResponseHeader('content-type') || '';
+      if (ct.indexOf('html') < 0) return;
+      var html = xhr.responseText || '';
+      if (html.indexOf('alert--danger') >= 0 || html.indexOf('✗') >= 0) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        var alertEl = tmp.querySelector('.alert--danger');
+        if (alertEl) {
+          var msg = alertEl.textContent.replace(/^✗\s*/, '').trim();
+          if (msg) window.showErrorModal(msg);
+        }
+      }
+    });
+  </script>
 </body>
 </html>

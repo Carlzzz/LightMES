@@ -23,7 +23,7 @@
         {% for b in batches %}
         <tr>
           <td>{{ b.batch.id }}</td>
-          <td>{{ b.work_order_code }}</td>
+          <td><a href="/production/work-orders/{{ b.batch.work_order_id }}">{{ b.work_order_code }}</a></td>
           <td>{{ b.batch.batch_number }}</td>
           <td><span class="badge">{{ b.batch.status }}</span></td>
           <td>{{ b.batch.target_qty }}</td>

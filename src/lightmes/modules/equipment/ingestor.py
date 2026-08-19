@@ -62,28 +62,51 @@ class MachineSignalIngestor:
         self.db.flush()
 
     def _ingest_alarm(self, tag, value, work_station_id):
-        if not value:
-            return
         cur = self.state_machine.current(work_station_id)
         if cur is not None:
             meta = dict(cur.metadata_ or {})
-            meta["alarm"] = value
+            if value:
+                meta["alarm"] = value
+            else:
+                meta.pop("alarm", None)
             cur.metadata_ = meta
             self.db.flush()
         from lightmes.config import get_settings
-        if get_settings().equipment_auto_create_issue_on_fault:
+        if not get_settings().equipment_auto_create_issue_on_fault:
+            return
+        if value:
             self._create_alarm_issue(tag, value, work_station_id)
+        else:
+            self._resolve_alarm_issues(tag, work_station_id)
 
     def _create_alarm_issue(self, tag, value, work_station_id):
         from sqlalchemy import select
 
         from lightmes.modules.auth.models import User
+        from lightmes.modules.issue.models import Issue, IssueType
         from lightmes.modules.issue.repository import IssueTypeRepository
         from lightmes.modules.issue.service import IssueService
 
         issue_type = IssueTypeRepository(self.db).get_by_code("equipment")
         if issue_type is None:
             logger.warning("缺少 equipment issue type，跳过自动建 issue")
+            return
+        # 去重：同一 tag 同一工位的报警在未关闭期间只建一条 issue
+        title = f"设备告警: {tag.name} = {value}"
+        if len(title) > 200:
+            title = title[:200]
+        dup = self.db.execute(
+            select(Issue)
+            .join(IssueType, Issue.issue_type_id == IssueType.id)
+            .where(
+                Issue.work_station_id == work_station_id,
+                Issue.status.in_(("open", "acknowledged", "resolved")),
+                Issue.title == title,
+            )
+            .order_by(Issue.id.desc())
+            .limit(1)
+        ).scalars().first()
+        if dup is not None:
             return
         # reported_by_id 是 NOT NULL FK；机器上报无真人，复用 _system_machine 占位用户
         user = self.db.execute(
@@ -96,18 +119,61 @@ class MachineSignalIngestor:
             )
             self.db.add(user)
             self.db.flush()
-        title = f"设备告警: {tag.name} = {value}"
-        if len(title) > 200:
-            title = title[:200]
         IssueService(self.db).create_issue(
             issue_type_id=issue_type.id,
             title=title,
-            description=f"工位 {work_station_id} 告警：{tag.name}={value}",
+            description=f"工位 {work_station_id} 告警：{tag.name}={value}（持续中，重复信号不另建单）",
             source="station_andon",
             work_station_id=work_station_id,
             reported_by_id=user.id,
         )
         self.db.flush()
+
+    def _resolve_alarm_issues(self, tag, work_station_id):
+        """报警恢复：把该 tag 在本工位未关闭的报警 issue 自动 resolve+close。"""
+        from datetime import datetime
+
+        from sqlalchemy import select
+
+        from lightmes.modules.auth.models import User
+        from lightmes.modules.issue.models import Issue
+        from lightmes.modules.issue.service import IssueService
+
+        prefix = f"设备告警: {tag.name}"
+        open_issues = self.db.execute(
+            select(Issue).where(
+                Issue.work_station_id == work_station_id,
+                Issue.status.in_(("open", "acknowledged")),
+                Issue.title.like(f"{prefix}%"),
+            )
+        ).scalars().all()
+        if not open_issues:
+            return
+        user = self.db.execute(
+            select(User).where(User.username == "_system_machine")
+        ).scalar_one_or_none()
+        if user is None:
+            return
+        svc = IssueService(self.db)
+        now = datetime.now()
+        for issue in open_issues:
+            if issue.status == "open":
+                issue.acknowledged_by_id = user.id
+                issue.acknowledged_at = now
+                issue.status = "acknowledged"
+            issue.status = "resolved"
+            issue.root_cause = issue.root_cause or "设备报警信号恢复（自动闭环）"
+            issue.containment_action = issue.containment_action or "报警恢复信号触发自动关闭"
+            issue.disposition = "use_as_is"
+            issue.resolved_by_id = user.id
+            issue.resolved_at = now
+            issue.status = "closed"
+            issue.closed_by_id = user.id
+            issue.closed_at = now
+            issue.resolution_notes = "报警恢复，系统自动关闭"
+        self.db.flush()
+        logger.info("报警恢复：tag=%s work_station=%s 自动关闭 %d 条 issue",
+                    tag.name, work_station_id, len(open_issues))
 
 
 def ingest_topic_signals(db: Session, topic_id: int, parsed_data: dict,

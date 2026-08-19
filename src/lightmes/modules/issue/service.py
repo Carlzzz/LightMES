@@ -93,6 +93,8 @@ class IssueService:
         containment_action: str,
         disposition: str,
         resolution_notes: str | None = None,
+        target_seq: int | None = None,
+        expected_repass_station_id: int | None = None,
     ) -> Issue:
         issue = self._get_or_404(issue_id)
         if issue.status != "acknowledged":
@@ -101,6 +103,13 @@ class IssueService:
             raise ValidationError("root_cause 与 containment_action 不可为空")
         if disposition not in ("use_as_is", "rework", "scrap", "hold"):
             raise ValidationError(f"非法 disposition: {disposition}")
+        # 处置联动：issue 关联缺陷且缺陷未处理时，resolve 的 disposition
+        # 同步执行缺陷处置，避免两套体系状态漂移。
+        if issue.defect_id is not None:
+            self._sync_defect_disposition(
+                issue, user_id, disposition,
+                target_seq=target_seq,
+                expected_repass_station_id=expected_repass_station_id)
         issue.status = "resolved"
         issue.root_cause = root_cause
         issue.containment_action = containment_action
@@ -109,6 +118,39 @@ class IssueService:
         issue.resolved_by_id = user_id
         issue.resolved_at = datetime.now()
         return issue
+
+    def _sync_defect_disposition(
+        self, issue: Issue, user_id: int, disposition: str,
+        *, target_seq: int | None = None,
+        expected_repass_station_id: int | None = None,
+    ) -> None:
+        from lightmes.modules.production.defect_service import DefectService
+        from lightmes.modules.production.models import DefectRecord
+
+        record = self.db.get(DefectRecord, issue.defect_id)
+        if record is None or record.handling_status != "pending":
+            return  # 缺陷已处理/不存在 → 不重复处置，仅记录 issue 侧决策
+        svc = DefectService(self.db)
+        mapping = {
+            "use_as_is": lambda: svc.handle_concession(
+                issue.defect_id, user_id, remark="issue resolve 同步：让步接收"),
+            "scrap": lambda: svc.handle_scrap(
+                issue.defect_id, user_id, remark="issue resolve 同步：报废"),
+        }
+        if disposition == "rework":
+            if target_seq is None or expected_repass_station_id is None:
+                raise ValidationError(
+                    "返工处置需提供 target_seq 与 expected_repass_station_id")
+            svc.handle_rework(
+                issue.defect_id, user_id,
+                target_seq=target_seq,
+                expected_repass_station_id=expected_repass_station_id,
+                remark="issue resolve 同步：返工")
+            return
+        handler = mapping.get(disposition)
+        if handler is not None:
+            handler()
+        # hold：缺陷保持 pending（继续隔离），issue 侧仅记录决策
 
     def close(self, issue_id: int, user_id: int) -> Issue:
         issue = self._get_or_404(issue_id)

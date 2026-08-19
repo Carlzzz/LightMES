@@ -2,26 +2,88 @@
 {% block title %}SN规则管理{% endblock %}
 {% block content %}
 <h1 class="page-title">SN 规则管理</h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
 <div class="card">
-  <div class="card__title">新增 SN 规则</div>
-  <form class="form-row" hx-post="/production/sn-rules" hx-target="#rows" hx-swap="beforeend"
-        hx-on::after-request="if(event.detail.successful) this.reset()">
-    <div class="field"><label>编码</label><input name="code" required></div>
-    <div class="field"><label>名称</label><input name="name" required></div>
-    <div class="field" style="flex:1"><label>模板</label><input name="pattern" placeholder="SN{YY}{MM}{DD}{SEQ:5}" required></div>
-    <div class="field"><label>重置</label>
-      <select name="seq_reset"><option value="never">不重置</option><option value="daily">按日</option><option value="monthly">按月</option></select>
-    </div>
-    <button type="submit">新增</button>
-  </form>
-</div>
-<div class="card">
-  <div class="card__title">SN 规则列表</div>
+  <div class="card__title">SN 规则列表
+    <button type="button" style="float:right" onclick="openMd(null)">+ 新建规则</button>
+  </div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>模板</th><th>重置</th></tr></thead>
-    <tbody id="rows">
-      {% for r in rules %}{% include "production/partials/sn_rule_row.html" %}{% endfor %}
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>模板</th><th>重置</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for r in rules %}
+      <tr>
+        <td>#{{ r.id }}</td>
+        <td><code>{{ r.code }}</code></td>
+        <td>{{ r.name }}</td>
+        <td><code>{{ r.pattern }}</code></td>
+        <td>{{ r.seq_reset }}</td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn-secondary"
+                  data-id="{{ r.id }}" data-code="{{ r.code }}" data-name="{{ r.name }}"
+                  data-pattern="{{ r.pattern }}" data-reset="{{ r.seq_reset }}"
+                  onclick="openMd(this)">编辑</button>
+          <form method="post" action="/production/sn-rules/{{ r.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除 SN 规则 {{ r.code }}？（被工单引用时拒绝）')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">暂无规则</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
+
+<div class="modal" id="md-modal" style="display:none">
+  <div class="modal__body" style="max-width:480px;width:92vw">
+    <div class="card" style="margin-bottom:0">
+      <div class="card__title" id="md-title">新建 SN 规则</div>
+      <form id="md-form" method="post" action="/production/sn-rules">
+        <div class="form-row">
+          <div class="field"><label>编码</label><input name="code" required></div>
+          <div class="field"><label>名称</label><input name="name" required></div>
+        </div>
+        <div class="field" style="margin-top:10px"><label>模板</label>
+          <input name="pattern" placeholder="SN{YY}{MM}{DD}{SEQ:5}" required></div>
+        <div class="field" style="margin-top:10px"><label>流水重置</label>
+          <select name="seq_reset">
+            <option value="never">不重置</option>
+            <option value="daily">按日</option>
+            <option value="monthly">按月</option>
+          </select>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button type="button" class="btn-secondary" onclick="closeMd()">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMd(btn) {
+  var form = document.getElementById('md-form');
+  var f = function (n) { return form.querySelector('[name="' + n + '"]'); };
+  if (btn) {
+    form.action = '/production/sn-rules/' + btn.dataset.id + '/update';
+    f('code').value = btn.dataset.code;
+    f('name').value = btn.dataset.name;
+    f('pattern').value = btn.dataset.pattern;
+    f('seq_reset').value = btn.dataset.reset;
+    document.getElementById('md-title').textContent = '编辑 SN 规则 #' + btn.dataset.id;
+  } else {
+    form.action = '/production/sn-rules';
+    form.reset();
+    document.getElementById('md-title').textContent = '新建 SN 规则';
+  }
+  document.getElementById('md-modal').style.display = 'flex';
+}
+function closeMd() { document.getElementById('md-modal').style.display = 'none'; }
+document.getElementById('md-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeMd();
+});
+</script>
 {% endblock %}

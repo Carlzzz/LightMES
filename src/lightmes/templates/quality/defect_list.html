@@ -15,18 +15,22 @@
         <option value="concession" {% if status_filter == 'concession' %}selected{% endif %}>已让步</option>
       </select>
     </div>
+    <div class="field" style="flex:1"><label>SN 码过滤</label>
+      <input name="sn" value="{{ sn_filter }}" placeholder="输入完整 SN">
+    </div>
+    <div class="field"><label>&nbsp;</label><button type="submit">过滤</button></div>
   </form>
 </div>
 
 <div class="card">
   <div class="card__title">缺陷列表</div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>SN ID</th><th>缺陷类型</th><th>严重度</th><th>发现时间</th><th>处理状态</th></tr></thead>
+    <thead><tr><th>ID</th><th>SN</th><th>缺陷类型</th><th>严重度</th><th>发现时间</th><th>处理状态</th></tr></thead>
     <tbody>
       {% for r in records %}
       <tr>
         <td><a href="/quality/defects/{{ r.id }}">#{{ r.id }}</a></td>
-        <td>{{ r.serial_unit_id }}</td>
+        <td>{% if sn_map.get(r.serial_unit_id) %}<a href="/trace/query?type=history&value={{ sn_map[r.serial_unit_id] | urlencode }}">{{ sn_map[r.serial_unit_id] }}</a>{% else %}—{% endif %}</td>
         <td>{{ r.defect_type_code }} {{ r.defect_type_name }}</td>
         <td><span class="badge severity-{{ r.severity }}">{{ r.severity }}</span></td>
         <td>{{ r.discovered_at.strftime('%Y-%m-%d %H:%M') }}</td>

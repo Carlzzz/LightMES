@@ -1,6 +1,8 @@
 {% for row in board %}
-<div class="card">
-  <div class="card__title">{{ row.code }} {{ row.name }}</div>
+<div class="card" id="station-{{ row.work_station_id }}">
+  <div class="card__title">{{ row.code }} {{ row.name }}
+    <a href="/equipment/downtimes?station_id={{ row.work_station_id }}" style="font-size:12px">停机记录 →</a>
+  </div>
   <div class="nav-card__desc">
     状态：<strong>{{ row.state or "未采集" }}</strong>
     {% if row.conn_status %}
@@ -9,7 +11,8 @@
       <span class="badge">未配置连接</span>
     {% endif %}
   </div>
-  <form hx-post="/equipment/monitor/{{ row.work_station_id }}/transition" hx-swap="none">
+  <form hx-post="/equipment/monitor/{{ row.work_station_id }}/transition" hx-swap="none"
+        hx-confirm="确认手动切换 {{ row.code }} 状态？（计划性状态 15 分钟内机器信号不覆盖）">
     <select name="state">
       {% for s in all_states %}
       <option value="{{ s }}" {% if row.state == s %}selected{% endif %}>{{ s }}</option>

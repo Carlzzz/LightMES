@@ -27,7 +27,7 @@ def list_work_orders(
     Args:
         page: 页码，从 1 开始。
         size: 每页数量。
-        status: 可选，按状态过滤（如 ["created", "in_progress"]）。
+        status: 可选，按状态过滤（如 ["created", "in_process"]）。
         line_id: 可选，按产线过滤。
 
     Returns:

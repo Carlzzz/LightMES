@@ -15,6 +15,9 @@ SYSTEM_DEFECT_TYPES = [
     {"code": "FIRST_INSPECTION_FAIL", "name": "首检不合格",
      "category": "质量", "severity": "critical",
      "description": "系统自动创建：首检不合格"},
+    {"code": "TEST_DATA_FAIL", "name": "测试数据不合格",
+     "category": "功能", "severity": "critical",
+     "description": "系统自动创建：工序测试数据判定 failed"},
 ]
 
 
@@ -105,6 +108,7 @@ class DefectService:
         event_bus.publish(DefectHandled(
             defect_record_id=record.id, serial_unit_id=su.id, sn=su.sn,
             decision="rework"))
+        self._sync_linked_issue(record, handled_by, "rework")
         return record
 
     def handle_scrap(self, record_id: int, handled_by: int,
@@ -120,12 +124,16 @@ class DefectService:
         event_bus.publish(DefectHandled(
             defect_record_id=record.id, serial_unit_id=su.id, sn=su.sn,
             decision="scrap"))
+        self._sync_linked_issue(record, handled_by, "scrap")
         return record
 
     def handle_concession(self, record_id: int, handled_by: int,
                           remark: str | None = None) -> DefectRecord:
         record = self._get_pending(record_id)
         su = self.serial_units.get(record.serial_unit_id)
+        if su.status == "finished":
+            raise BusinessRuleError(
+                f"完工件不可让步回退到在制（当前 finished）：请走问题单处置")
         su.status = "in_process"  # 一律回 in_process
         record.handling_status = "concession"
         record.handled_by = handled_by
@@ -135,7 +143,32 @@ class DefectService:
         event_bus.publish(DefectHandled(
             defect_record_id=record.id, serial_unit_id=su.id, sn=su.sn,
             decision="concession"))
+        self._sync_linked_issue(record, handled_by, "use_as_is")
         return record
+
+    def _sync_linked_issue(self, record: DefectRecord, user_id: int,
+                           disposition: str) -> None:
+        """缺陷处置后同步关联 issue：open/acknowledged → resolved，避免双体系漂移。"""
+        from lightmes.modules.issue.models import Issue
+        issue = self.db.execute(
+            select(Issue).where(
+                Issue.defect_id == record.id,
+                Issue.status.in_(("open", "acknowledged")),
+            ).order_by(Issue.id.desc()).limit(1)
+        ).scalars().first()
+        if issue is None:
+            return
+        if issue.status == "open":
+            issue.acknowledged_by_id = user_id
+            issue.acknowledged_at = datetime.now()
+        issue.status = "resolved"
+        issue.root_cause = issue.root_cause or f"缺陷处置同步（{record.handling_status}）"
+        issue.containment_action = issue.containment_action or "缺陷已处置，系统自动同步"
+        issue.disposition = disposition
+        issue.resolved_by_id = user_id
+        issue.resolved_at = datetime.now()
+        issue.resolution_notes = "缺陷处置联动自动 resolve"
+        self.db.flush()
 
     def log_defect_from_inspection(self, fi_record: FirstInspectionRecord, sn: str,
                                     discovered_by: int,
@@ -154,4 +187,28 @@ class DefectService:
             defect_type_id=dt.id, sn=sn, discovered_by=discovered_by,
             operation_id=fi_record.operation_id,
             work_station_id=fi_record.work_station_id,
+            position=None, remark=remark)
+
+    def log_defect_from_test_data(self, td_record, sn: str, discovered_by: int,
+                                  remark: str | None = None) -> DefectRecord:
+        """测试数据判定 failed 时调用：隔离 SN + 建 TEST_DATA_FAIL 缺陷。
+
+        td_record（TestDataRecord）必须已持久化。已 quarantined 的 SN 直接
+        返回 None（上一缺陷未处理，不重复建单）。
+        """
+        if td_record.id is None:
+            raise ValidationError("td_record 必须已持久化（flush/commit 后再调用）")
+        su = self.serial_units.get_by_sn(sn)
+        if su is None:
+            raise NotFoundError(f"SN 不存在: {sn}")
+        if su.status == "quarantined":
+            return None
+        dt = self._get_or_create_system_defect_type(
+            code="TEST_DATA_FAIL", name="测试数据不合格",
+            severity="critical", category="功能",
+            description="系统自动创建：工序测试数据判定 failed")
+        return self.log_defect(
+            defect_type_id=dt.id, sn=sn, discovered_by=discovered_by,
+            operation_id=td_record.operation_id,
+            work_station_id=td_record.work_station_id,
             position=None, remark=remark)

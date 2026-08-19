@@ -3,6 +3,6 @@
 {% else %}
 <option value="" disabled selected>- 选择工单 -</option>
 {% for w in wo_list %}
-<option value="{{ w.id }}">{{ w.code }}（可用 {{ w.remaining }}）</option>
+<option value="{{ w.id }}">{{ w.code }}（待产 {{ w.remaining }}）</option>
 {% endfor %}
 {% endif %}

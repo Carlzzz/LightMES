@@ -63,7 +63,7 @@
 
 <div class="card">
   <div class="card__title">新建配置</div>
-  <form class="form-row" hx-post="/quality/first-inspection" hx-target="body" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+  <form class="form-row" hx-post="/quality/first-inspection" hx-target="#create-result" hx-swap="innerHTML" style="flex-wrap: wrap; align-items: flex-end; gap: 12px;">
     <div class="field" style="min-width: 180px;">
       <label>配置名称</label>
       <input type="text" name="name" required placeholder="如：OP20首检">
@@ -146,5 +146,6 @@
     </div>
     <button type="submit">创建配置</button>
   </form>
+  <div id="create-result" class="result-slot"></div>
 </div>
 {% endblock %}

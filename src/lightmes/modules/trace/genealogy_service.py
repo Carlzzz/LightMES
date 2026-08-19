@@ -46,9 +46,22 @@ class GenealogyService:
                 raise BusinessRuleError(
                     f"组件不属于本产品 BOM: {comp.component_product_id}")
             track = item.track_mode
+            expected_p = self.query.get_product(item.component_product_id)
+            expected_code = expected_p.code if expected_p else f"#{item.component_product_id}"
             if track == "serial":
                 if not comp.component_sn:
                     raise ValidationError("唯一件组件必须提供 component_sn")
+                # 料号校验：扫码的 SN 必须真实存在且属于 BOM 声明的料号
+                from lightmes.modules.production.repository import SerialUnitRepository
+                comp_su = SerialUnitRepository(self.db).get_by_sn(comp.component_sn)
+                if comp_su is None:
+                    raise NotFoundError(f"唯一件 SN 不存在: {comp.component_sn}")
+                if comp_su.product_id != item.component_product_id:
+                    scanned_p = self.query.get_product(comp_su.product_id)
+                    scanned_code = scanned_p.code if scanned_p else f"#{comp_su.product_id}"
+                    raise BusinessRuleError(
+                        f"料号不匹配：SN {comp.component_sn} 属于 [{scanned_code}]，"
+                        f"本工位应装 [{expected_code}]")
                 occupied = self.binds.list_active_by_component_sn(comp.component_sn)
                 if occupied:
                     raise ConflictError(
@@ -56,6 +69,16 @@ class GenealogyService:
             elif track == "batch":
                 if not comp.component_batch_no:
                     raise ValidationError("批次件组件必须提供 component_batch_no")
+                # 料号校验：扫码批次必须存在且属于 BOM 声明的料号
+                lot = MaterialLotRepository(self.db).get_by_code(comp.component_batch_no)
+                if lot is None:
+                    raise NotFoundError(f"物料批次不存在: {comp.component_batch_no}")
+                if lot.product_id != item.component_product_id:
+                    scanned_p = self.query.get_product(lot.product_id)
+                    scanned_code = scanned_p.code if scanned_p else f"#{lot.product_id}"
+                    raise BusinessRuleError(
+                        f"料号不匹配：批次 {comp.component_batch_no} 是 [{scanned_code}]，"
+                        f"本工位应装 [{expected_code}]")
             # 扫错件拦截（current_op_seq 非 None 且 BOM 声明了 consume_at_operation_seq 时校验）
             if (current_op_seq is not None
                     and item.consume_at_operation_seq is not None

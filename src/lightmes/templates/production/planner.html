@@ -3,7 +3,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/planner.css">
 {% endblock %}
-{% block container_class %}--planner{% endblock %}
+{% block container_class %} container--planner{% endblock %}
 {% block content %}
 <h1 class="page-title">生产计划 <small>Planner</small></h1>
 
@@ -41,7 +41,7 @@
             <div class="planner-card planner-card--{{ wo_card_status(wo) }}"
                  data-wo-id="{{ wo.id }}">
               <strong>{{ wo.code }}</strong>
-              <div>{{ wo.produced_qty }}/{{ wo.qty }}</div>
+              <div title="产出/计划">产出 {{ wo.produced_qty }}/{{ wo.qty }}</div>
             </div>
             {% endif %}
           {% endfor %}

@@ -3,7 +3,7 @@
 {% endif %}
 {% if error %}
 <div class="alert alert--danger">✗ {{ error }}</div>
-<div class="card"><div class="nav-card__desc">修正后请重新扫码。返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div></div>
+<div class="card"><div class="nav-card__desc">修正后请重新扫码。返回 <a href="/production/station?work_station_id={{ work_station_id }}&work_order_id={{ work_order_id or '' }}">工位作业</a>。</div></div>
 <script>if(window.showErrorModal){showErrorModal("{{ error|e }}");}</script>
 {% elif switch_station %}
 <div class="alert alert--ok">
@@ -13,7 +13,7 @@
 <div class="card">
   <div class="card__title">请切换作业站</div>
   <div class="nav-card__desc">该 SN 下一工序不在本作业站可做范围。请到对应作业站继续。
-    返回 <a href="/production/station?work_station_id={{ work_station_id }}">工位作业</a>。</div>
+    返回 <a href="/production/station?work_station_id={{ work_station_id }}&work_order_id={{ work_order_id or '' }}">工位作业</a>。</div>
 </div>
 {% elif result.is_finished %}
 <div class="alert alert--ok">

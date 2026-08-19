@@ -1,17 +1,22 @@
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lightmes.database import get_db
-from lightmes.modules.auth.dependencies import current_user_or_none, require_role
+from lightmes.modules.auth.dependencies import (
+    current_user_or_none, login_redirect, require_role,
+)
 from lightmes.modules.issue.linkify import issue_linkify
 from lightmes.modules.issue.repository import (
     IssueActionRepository, IssueRepository, IssueTypeRepository,
 )
 from lightmes.modules.issue.service import IssueService
+from lightmes.modules.production.models import SerialUnit
 from lightmes.shared.errors import DomainError
 
 router = APIRouter()
@@ -35,6 +40,17 @@ def _is_privileged(user) -> bool:
     return is_privileged(user)
 
 
+def _back(path: str, error: str | None = None) -> Response:
+    """POST 失败统一回跳：303 回原页带 ?error=，由页面顶部横幅呈现，
+    避免裸文本替换整页。"""
+    if error:
+        sep = "&" if "?" in path else "?"
+        return Response(
+            status_code=303,
+            headers={"Location": f"{path}{sep}error={quote(error)}"})
+    return Response(status_code=303, headers={"Location": path})
+
+
 @router.get("/issues", response_class=HTMLResponse)
 def issue_list(
     request: Request,
@@ -46,7 +62,7 @@ def issue_list(
 ):
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=302, headers={"Location": "/login"})
+        return login_redirect(request)
 
     repo = IssueRepository(db)
     kwargs = {}
@@ -63,11 +79,23 @@ def issue_list(
         kwargs["reported_by_id"] = user.id
     issues = repo.list(**kwargs)
 
+    serial_unit_ids = [i.serial_unit_id for i in issues if i.serial_unit_id]
+    sn_map = {}
+    if serial_unit_ids:
+        sn_map = {
+            su.id: su.sn
+            for su in db.execute(
+                select(SerialUnit).where(SerialUnit.id.in_(serial_unit_ids))
+            ).scalars().all()
+        }
+
     return templates.TemplateResponse(
         request, "issue/list.html",
         {"issues": issues,
+         "sn_map": sn_map,
          "filters": {"status": status, "severity": severity,
-                     "source": source, "search": search}},
+                     "source": source, "search": search},
+         "error": request.query_params.get("error")},
     )
 
 
@@ -86,7 +114,7 @@ def issue_create(
 ):
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=302, headers={"Location": "/login"})
+        return login_redirect(request)
     try:
         issue = IssueService(db).create_issue(
             issue_type_id=issue_type_id,
@@ -101,12 +129,16 @@ def issue_create(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back("/issues", e.detail)
     # ANDON 提交后留在 station 页：返回小段 JS 触发 station view 刷新
     if source == "station_andon":
         return HTMLResponse(
-            f"<script>htmx.trigger(document.getElementById('enter-form'), 'submit'); "
-            f"window.showErrorModal('Issue #{issue.id} 已上报');</script>")
+            "<script>(function(){"
+            "var f=document.getElementById('enter-form');"
+            "if(f){htmx.trigger(f,'submit');}"
+            "else if(window.location.pathname.indexOf('/production/station')===0){window.location.reload();}"
+            "if(window.showErrorModal){window.showErrorModal('Issue #%d 已上报');}else{alert('Issue #%d 已上报');}"
+            "})();</script>" % (issue.id, issue.id))
     return Response(status_code=303, headers={"Location": f"/issues/{issue.id}"})
 
 
@@ -119,7 +151,8 @@ def issue_types_page(
 ):
     types = IssueTypeRepository(db).list_all()
     return templates.TemplateResponse(
-        request, "issue/types.html", {"types": types})
+        request, "issue/types.html",
+        {"types": types, "error": request.query_params.get("error")})
 
 
 @router.get("/issues/{issue_id}", response_class=HTMLResponse)
@@ -130,7 +163,7 @@ def issue_detail(
 ):
     user = current_user_or_none(request, db)
     if user is None:
-        return Response(status_code=302, headers={"Location": "/login"})
+        return login_redirect(request)
 
     svc = IssueService(db)
     issue = svc.issues.get(issue_id)
@@ -142,10 +175,30 @@ def issue_detail(
     if not is_privileged and issue.reported_by_id != user.id:
         return Response(status_code=403, content="无权查看")
 
+    serial_unit_sn = None
+    if issue.serial_unit_id:
+        serial_unit = db.get(SerialUnit, issue.serial_unit_id)
+        serial_unit_sn = serial_unit.sn if serial_unit else None
+
+    from lightmes.modules.masterdata.models import WorkStation
+    from lightmes.modules.production.models import Operation, WorkOrder
+    wo = db.get(WorkOrder, issue.work_order_id) if issue.work_order_id else None
+    station = db.get(WorkStation, issue.work_station_id) if issue.work_station_id else None
+    operation = db.get(Operation, issue.operation_id) if issue.operation_id else None
+
     actions = IssueActionRepository(db).list_for_issue(issue_id)
     return templates.TemplateResponse(
         request, "issue/detail.html",
-        {"issue": issue, "actions": actions, "is_privileged": is_privileged},
+        {
+            "issue": issue,
+            "serial_unit_sn": serial_unit_sn,
+            "wo": wo,
+            "station": station,
+            "operation": operation,
+            "actions": actions,
+            "is_privileged": is_privileged,
+            "error": request.query_params.get("error"),
+        },
     )
 
 
@@ -162,7 +215,7 @@ def issue_acknowledge(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back(f"/issues/{issue_id}", e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
 
 
@@ -173,6 +226,8 @@ def issue_resolve(
     containment_action: str = Form(...),
     disposition: str = Form(...),
     resolution_notes: str = Form(""),
+    target_seq: int | None = Form(None),
+    expected_repass_station_id: int | None = Form(None),
     user=Depends(require_role("supervisor", "admin")),
     db: Session = Depends(get_db),
 ):
@@ -182,11 +237,13 @@ def issue_resolve(
             root_cause=root_cause, containment_action=containment_action,
             disposition=disposition,
             resolution_notes=resolution_notes or None,
+            target_seq=target_seq,
+            expected_repass_station_id=expected_repass_station_id,
         )
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back(f"/issues/{issue_id}", e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
 
 
@@ -201,7 +258,7 @@ def issue_close(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back(f"/issues/{issue_id}", e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
 
 
@@ -217,7 +274,7 @@ def issue_reopen(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back(f"/issues/{issue_id}", e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
 
 
@@ -246,12 +303,15 @@ def issue_add_action(
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back(f"/issues/{issue_id}", e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{issue_id}"})
 
 
 def _capa_transition(action_id: int, op: str, user, db: Session) -> Response:
     svc = IssueService(db)
+    existing = svc.actions.get(action_id)
+    issue_id = existing.issue_id if existing is not None else None
+    back = f"/issues/{issue_id}" if issue_id is not None else "/issues"
     try:
         if op == "start":
             action = svc.start_action(action_id, user.id)
@@ -260,11 +320,11 @@ def _capa_transition(action_id: int, op: str, user, db: Session) -> Response:
         elif op == "verify":
             action = svc.verify_action(action_id, user.id)
         else:
-            return Response(status_code=404)
+            return _back("/issues", "未知操作")
         db.commit()
     except DomainError as e:
         db.rollback()
-        return Response(status_code=e.status_code, content=e.detail)
+        return _back(back, e.detail)
     return Response(status_code=303, headers={"Location": f"/issues/{action.issue_id}"})
 
 
@@ -319,10 +379,10 @@ def issue_types_create(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return Response(status_code=400, content=f"code 已存在：{code.strip()}")
+        return _back("/issues/types", f"code 已存在：{code.strip()}")
     except Exception as e:
         db.rollback()
-        return Response(status_code=400, content=str(e))
+        return _back("/issues/types", str(e))
     return Response(status_code=303, headers={"Location": "/issues/types"})
 
 
@@ -335,7 +395,7 @@ def issue_types_toggle(
     from lightmes.modules.issue.models import IssueType
     t = db.get(IssueType, type_id)
     if t is None:
-        return Response(status_code=404, content="不存在")
+        return _back("/issues/types", "类型不存在")
     t.is_active = not t.is_active
     db.commit()
     return Response(status_code=303, headers={"Location": "/issues/types"})

@@ -2,6 +2,7 @@
 {% block title %}Issue 列表{% endblock %}
 {% block content %}
 <h1 class="page-title">Issue 看板 <small>异常 / Andon</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
   <div class="card__title">过滤</div>
@@ -49,7 +50,7 @@
         <td><span class="badge">{{ i.issue_type.code }}</span></td>
         <td><span class="badge {% if i.severity == 'critical' %}badge--danger{% elif i.severity == 'major' %}badge--warn{% endif %}">{{ i.severity }}</span></td>
         <td><span class="badge {% if i.status == 'open' %}badge--warn{% elif i.status == 'closed' %}badge--ok{% endif %}">{{ i.status }}</span></td>
-        <td>{% if i.serial_unit_id %}<a href="/trace/query?sn={{ i.serial_unit_id }}">SN#{{ i.serial_unit_id }}</a>{% else %}—{% endif %}</td>
+        <td>{% if i.serial_unit_id %}<a href="/trace/query?type=history&value={{ (sn_map.get(i.serial_unit_id, '') or '') | urlencode }}">SN#{{ sn_map.get(i.serial_unit_id, i.serial_unit_id) }}</a>{% else %}—{% endif %}</td>
         <td>#{{ i.reported_by_id }}</td>
         <td>{{ i.reported_at.strftime('%Y-%m-%d %H:%M') if i.reported_at else '—' }}</td>
       </tr>

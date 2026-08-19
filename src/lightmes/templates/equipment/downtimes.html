@@ -2,13 +2,27 @@
 {% block title %}停机记录 - LightMES{% endblock %}
 {% block content %}
 <div class="page-head"><h1>停机记录</h1></div>
+<div class="card">
+  <div class="card__title">工位过滤</div>
+  <form method="get" class="form-row">
+    <div class="field"><label>工位</label>
+      <select name="station_id" onchange="this.form.submit()">
+        <option value="">全部</option>
+        {% for s in stations %}
+        <option value="{{ s.id }}" {% if station_id == s.id %}selected{% endif %}>{{ s.code }} {{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>&nbsp;</label><button type="submit">过滤</button></div>
+  </form>
+</div>
 <table>
   <thead><tr><th>ID</th><th>工位</th><th>开始</th><th>结束</th><th>当前原因</th><th>修正原因</th></tr></thead>
   <tbody>
   {% for d in downtimes %}
   <tr>
     <td>{{ d.dt.id }}</td>
-    <td>{{ d.station_code }}</td>
+    <td>{{ d.station_code }} <a href="/equipment/monitor#station-{{ d.dt.work_station_id }}" style="font-size:12px">监控 →</a></td>
     <td>{{ d.dt.started_at }}</td>
     <td>{{ d.dt.ended_at or "进行中" }}</td>
     <td>{{ d.reason_name or "未分配" }}</td>

@@ -6,7 +6,7 @@ from lightmes.modules.production.models import WorkOrder, ScheduleChangeLog
 from lightmes.shared.errors import BusinessRuleError, NotFoundError, ConflictError
 
 
-_ACTIVE_STATUSES = ("created", "released", "in_progress")
+_ACTIVE_STATUSES = ("created", "released", "in_process")
 
 
 class PlannerService:

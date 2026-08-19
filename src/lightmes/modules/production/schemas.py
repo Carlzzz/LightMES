@@ -176,6 +176,8 @@ class StationView(BaseModel):
     first_inspection: FirstInspectionStationView | None = None
     test_data: TestDataStationView | None = None
     blocking_issue: Any | None = None  # Issue 模型或 None
+    require_material_binding: bool = False
+    require_param_collection: bool = False
 
 
 class CarrierBindInput(BaseModel):

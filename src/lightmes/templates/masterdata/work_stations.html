@@ -2,26 +2,87 @@
 {% block title %}作业站管理{% endblock %}
 {% block content %}
 <h1 class="page-title">作业站管理</h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
 <div class="card">
-  <div class="card__title">新增作业站</div>
-  <form class="form-row" hx-post="/masterdata/work-stations" hx-target="#rows" hx-swap="beforeend"
-        hx-on::after-request="if(event.detail.successful) this.reset()">
-    <div class="field"><label>编码</label><input name="code" required></div>
-    <div class="field"><label>名称</label><input name="name" required></div>
-    <div class="field"><label>产线</label>
-      <select name="line_id">{% for l in lines %}<option value="{{ l.id }}">{{ l.code }} {{ l.name }}</option>{% endfor %}</select>
-    </div>
-    <div class="field"><label>顺序</label><input name="seq" type="number" required></div>
-    <button type="submit">新增</button>
-  </form>
-</div>
-<div class="card">
-  <div class="card__title">作业站列表</div>
+  <div class="card__title">作业站列表
+    <button type="button" style="float:right" onclick="openMd(null)">+ 新建作业站</button>
+  </div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>产线</th><th>顺序</th></tr></thead>
-    <tbody id="rows">
-      {% for ws in work_stations %}{% include "masterdata/partials/work_station_row.html" %}{% endfor %}
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>产线</th><th>顺序</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for ws in work_stations %}
+      <tr>
+        <td>#{{ ws.id }}</td>
+        <td><code>{{ ws.code }}</code></td>
+        <td>{{ ws.name }}</td>
+        <td>{% set l = line_map.get(ws.line_id) %}{{ l.code if l else ws.line_id }} {{ l.name if l else '' }}</td>
+        <td>{{ ws.seq }}</td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn-secondary"
+                  data-id="{{ ws.id }}" data-code="{{ ws.code }}" data-name="{{ ws.name }}"
+                  data-line="{{ ws.line_id }}" data-seq="{{ ws.seq }}"
+                  onclick="openMd(this)">编辑</button>
+          <form method="post" action="/masterdata/work-stations/{{ ws.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除作业站 {{ ws.code }}？（被工序引用时拒绝）')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">暂无作业站</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
+
+<div class="modal" id="md-modal" style="display:none">
+  <div class="modal__body" style="max-width:440px;width:92vw">
+    <div class="card" style="margin-bottom:0">
+      <div class="card__title" id="md-title">新建作业站</div>
+      <form id="md-form" method="post" action="/masterdata/work-stations">
+        <div class="form-row">
+          <div class="field"><label>编码</label><input name="code" required></div>
+          <div class="field"><label>名称</label><input name="name" required></div>
+        </div>
+        <div class="form-row" style="margin-top:10px">
+          <div class="field"><label>产线</label>
+            <select name="line_id" required>
+              {% for l in lines %}<option value="{{ l.id }}">{{ l.code }} {{ l.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>顺序</label><input name="seq" type="number" required></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button type="button" class="btn-secondary" onclick="closeMd()">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMd(btn) {
+  var form = document.getElementById('md-form');
+  var f = function (n) { return form.querySelector('[name="' + n + '"]'); };
+  if (btn) {
+    form.action = '/masterdata/work-stations/' + btn.dataset.id + '/update';
+    f('code').value = btn.dataset.code;
+    f('name').value = btn.dataset.name;
+    f('line_id').value = btn.dataset.line;
+    f('seq').value = btn.dataset.seq;
+    document.getElementById('md-title').textContent = '编辑作业站 #' + btn.dataset.id;
+  } else {
+    form.action = '/masterdata/work-stations';
+    form.reset();
+    document.getElementById('md-title').textContent = '新建作业站';
+  }
+  document.getElementById('md-modal').style.display = 'flex';
+}
+function closeMd() { document.getElementById('md-modal').style.display = 'none'; }
+document.getElementById('md-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeMd();
+});
+</script>
 {% endblock %}

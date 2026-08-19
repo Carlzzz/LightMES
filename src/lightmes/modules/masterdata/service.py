@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from lightmes.modules.masterdata.models import (
     Bom,
@@ -104,6 +105,8 @@ class MasterDataService:
                 name=op.name,
                 default_work_station_id=op.default_work_station_id,
                 is_mandatory=op.is_mandatory,
+                require_material_binding=op.require_material_binding,
+                require_param_collection=op.require_param_collection,
                 required_skill_id=op.required_skill_id,
                 required_level=op.required_level,
             )
@@ -181,7 +184,8 @@ class MasterDataService:
 
     def update_operation(self, operation_id: int, *, seq, code, name,
                          default_work_station_id, allowed_work_station_ids,
-                         required_skill_id, required_level, is_mandatory=True) -> Operation:
+                         required_skill_id, required_level, is_mandatory=True,
+                         require_material_binding=False, require_param_collection=False) -> Operation:
         op = self.db.get(Operation, operation_id)
         if op is None:
             raise ValueError(f"工序不存在: {operation_id}")
@@ -193,6 +197,8 @@ class MasterDataService:
         op.seq = seq; op.code = code; op.name = name
         op.default_work_station_id = default_work_station_id
         op.is_mandatory = is_mandatory
+        op.require_material_binding = require_material_binding
+        op.require_param_collection = require_param_collection
         op.required_skill_id = required_skill_id
         op.required_level = required_level
         # 重写关联表
@@ -204,7 +210,8 @@ class MasterDataService:
 
     def add_operation(self, routing_id: int, *, seq, code, name,
                       default_work_station_id, allowed_work_station_ids,
-                      required_skill_id, required_level, is_mandatory=True) -> Operation:
+                      required_skill_id, required_level, is_mandatory=True,
+                      require_material_binding=False, require_param_collection=False) -> Operation:
         routing = self.routings.get(routing_id)
         if routing is None:
             raise ValueError(f"路线不存在: {routing_id}")
@@ -216,6 +223,8 @@ class MasterDataService:
         op = Operation(routing_id=routing_id, seq=seq, code=code, name=name,
                        default_work_station_id=default_work_station_id,
                        is_mandatory=is_mandatory,
+                       require_material_binding=require_material_binding,
+                       require_param_collection=require_param_collection,
                        required_skill_id=required_skill_id,
                        required_level=required_level)
         self.db.add(op); self.db.flush()
@@ -274,11 +283,203 @@ class MasterDataService:
         self.db.flush()
         return bom
 
+    # ---- BOM 行级 CRUD ----
+
+    def _get_bom_or_404(self, bom_id: int) -> Bom:
+        bom = self.boms.get(bom_id)
+        if bom is None:
+            raise ValueError(f"BOM 不存在: {bom_id}")
+        return bom
+
+    def add_bom_item(self, bom_id: int, *, component_product_id: int,
+                     qty: float, consume_at_operation_seq: int | None = None) -> BomItem:
+        bom = self._get_bom_or_404(bom_id)
+        comp = self.products.get(component_product_id)
+        if comp is None:
+            raise ValueError(f"组件不存在: {component_product_id}")
+        dup = self.db.execute(
+            select(BomItem).where(
+                BomItem.bom_id == bom.id,
+                BomItem.component_product_id == component_product_id)
+        ).scalar_one_or_none()
+        if dup is not None:
+            raise ValueError(f"组件已在 BOM 中: {comp.code}（每行组件不能重复）")
+        if qty <= 0:
+            raise ValueError("用量必须大于 0")
+        item = BomItem(
+            bom_id=bom.id, component_product_id=component_product_id,
+            qty=qty, track_mode=comp.track_mode,
+            consume_at_operation_seq=consume_at_operation_seq)
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def update_bom_item(self, item_id: int, *, qty: float,
+                        consume_at_operation_seq: int | None) -> BomItem:
+        item = self.db.get(BomItem, item_id)
+        if item is None:
+            raise ValueError(f"BOM 行不存在: {item_id}")
+        if qty <= 0:
+            raise ValueError("用量必须大于 0")
+        item.qty = qty
+        item.consume_at_operation_seq = consume_at_operation_seq
+        self.db.flush()
+        return item
+
+    def delete_bom_item(self, item_id: int) -> None:
+        item = self.db.get(BomItem, item_id)
+        if item is None:
+            raise ValueError(f"BOM 行不存在: {item_id}")
+        self.db.delete(item)
+        self.db.flush()
+
+    def set_bom_status(self, bom_id: int, status: str) -> Bom:
+        bom = self._get_bom_or_404(bom_id)
+        if status not in ("active", "inactive"):
+            raise ValueError(f"非法状态: {status}")
+        if status == "active":
+            # 每产品仅一个 active（部分唯一索引）：先停用现有的
+            current = self.boms.get_active_by_product(bom.product_id)
+            if current is not None and current.id != bom.id:
+                current.status = "inactive"
+        bom.status = status
+        self.db.flush()
+        return bom
+
+    def delete_bom(self, bom_id: int) -> None:
+        bom = self._get_bom_or_404(bom_id)
+        if bom.status == "active":
+            raise ValueError("该 BOM 是产品的启用版本，请先停用再删除")
+        for item in self.db.execute(
+                select(BomItem).where(BomItem.bom_id == bom.id)).scalars().all():
+            self.db.delete(item)
+        self.db.delete(bom)
+        self.db.flush()
+
     def create_line(self, data: LineCreate) -> Line:
         if self.lines.get_by_code(data.code) is not None:
             raise ValueError(f"产线编码已存在: {data.code}")
         line = Line(code=data.code, name=data.name, description=data.description)
         return self.lines.add(line)
+
+    # ---- 主数据编辑/删除（含引用守卫） ----
+
+    def update_product(self, product_id: int, *, code: str, name: str,
+                       type: str, unit: str, track_mode: str,
+                       spec: str | None = None) -> Product:
+        product = self.products.get(product_id)
+        if product is None:
+            raise ValueError(f"产品不存在: {product_id}")
+        dup = self.products.get_by_code(code)
+        if dup is not None and dup.id != product_id:
+            raise ValueError(f"产品编码已存在: {code}")
+        product.code = code
+        product.name = name
+        product.type = type
+        product.unit = unit
+        product.track_mode = track_mode
+        if spec is not None:
+            product.spec = spec
+        self.db.flush()
+        return product
+
+    def delete_product(self, product_id: int) -> None:
+        product = self.products.get(product_id)
+        if product is None:
+            raise ValueError(f"产品不存在: {product_id}")
+        from lightmes.modules.production.models import WorkOrder, SerialUnit, MaterialLot
+        checks = [
+            ("工艺路线", select(func.count()).select_from(Routing)
+                .where(Routing.product_id == product_id)),
+            ("BOM", select(func.count()).select_from(Bom)
+                .where(Bom.product_id == product_id)),
+            ("BOM 组件行", select(func.count()).select_from(BomItem)
+                .where(BomItem.component_product_id == product_id)),
+            ("工单", select(func.count()).select_from(WorkOrder)
+                .where(WorkOrder.product_id == product_id)),
+            ("序列号档案", select(func.count()).select_from(SerialUnit)
+                .where(SerialUnit.product_id == product_id)),
+            ("物料批次", select(func.count()).select_from(MaterialLot)
+                .where(MaterialLot.product_id == product_id)),
+        ]
+        for label, q in checks:
+            n = self.db.execute(q).scalar_one()
+            if n > 0:
+                raise ValueError(f"产品被 {label} 引用（{n} 条），不可删除")
+        self.db.delete(product)
+        self.db.flush()
+
+    def update_line(self, line_id: int, *, code: str, name: str,
+                    description: str | None) -> Line:
+        line = self.lines.get(line_id)
+        if line is None:
+            raise ValueError(f"产线不存在: {line_id}")
+        dup = self.lines.get_by_code(code)
+        if dup is not None and dup.id != line_id:
+            raise ValueError(f"产线编码已存在: {code}")
+        line.code = code
+        line.name = name
+        line.description = description
+        self.db.flush()
+        return line
+
+    def delete_line(self, line_id: int) -> None:
+        line = self.lines.get(line_id)
+        if line is None:
+            raise ValueError(f"产线不存在: {line_id}")
+        ws_count = self.db.execute(
+            select(func.count()).select_from(WorkStation)
+            .where(WorkStation.line_id == line_id)
+        ).scalar_one()
+        if ws_count > 0:
+            raise ValueError(f"产线下有 {ws_count} 个作业站，不可删除")
+        from lightmes.modules.production.models import WorkOrder
+        wo_count = self.db.execute(
+            select(func.count()).select_from(WorkOrder)
+            .where(WorkOrder.line_id == line_id)
+        ).scalar_one()
+        if wo_count > 0:
+            raise ValueError(f"产线被 {wo_count} 个工单引用，不可删除")
+        self.db.delete(line)
+        self.db.flush()
+
+    def update_work_station(self, ws_id: int, *, code: str, name: str,
+                            line_id: int, seq: int,
+                            description: str | None = None) -> WorkStation:
+        ws = self.work_stations.get(ws_id)
+        if ws is None:
+            raise ValueError(f"作业站不存在: {ws_id}")
+        dup = self.work_stations.get_by_code(code)
+        if dup is not None and dup.id != ws_id:
+            raise ValueError(f"作业站编码已存在: {code}")
+        if self.lines.get(line_id) is None:
+            raise ValueError(f"产线不存在: {line_id}")
+        ws.code = code
+        ws.name = name
+        ws.line_id = line_id
+        ws.seq = seq
+        ws.description = description
+        self.db.flush()
+        return ws
+
+    def delete_work_station(self, ws_id: int) -> None:
+        from lightmes.modules.masterdata.models import OperationWorkStation
+        ws = self.work_stations.get(ws_id)
+        if ws is None:
+            raise ValueError(f"作业站不存在: {ws_id}")
+        allowed_refs = self.db.execute(
+            select(func.count()).select_from(OperationWorkStation)
+            .where(OperationWorkStation.work_station_id == ws_id)
+        ).scalar_one()
+        default_refs = self.db.execute(
+            select(func.count()).select_from(Operation)
+            .where(Operation.default_work_station_id == ws_id)
+        ).scalar_one()
+        if allowed_refs or default_refs:
+            raise ValueError(
+                f"作业站被工序引用（允许 {allowed_refs} / 默认 {default_refs}），不可删除")
+        self.db.delete(ws)
+        self.db.flush()
 
     def create_work_station(self, data: WorkStationCreate) -> WorkStation:
         if self.work_stations.get_by_code(data.code) is not None:

@@ -90,8 +90,10 @@ class ProductionDowntime(Base, TimestampMixin):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, default=None)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, default=None)
     notes: Mapped[str | None] = mapped_column(Text, default=None)
     is_planned: Mapped[bool] = mapped_column(default=False)
+    source: Mapped[str] = mapped_column(default="machine")  # machine / manual
 
     downtime_reason: Mapped["DowntimeReason | None"] = relationship("DowntimeReason")
 

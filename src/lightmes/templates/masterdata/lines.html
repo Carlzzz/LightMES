@@ -2,23 +2,78 @@
 {% block title %}产线管理{% endblock %}
 {% block content %}
 <h1 class="page-title">产线管理</h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
 <div class="card">
-  <div class="card__title">新增产线</div>
-  <form class="form-row" hx-post="/masterdata/lines" hx-target="#rows" hx-swap="beforeend"
-        hx-on::after-request="if(event.detail.successful) this.reset()">
-    <div class="field"><label>编码</label><input name="code" required></div>
-    <div class="field"><label>名称</label><input name="name" required></div>
-    <div class="field" style="flex:1"><label>描述</label><input name="description"></div>
-    <button type="submit">新增</button>
-  </form>
-</div>
-<div class="card">
-  <div class="card__title">产线列表</div>
+  <div class="card__title">产线列表
+    <button type="button" style="float:right" onclick="openMd(null)">+ 新建产线</button>
+  </div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>描述</th></tr></thead>
-    <tbody id="rows">
-      {% for line in lines %}{% include "masterdata/partials/line_row.html" %}{% endfor %}
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>描述</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for l in lines %}
+      <tr>
+        <td>#{{ l.id }}</td>
+        <td><code>{{ l.code }}</code></td>
+        <td>{{ l.name }}</td>
+        <td>{{ l.description or '—' }}</td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn-secondary"
+                  data-id="{{ l.id }}" data-code="{{ l.code }}" data-name="{{ l.name }}"
+                  data-desc="{{ l.description or '' }}"
+                  onclick="openMd(this)">编辑</button>
+          <form method="post" action="/masterdata/lines/{{ l.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除产线 {{ l.code }}？（有作业站/工单时拒绝）')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">暂无产线</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
+
+<div class="modal" id="md-modal" style="display:none">
+  <div class="modal__body" style="max-width:440px;width:92vw">
+    <div class="card" style="margin-bottom:0">
+      <div class="card__title" id="md-title">新建产线</div>
+      <form id="md-form" method="post" action="/masterdata/lines">
+        <div class="form-row">
+          <div class="field"><label>编码</label><input name="code" required></div>
+          <div class="field"><label>名称</label><input name="name" required></div>
+        </div>
+        <div class="field" style="margin-top:10px"><label>描述</label><input name="description"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button type="button" class="btn-secondary" onclick="closeMd()">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMd(btn) {
+  var form = document.getElementById('md-form');
+  var f = function (n) { return form.querySelector('[name="' + n + '"]'); };
+  if (btn) {
+    form.action = '/masterdata/lines/' + btn.dataset.id + '/update';
+    f('code').value = btn.dataset.code;
+    f('name').value = btn.dataset.name;
+    f('description').value = btn.dataset.desc;
+    document.getElementById('md-title').textContent = '编辑产线 #' + btn.dataset.id;
+  } else {
+    form.action = '/masterdata/lines';
+    form.reset();
+    document.getElementById('md-title').textContent = '新建产线';
+  }
+  document.getElementById('md-modal').style.display = 'flex';
+}
+function closeMd() { document.getElementById('md-modal').style.display = 'none'; }
+document.getElementById('md-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeMd();
+});
+</script>
 {% endblock %}

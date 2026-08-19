@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}工位作业{% endblock %}
-{% block container_class %}--station{% endblock %}
+{% block container_class %} container--station{% endblock %}
 {% block content %}
 <div class="station-shell">
   <div class="station-ready card">
     <div class="card__title">扫码进入</div>
     <form class="form-row" id="enter-form" hx-post="/production/station/enter" hx-target="#station-root" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful && event.target && event.target.id === 'enter-form'){document.getElementById('enter-scan').value='';document.querySelector('.station-ready').classList.add('is-hidden');}">
+          hx-on::after-request="if(event.detail.successful && event.target && event.target.id === 'enter-form'){var root=document.getElementById('station-root');var isErr=root&&root.innerHTML.indexOf('alert--danger')>=0;if(!isErr){document.getElementById('enter-scan').value='';document.querySelector('.station-ready').classList.add('is-hidden');}}">
       <div class="field"><label>作业站</label>
         <select id="station-ws-select" name="work_station_id" required
                 onchange="if(this.value){document.querySelector('.station-ready').classList.remove('is-hidden');document.getElementById('station-root').innerHTML='';htmx.trigger(document.getElementById('station-wo-select'),'reset-wo');}">
@@ -19,8 +19,9 @@
       <div class="field"><label>工单</label>
         <select id="station-wo-select" name="work_order_id" required
                 style="width:200px"
+                data-preselect-work-order="{{ work_order_id }}"
                 hx-get="/production/station/work-orders"
-                hx-trigger="reset-wo from:body"
+                hx-trigger="reset-wo from:body, load"
                 hx-target="this"
                 hx-swap="innerHTML"
                 hx-include="#station-ws-select"
@@ -41,9 +42,20 @@
 </div>
 <script>
   (function () {
-    var wsSel = document.getElementById('station-ws-select');
-    if (wsSel && wsSel.value) {
-      htmx.trigger(document.getElementById('station-wo-select'), 'reset-wo');
+    var woSel = document.getElementById('station-wo-select');
+    var presetWorkOrder = woSel && woSel.getAttribute('data-preselect-work-order');
+    // 工单下拉的初始加载由 wo-select 的 hx-trigger="load" 负责：
+    // 在此处 htmx.trigger('reset-wo') 会抢在 htmx 挂载监听前执行，
+    // 事件丢失导致带 work_station_id 预选进入时下拉为空。
+    if (woSel && presetWorkOrder) {
+      woSel.addEventListener('htmx:afterSwap', function() {
+        var value = String(presetWorkOrder);
+        if (Array.prototype.some.call(woSel.options, function(option) {
+          return option.value === value;
+        })) {
+          woSel.value = value;
+        }
+      });
     }
     // 报错返回后自动刷新工单列表（防止工单状态已变更但列表是旧数据）
     document.getElementById('station-root').addEventListener('htmx:afterSwap', function(e) {

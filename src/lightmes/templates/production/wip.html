@@ -19,13 +19,20 @@
     <div class="wip-progress-body">
       <div class="wip-progress-info">
         <span class="wip-stat-label">工单号</span>
-        <span class="wip-stat-value">{{ summary.work_order.code }}</span>
+        <span class="wip-stat-value"><a href="/production/work-orders/{{ summary.work_order.id }}">{{ summary.work_order.code }}</a></span>
       </div>
       <div class="wip-progress-bar-wrap">
         <div class="wip-progress-bar">
           <div class="wip-progress-fill" style="width: {{ summary.progress_pct }}%"></div>
         </div>
-        <span class="wip-progress-text">{{ summary.produced }} / {{ summary.planned_qty }} ({{ summary.progress_pct }}%)</span>
+        <span class="wip-progress-text">产出 {{ summary.produced }} / {{ summary.planned_qty }} ({{ summary.progress_pct }}%)</span>
+      </div>
+      <div style="margin-top:6px;font-size:12px;color:var(--text-soft)">
+        待产 {{ summary.status_counts.get('pending', 0) }} ·
+        在制 {{ summary.status_counts.get('in_process', 0) + summary.status_counts.get('reworking', 0) }} ·
+        隔离 {{ summary.status_counts.get('quarantined', 0) }} ·
+        完工 {{ summary.status_counts.get('finished', 0) }} ·
+        报废 {{ summary.status_counts.get('scrapped', 0) }}
       </div>
       <div class="wip-progress-status">
         <span class="badge">{{ summary.work_order.status }}</span>
@@ -70,7 +77,7 @@
 {% endif %}
 
 <div class="card">
-  <div class="card__title">在制品列表 (in_process)</div>
+  <div class="card__title">未完工单元（在制/返工/隔离）</div>
   {% if items %}
   <div class="data-table-wrap">
   <table class="data-table">

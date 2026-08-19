@@ -19,6 +19,16 @@ templates = Jinja2Templates(
 )
 
 
+def _back(path: str, error: str | None = None):
+    """POST 失败统一回跳：303 回原页带 ?error=，页面顶部横幅呈现。"""
+    from urllib.parse import quote
+    if error:
+        sep = "&" if "?" in path else "?"
+        return RedirectResponse(
+            url=f"{path}{sep}error={quote(error)}", status_code=303)
+    return RedirectResponse(url=path, status_code=303)
+
+
 @router.get("/connectivity", response_class=HTMLResponse)
 def connectivity_index(request: Request) -> HTMLResponse:
     return RedirectResponse(url="/connectivity/connections", status_code=303)
@@ -155,7 +165,8 @@ def connections_list(
             "endpoint": endpoint,
         })
     return templates.TemplateResponse(
-        request, "connectivity/connections_list.html", {"connections": conn_views}
+        request, "connectivity/connections_list.html",
+        {"connections": conn_views, "error": request.query_params.get("error")}
     )
 
 
@@ -207,7 +218,8 @@ def connections_create(
         )
         db.commit()
     except DomainError as e:
-        return HTMLResponse(f"创建失败: {e.detail}", status_code=400)
+        db.rollback()
+        return _back("/connectivity/connections", e.detail)
     return RedirectResponse(url="/connectivity/connections", status_code=303)
 
 
@@ -307,6 +319,7 @@ def connection_detail(
             "topics": topics,
             "all_mappings": all_mappings,
             "messages": messages,
+            "error": request.query_params.get("error"),
         },
     )
 
@@ -326,7 +339,8 @@ def topic_add(
         svc.add_topic(conn_id, topic_pattern, payload_format, description or None)
         db.commit()
     except DomainError as e:
-        return HTMLResponse(f"添加失败: {e.detail}", status_code=400)
+        db.rollback()
+        return _back(f"/connectivity/connections/{conn_id}", e.detail)
     return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
 
 
@@ -384,7 +398,8 @@ def mapping_add(
         )
         db.commit()
     except DomainError as e:
-        return HTMLResponse(f"添加失败: {e.detail}", status_code=400)
+        db.rollback()
+        return _back(f"/connectivity/connections/{conn_id}", e.detail)
     return RedirectResponse(url=f"/connectivity/connections/{conn_id}", status_code=303)
 
 

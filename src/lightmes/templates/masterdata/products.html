@@ -2,40 +2,101 @@
 {% block title %}产品管理{% endblock %}
 {% block content %}
 <h1 class="page-title">产品管理</h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
 
 <div class="card">
-  <div class="card__title">新增产品</div>
-  <form class="form-row" hx-post="/masterdata/products" hx-target="#rows" hx-swap="beforeend"
-        hx-on::after-request="if(event.detail.successful) this.reset()">
-    <div class="field"><label>编码</label><input name="code" placeholder="如 NBK-SHELL-A" required></div>
-    <div class="field"><label>名称</label><input name="name" placeholder="产品名称" required></div>
-    <div class="field"><label>类型</label>
-      <select name="type">
-        <option value="finished">成品</option>
-        <option value="semi">半成品</option>
-        <option value="component">组件</option>
-        <option value="consumable">辅料</option>
-      </select>
-    </div>
-    <div class="field"><label>单位</label><input name="unit" value="pcs"></div>
-    <div class="field"><label>追踪方式</label>
-      <select name="track_mode">
-        <option value="none">不追踪</option>
-        <option value="serial">唯一件</option>
-        <option value="batch">批次</option>
-      </select>
-    </div>
-    <button type="submit">新增</button>
-  </form>
-</div>
-
-<div class="card">
-  <div class="card__title">产品列表</div>
+  <div class="card__title">产品列表
+    <button type="button" style="float:right" onclick="openMd(null)">+ 新建产品</button>
+  </div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>类型</th><th>单位</th><th>追踪</th><th>来源</th></tr></thead>
-    <tbody id="rows">
-      {% for product in products %}{% include "masterdata/partials/product_row.html" %}{% endfor %}
+    <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>类型</th><th>单位</th><th>追踪</th><th>来源</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for p in products %}
+      <tr>
+        <td>#{{ p.id }}</td>
+        <td><code>{{ p.code }}</code></td>
+        <td>{{ p.name }}</td>
+        <td>{{ p.type }}</td>
+        <td>{{ p.unit }}</td>
+        <td>{{ p.track_mode }}</td>
+        <td>{% if p.source == 'erp' %}<span class="badge">ERP</span>{% else %}本地{% endif %}</td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn-secondary"
+                  data-id="{{ p.id }}" data-code="{{ p.code }}" data-name="{{ p.name }}"
+                  data-type="{{ p.type }}" data-unit="{{ p.unit }}" data-track="{{ p.track_mode }}"
+                  onclick="openMd(this)">编辑</button>
+          <form method="post" action="/masterdata/products/{{ p.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除产品 {{ p.code }}？（被引用时会拒绝）')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">暂无产品</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
+
+<div class="modal" id="md-modal" style="display:none">
+  <div class="modal__body" style="max-width:480px;width:92vw">
+    <div class="card" style="margin-bottom:0">
+      <div class="card__title" id="md-title">新建产品</div>
+      <form id="md-form" method="post" action="/masterdata/products">
+        <div class="form-row">
+          <div class="field"><label>编码</label><input name="code" required></div>
+          <div class="field" style="flex:1"><label>名称</label><input name="name" required></div>
+        </div>
+        <div class="form-row" style="margin-top:10px">
+          <div class="field"><label>类型</label>
+            <select name="type">
+              <option value="finished">成品</option>
+              <option value="semi">半成品</option>
+              <option value="component">组件</option>
+              <option value="consumable">辅料</option>
+              <option value="material">物料</option>
+            </select>
+          </div>
+          <div class="field"><label>单位</label><input name="unit" value="pcs"></div>
+          <div class="field"><label>追踪方式</label>
+            <select name="track_mode">
+              <option value="none">不追踪</option>
+              <option value="serial">唯一件</option>
+              <option value="batch">批次</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button type="button" class="btn-secondary" onclick="closeMd()">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMd(btn) {
+  var form = document.getElementById('md-form');
+  var f = function (n) { return form.querySelector('[name="' + n + '"]'); };
+  if (btn) {
+    form.action = '/masterdata/products/' + btn.dataset.id + '/update';
+    f('code').value = btn.dataset.code;
+    f('name').value = btn.dataset.name;
+    f('type').value = btn.dataset.type;
+    f('unit').value = btn.dataset.unit;
+    f('track_mode').value = btn.dataset.track;
+    document.getElementById('md-title').textContent = '编辑产品 #' + btn.dataset.id;
+  } else {
+    form.action = '/masterdata/products';
+    form.reset();
+    document.getElementById('md-title').textContent = '新建产品';
+  }
+  document.getElementById('md-modal').style.display = 'flex';
+}
+function closeMd() { document.getElementById('md-modal').style.display = 'none'; }
+document.getElementById('md-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeMd();
+});
+</script>
 {% endblock %}

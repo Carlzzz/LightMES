@@ -2,27 +2,87 @@
 {% block title %}人员技能{% endblock %}
 {% block content %}
 <h1 class="page-title">人员技能档案</h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
 <div class="card">
-  <div class="card__title">设置人员技能（同人同技能重复=更新等级）</div>
-  <form class="form-row" hx-post="/masterdata/operator-skills" hx-target="#rows" hx-swap="beforeend"
-        hx-on::after-request="if(event.detail.successful) this.reset()">
-    <div class="field"><label>人员</label>
-      <select name="user_id">{% for u in users %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}</select>
-    </div>
-    <div class="field"><label>技能</label>
-      <select name="skill_id">{% for s in skills %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
-    </div>
-    <div class="field"><label>等级</label><input name="level" type="number" required></div>
-    <button type="submit">保存</button>
-  </form>
-</div>
-<div class="card">
-  <div class="card__title">档案列表</div>
+  <div class="card__title">档案列表
+    <button type="button" style="float:right" onclick="openMd(null)">+ 设置技能</button>
+  </div>
   <table class="data-table">
-    <thead><tr><th>ID</th><th>人员</th><th>技能</th><th>等级</th></tr></thead>
-    <tbody id="rows">
-      {% for os in operator_skills %}{% include "masterdata/partials/operator_skill_row.html" %}{% endfor %}
+    <thead><tr><th>ID</th><th>人员</th><th>技能</th><th>等级</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for os in operator_skills %}
+      <tr>
+        <td>#{{ os.id }}</td>
+        <td>{% set u = user_map.get(os.user_id) %}{{ u.display_name if u else os.user_id }}</td>
+        <td>{% set s = skill_map.get(os.skill_id) %}{{ s.name if s else os.skill_id }}</td>
+        <td>L{{ os.level }}</td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn-secondary"
+                  data-id="{{ os.id }}" data-user="{{ os.user_id }}"
+                  data-skill="{{ os.skill_id }}" data-level="{{ os.level }}"
+                  onclick="openMd(this)">编辑</button>
+          <form method="post" action="/masterdata/operator-skills/{{ os.id }}/delete" style="display:inline"
+                onsubmit="return confirm('确认删除该技能档案？')">
+            <button type="submit" class="btn-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">暂无档案</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
+
+<div class="modal" id="md-modal" style="display:none">
+  <div class="modal__body" style="max-width:440px;width:92vw">
+    <div class="card" style="margin-bottom:0">
+      <div class="card__title" id="md-title">设置人员技能</div>
+      <form id="md-form" method="post" action="/masterdata/operator-skills">
+        <div class="field"><label>人员</label>
+          <select name="user_id" required>
+            {% for u in users %}<option value="{{ u.id }}">{{ u.display_name }}（{{ u.username }}）</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-row" style="margin-top:10px">
+          <div class="field" style="flex:1"><label>技能</label>
+            <select name="skill_id" required>
+              {% for s in skills %}<option value="{{ s.id }}">{{ s.name }}（L{{ s.max_level }}）</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>等级</label><input name="level" type="number" min="1" required></div>
+        </div>
+        <p class="nav-card__desc">同人同技能重复保存 = 更新等级</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button type="button" class="btn-secondary" onclick="closeMd()">取消</button>
+          <button type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMd(btn) {
+  var form = document.getElementById('md-form');
+  var f = function (n) { return form.querySelector('[name="' + n + '"]'); };
+  if (btn) {
+    form.action = '/masterdata/operator-skills';
+    f('user_id').value = btn.dataset.user;
+    f('skill_id').value = btn.dataset.skill;
+    f('level').value = btn.dataset.level;
+    document.getElementById('md-title').textContent = '编辑技能等级';
+  } else {
+    form.action = '/masterdata/operator-skills';
+    form.reset();
+    document.getElementById('md-title').textContent = '设置人员技能';
+  }
+  document.getElementById('md-modal').style.display = 'flex';
+}
+function closeMd() { document.getElementById('md-modal').style.display = 'none'; }
+document.getElementById('md-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeMd();
+});
+</script>
 {% endblock %}

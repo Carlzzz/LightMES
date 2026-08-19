@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}工单 {{ wo.code }}{% endblock %}
+{% block content %}
+<h1 class="page-title">工单 {{ wo.code }} <small>
+  <span class="badge">{{ wo.status }}</span>
+  <a href="/production/planner">← 返回计划</a>
+</small></h1>
+{% if error %}<div class="alert alert--danger">✗ {{ error }}</div>{% endif %}
+
+<div class="card">
+  <div class="card__title">基本信息</div>
+  <table class="data-table">
+    <tr><th>产品</th><td>{% if product %}{{ product.code }} {{ product.name }}{% else %}#{{ wo.product_id }}{% endif %}</td>
+        <th>工艺路线</th><td>{% if routing %}{{ routing.code }} {{ routing.name }}{% else %}#{{ wo.routing_id }}{% endif %}</td></tr>
+    <tr><th>产线</th><td>{% if line %}{{ line.code }} {{ line.name }}{% else %}-{% endif %}</td>
+        <th>优先级</th><td>{{ wo.priority }}</td></tr>
+    <tr><th>计划量</th><td>{{ wo.qty }}</td>
+        <th>计划窗口</th><td>{{ wo.planned_start or '—' }} ~ {{ wo.planned_end or '—' }}</td></tr>
+    <tr><th>产出 / 报废</th><td><strong>{{ wo.produced_qty }}</strong> / {{ wo.scrap_qty }}
+        {% if wo.produced_qty + wo.scrap_qty >= wo.qty and wo.status == 'completed' %}<span class="badge badge--ok">已收尾</span>{% endif %}</td>
+        <th>来源</th><td>{{ wo.source }}</td></tr>
+  </table>
+  {% if can_manage and wo.status in ('created', 'released', 'in_process') %}
+  <div style="margin-top:12px">
+    <button type="button" class="btn-danger" id="wo-cancel-btn">取消工单</button>
+    <span style="color:var(--text-soft);font-size:12px">（存在在制/隔离 SN 时会要求确认强制取消）</span>
+  </div>
+  {% endif %}
+</div>
+
+{% set sns_total = status_counts.values() | sum %}
+<div class="card">
+  <div class="card__title">SN 状态汇总（{{ sns_total }}）</div>
+  <p>
+    {% for status, count in status_counts.items() %}
+    <span class="badge" style="margin-right:8px">{{ status }}: {{ count }}</span>
+    {% else %}暂无 SN{% endfor %}
+  </p>
+  {% if recent_sns %}
+  <table class="data-table">
+    <thead><tr><th>SN</th><th>状态</th><th>当前工序 seq</th><th>批次</th></tr></thead>
+    <tbody>
+      {% for su in recent_sns %}
+      <tr>
+        <td><a href="/trace/query?type=history&value={{ su.sn | urlencode }}">{{ su.sn }}</a></td>
+        <td><span class="badge">{{ su.status }}</span></td>
+        <td>{{ su.current_operation_seq }}</td>
+        <td>{% if su.batch_id %}#{{ su.batch_id }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if sns_total != recent_sns|length %}
+  <p style="color:var(--text-soft);font-size:12px">仅显示最近 {{ recent_sns|length }} 条</p>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card__title">批次（{{ batches|length }}）</div>
+  {% if batches %}
+  <table class="data-table">
+    <thead><tr><th>批次号</th><th>状态</th><th>目标</th><th>已完成</th><th>开始</th><th>完成</th></tr></thead>
+    <tbody>
+      {% for b in batches %}
+      <tr>
+        <td>{{ b.batch_number }}</td>
+        <td><span class="badge">{{ b.status }}</span></td>
+        <td>{{ b.target_qty }}</td>
+        <td>{{ b.produced_qty }}</td>
+        <td>{{ b.started_at or '—' }}</td>
+        <td>{{ b.completed_at or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p style="color:var(--text-soft)">暂无批次</p>{% endif %}
+</div>
+
+<div class="card">
+  <div class="card__title">缺陷记录（最近 {{ defects|length }} 条）</div>
+  {% if defects %}
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>类型</th><th>严重度</th><th>处理状态</th><th>发现时间</th></tr></thead>
+    <tbody>
+      {% for d in defects %}
+      <tr>
+        <td><a href="/quality/defects/{{ d.id }}">#{{ d.id }}</a></td>
+        <td>{{ d.defect_type_code }} {{ d.defect_type_name }}</td>
+        <td><span class="badge severity-{{ d.severity }}">{{ d.severity }}</span></td>
+        <td><span class="badge status-{{ d.handling_status }}">{{ d.handling_status }}</span></td>
+        <td>{{ d.discovered_at.strftime('%m-%d %H:%M') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p style="color:var(--text-soft)">无缺陷记录</p>{% endif %}
+</div>
+
+<div class="card">
+  <div class="card__title">关联 Issue（{{ issues|length }}）</div>
+  {% if issues %}
+  <table class="data-table">
+    <thead><tr><th>ID</th><th>标题</th><th>状态</th><th>严重度</th></tr></thead>
+    <tbody>
+      {% for i in issues %}
+      <tr>
+        <td><a href="/issues/{{ i.id }}">#{{ i.id }}</a></td>
+        <td>{{ i.title }}</td>
+        <td><span class="badge {% if i.status in ('open','acknowledged') %}badge--warn{% elif i.status == 'closed' %}badge--ok{% endif %}">{{ i.status }}</span></td>
+        <td><span class="badge">{{ i.severity }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p style="color:var(--text-soft)">无关联 Issue</p>{% endif %}
+</div>
+
+{% if can_manage and wo.status in ('created', 'released', 'in_process') %}
+<script>
+(function () {
+  var btn = document.getElementById('wo-cancel-btn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var reason = prompt('取消工单 {{ wo.code }}：请输入取消原因');
+    if (reason === null) return;
+    if (!reason.trim()) { alert('取消原因不可为空'); return; }
+    var force = confirm('若工单存在在制/隔离中的 SN，是否强制取消？（取消 = 确认带走，否则将拒绝）');
+    fetch('/production/work-orders/{{ wo.id }}/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'reason=' + encodeURIComponent(reason) + '&force=' + (force ? 'true' : '')
+    }).then(function (r) {
+      if (r.ok) window.location.href = '/production/planner';
+      else return r.text().then(function (t) {
+        if (window.showErrorModal) window.showErrorModal(t || '取消失败'); else alert(t || '取消失败');
+      });
+    }).catch(function (e) {
+      if (window.showErrorModal) window.showErrorModal('网络错误: ' + e); else alert('网络错误: ' + e);
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
