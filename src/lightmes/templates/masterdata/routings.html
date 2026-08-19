@@ -35,7 +35,7 @@
 </div>
 
 <div class="modal" id="rt-modal" style="display:none">
-  <div class="modal__body" style="max-width:720px;width:94vw">
+  <div class="modal__body" style="min-width:0;max-width:720px;width:94vw">
     <div class="card" style="margin-bottom:0">
       <div class="card__title">新建工艺路径</div>
       <form id="rt-form" method="post" action="/masterdata/routings"
@@ -84,7 +84,7 @@
             </div>
             <div class="form-row" style="margin-top:8px">
               <div class="field" style="flex:1"><label>允许作业站（可多选；默认站自动包含）</label>
-                <select id="st_allowed" multiple size="4" style="width:100%"></select>
+                <div id="st_allowed" class="st-allowed-list"></div>
               </div>
               <div class="field"><label>校验开关</label>
                 <label class="cb"><input type="checkbox" id="st_req_m" value="true"><span>强制绑料</span></label>
@@ -142,20 +142,46 @@ function showOpStage() {
 }
 function hideOpStage() { document.getElementById('rt-op-stage').style.display = 'none'; }
 
+function allowedSelection() {
+  return Array.from(document.querySelectorAll('#st_allowed .st-allowed-cb'))
+    .filter(function (cb) { return cb.checked; })
+    .map(function (cb) { return cb.value; });
+}
+
 function fillAllowedOptions(selectedIds) {
-  var sel = document.getElementById('st_allowed');
-  sel.innerHTML = '';
+  var box = document.getElementById('st_allowed');
+  var defaultId = document.getElementById('st_ws').value;
+  box.innerHTML = '';
   wsOptions.forEach(function (w) {
-    var opt = document.createElement('option');
-    opt.value = w.id;
-    opt.textContent = w.label;
-    if (selectedIds.indexOf(String(w.id)) >= 0) opt.selected = true;
-    sel.appendChild(opt);
+    var id = String(w.id);
+    var label = document.createElement('label');
+    label.className = 'cb';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'st-allowed-cb';
+    cb.value = id;
+    cb.checked = selectedIds.indexOf(id) >= 0;
+    if (id === defaultId) {
+      cb.checked = true;
+      cb.disabled = true;
+      label.title = '默认作业站自动包含';
+    }
+    var span = document.createElement('span');
+    span.textContent = w.label;
+    label.appendChild(cb);
+    label.appendChild(span);
+    box.appendChild(label);
   });
 }
-// 默认站变化 → 允许站重置为仅默认站
+
 document.getElementById('st_ws').addEventListener('change', function () {
-  if (this.value) fillAllowedOptions([this.value]);
+  if (!this.value) {
+    fillAllowedOptions(allowedSelection());
+    return;
+  }
+  var selected = allowedSelection();
+  if (selected.indexOf(this.value) === -1) selected.push(this.value);
+  fillAllowedOptions(selected);
 });
 
 function stageAdd() {
@@ -166,8 +192,7 @@ function stageAdd() {
   if (!seq || !code || !name || !ws) { alert('请完整填写 seq/工序码/工序名/默认作业站'); return; }
   if (rtOps.some(function (o) { return o.seq === seq; })) { alert('seq ' + seq + ' 已存在'); return; }
   if (rtOps.some(function (o) { return o.code === code; })) { alert('工序码 ' + code + ' 已存在'); return; }
-  var allowed = Array.from(document.getElementById('st_allowed').selectedOptions)
-    .map(function (o) { return o.value; });
+  var allowed = allowedSelection();
   if (allowed.indexOf(ws) === -1) allowed.unshift(ws);
   rtOps.push({
     seq: seq, code: code, name: name, ws: ws, allowed: allowed,
@@ -222,4 +247,72 @@ function renderOps() {
 }
 renderOps();
 </script>
+<style>
+  .st-allowed-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    max-height: 184px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid #d8e0db;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .st-allowed-list .cb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 6px;
+    border-radius: 4px;
+  }
+  .st-allowed-list .cb input[type="checkbox"],
+  #rt-op-stage .cb input[type="checkbox"] {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    min-width: 0;
+    margin: 0;
+  }
+  #rt-op-stage .cb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .st-allowed-list .cb:has(input:checked) {
+    background: var(--mint-200, #c5e5d4);
+    font-weight: 600;
+  }
+  .st-allowed-list .cb:has(input:disabled) {
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 640px) {
+    #rt-modal {
+      align-items: flex-start;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+    #rt-modal .modal__body {
+      width: calc(100vw - 24px);
+      padding: 16px;
+    }
+    #rt-op-stage .form-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    #rt-op-stage .field,
+    #rt-op-stage input,
+    #rt-op-stage select {
+      width: 100%;
+      flex: 1 1 auto;
+    }
+    .st-allowed-list {
+      grid-template-columns: 1fr;
+      max-height: 220px;
+    }
+  }
+</style>
 {% endblock %}

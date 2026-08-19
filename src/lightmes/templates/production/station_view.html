@@ -4,7 +4,7 @@
     ⛔ Issue #{{ view.blocking_issue.id }} 阻断中：
     [{{ view.blocking_issue.severity|upper }}] {{ view.blocking_issue.title }}
     · 状态: {{ view.blocking_issue.status }}
-    · <a href="/issues/{{ view.blocking_issue.id }}">查看详情 →</a>
+    · <a class="station__link-btn station__link-btn--danger" href="/issues/{{ view.blocking_issue.id }}">查看详情</a>
   </div>
   {% endif %}
   {% if pass_error %}
@@ -19,11 +19,16 @@
     <div class="station__ident">
       <div><span class="station__label">当前 SN</span>
         <span class="station__sn">{{ view.sn or "（首件待生成）" }}</span>
-        {% if view.sn %}<a href="/quality/defects?sn={{ view.sn | urlencode }}" style="font-size:12px">缺陷记录 →</a>
-        <a href="/trace/query?type=history&value={{ view.sn | urlencode }}" style="font-size:12px">履历 →</a>{% endif %}</div>
+        {% if view.sn %}
+        <div class="station__quick-links">
+          <a class="station__link-btn" href="/quality/defects?sn={{ view.sn | urlencode }}">缺陷记录</a>
+          <a class="station__link-btn" href="/trace/query?type=history&value={{ view.sn | urlencode }}">履历</a>
+        </div>
+        {% endif %}
+      </div>
       <div><span class="station__label">成品 / 工单</span>
         <span>{{ view.product_code }} {{ view.product_name }} /
-        {% if view.work_order_id %}<a href="/production/work-orders/{{ view.work_order_id }}">{{ view.work_order_code }}</a>{% else %}{{ view.work_order_code }}{% endif %}</span></div>
+        {% if view.work_order_id %}<a class="station__link-btn" href="/production/work-orders/{{ view.work_order_id }}">{{ view.work_order_code }}</a>{% else %}{{ view.work_order_code }}{% endif %}</span></div>
     </div>
     <div class="station__operator {% if view.skill_ok %}is-ok{% else %}is-bad{% endif %}">
       <span class="station__label">操作员</span>

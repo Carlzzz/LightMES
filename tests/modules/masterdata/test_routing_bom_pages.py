@@ -42,6 +42,23 @@ def test_routing_page_and_create(client, db_session):
     assert "RT1" in resp.text or "保存" in resp.text or "成功" in resp.text
 
 
+def test_routing_create_modal_uses_checkbox_picker(client, db_session):
+    md = MasterDataService(db_session)
+    md.create_product(ProductCreate(code="RPUI", name="壳", type="finished"))
+    line = md.create_line(LineCreate(code="RLUI", name="线"))
+    md.create_work_station(WorkStationCreate(code="RWUI", name="站", line_id=line.id, seq=1))
+    db_session.flush()
+    _login(client, db_session)
+
+    resp = client.get("/masterdata/routings")
+
+    assert resp.status_code == 200
+    assert 'id="st_allowed" class="st-allowed-list"' in resp.text
+    assert "st-allowed-cb" in resp.text
+    assert '<select id="st_allowed"' not in resp.text
+    assert "selectedOptions" not in resp.text
+
+
 def test_routing_create_invalid_shows_error_fragment(client, db_session):
     md = MasterDataService(db_session)
     p = md.create_product(ProductCreate(code="RPE", name="壳", type="finished"))
