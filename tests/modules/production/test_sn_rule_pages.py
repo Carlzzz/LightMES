@@ -38,9 +38,10 @@ def test_sn_rules_page_and_create(client, db_session):
 
 def test_sn_rules_create_requires_login(client):
     resp = client.post("/production/sn-rules",
-        data={"code": "R2", "name": "规则", "pattern": "SN{SEQ:5}", "seq_reset": "never"})
+        data={"code": "R2", "name": "规则", "pattern": "SN{SEQ:5}", "seq_reset": "never"},
+        headers={"HX-Request": "true"})
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")
 
 
 def test_sn_rules_create_bad_pattern_returns_error_row(client, db_session):
@@ -49,4 +50,4 @@ def test_sn_rules_create_bad_pattern_returns_error_row(client, db_session):
         data={"code": "R3", "name": "规则", "pattern": "BAD", "seq_reset": "never"})
     assert resp.status_code == 200
     assert "pattern" in resp.text
-    assert 'colspan="5"' in resp.text
+    assert "alert--danger" in resp.text

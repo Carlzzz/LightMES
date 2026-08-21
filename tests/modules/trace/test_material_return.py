@@ -90,12 +90,14 @@ def test_unbind_returns_batch_material(db_session):
     assert float(restored.available_quantity) == 10
 
 
-def test_unbind_batch_unknown_lot_raises(db_session):
+def test_bind_batch_unknown_lot_rejected(db_session):
     finished, component, batch, serial_unit = _setup(db_session)
     service = GenealogyService(db_session)
-    binds = service.bind_components(serial_unit, [
-        ComponentBind(component_product_id=component.id, component_batch_no="NO-SUCH-LOT", qty=3),
-    ], operator_id=None)
-
     with pytest.raises(NotFoundError):
-        service.unbind(binds[0].id, reason="返工换料", operator_id=None)
+        service.bind_components(serial_unit, [
+            ComponentBind(
+                component_product_id=component.id,
+                component_batch_no="NO-SUCH-LOT",
+                qty=3,
+            ),
+        ], operator_id=None)

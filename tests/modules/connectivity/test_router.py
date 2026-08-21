@@ -242,7 +242,7 @@ def test_connection_detail_shows_mappings(client, db_session):
 
 
 def test_mapping_add_invalid_action_type_rejected(client, db_session):
-    """Invalid action_type → 400, no DB row created."""
+    """Invalid action_type redirects back with an error, no DB row created."""
     _login_admin(client, db_session, "m5")
     c = _make_conn(db_session, "map-invalid")
     client.post(f"/connectivity/connections/{c.id}/topics", data={
@@ -252,15 +252,16 @@ def test_mapping_add_invalid_action_type_rejected(client, db_session):
         MachineTopic.machine_connection_id == c.id).one()
     resp = client.post(
         f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
-            "action_type": "nonexistent_action"})
-    assert resp.status_code == 400
+            "action_type": "nonexistent_action"}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
     from lightmes.modules.connectivity.models import TopicMapping
     assert db_session.query(TopicMapping).filter(
         TopicMapping.machine_topic_id == t.id).count() == 0
 
 
 def test_mapping_add_invalid_json_params_rejected(client, db_session):
-    """action_params with malformed JSON → 400."""
+    """Malformed action_params redirects back with an error, no DB row."""
     _login_admin(client, db_session, "m6")
     c = _make_conn(db_session, "map-bad-json")
     client.post(f"/connectivity/connections/{c.id}/topics", data={
@@ -271,8 +272,12 @@ def test_mapping_add_invalid_json_params_rejected(client, db_session):
     resp = client.post(
         f"/connectivity/connections/{c.id}/topics/{t.id}/mappings", data={
             "action_type": "log_event",
-            "action_params": "{not valid json"})
-    assert resp.status_code == 400
+            "action_params": "{not valid json"}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    from lightmes.modules.connectivity.models import TopicMapping
+    assert db_session.query(TopicMapping).filter(
+        TopicMapping.machine_topic_id == t.id).count() == 0
 
 
 def test_connectivity_dashboard_renders(client, db_session):

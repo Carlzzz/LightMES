@@ -3,9 +3,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from lightmes.modules.masterdata.query_service import MasterDataQueryService
-from lightmes.modules.production.models import BatchMaterialConsumption
+from lightmes.modules.production.models import BatchMaterialConsumption, WorkOrder
 from lightmes.modules.production.material_lot_service import MaterialLotService
 from lightmes.modules.production.repository import MaterialLotRepository
+from lightmes.modules.production.process_snapshot import (
+    has_snapshot,
+    snapshot_bom_items,
+)
 from lightmes.modules.trace.events import GenealogyBound, GenealogyUnbound
 from lightmes.modules.trace.models import GenealogyBind
 from lightmes.modules.trace.repository import GenealogyBindRepository
@@ -22,6 +26,14 @@ class GenealogyService:
         self.query = MasterDataQueryService(db)
         self.binds = GenealogyBindRepository(db)
 
+    def _bom_items_for_unit(self, parent_su) -> list:
+        """Prefer the BOM frozen at work-order release time."""
+        if parent_su.work_order_id is not None:
+            work_order = self.db.get(WorkOrder, parent_su.work_order_id)
+            if work_order is not None and has_snapshot(work_order):
+                return snapshot_bom_items(work_order)
+        return self.query.get_active_bom_items(parent_su.product_id)
+
     def return_batch_consumption(self, *, material_lot_id: int, quantity: float, reason: str) -> None:
         MaterialLotService(self.db).return_consumed(
             material_lot_id=material_lot_id,
@@ -35,7 +47,7 @@ class GenealogyService:
         operation_record_id: int | None = None,
         current_op_seq: int | None = None,
     ) -> list[GenealogyBind]:
-        items = self.query.get_active_bom_items(parent_su.product_id)
+        items = self._bom_items_for_unit(parent_su)
         if not items:
             raise BusinessRuleError("成品无 active BOM，无法绑定组件")
         bom_by_component = {i.component_product_id: i for i in items}

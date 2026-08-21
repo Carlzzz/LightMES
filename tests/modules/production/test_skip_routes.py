@@ -46,7 +46,8 @@ def test_skip_form_requires_login(db_session):
     """未登录 -> 401。"""
     client = TestClient(app)
     resp = client.get("/production/station/skip-form",
-                      params={"work_station_id": 1, "scan": "X"})
+                      params={"work_station_id": 1, "scan": "X"},
+                      headers={"HX-Request": "true"})
     assert resp.status_code == 401
 
 
@@ -68,7 +69,8 @@ def test_skip_post_requires_login(db_session):
     """未登录 POST skip -> 401。"""
     client = TestClient(app)
     resp = client.post("/production/station/skip", data={
-        "work_station_id": 1, "scan": "X", "reason": "测试"})
+        "work_station_id": 1, "scan": "X", "reason": "测试"},
+        headers={"HX-Request": "true"})
     assert resp.status_code == 401
 
 

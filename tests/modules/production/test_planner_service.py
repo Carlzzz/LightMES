@@ -129,7 +129,30 @@ def test_schedule_rejects_end_before_start(db_session):
         PlannerService(db_session).schedule(
             wo.id, lines[0].id,
             datetime(2026, 8, 11, 16, 0), datetime(2026, 8, 11, 8, 0),
-            user_id=None)
+        user_id=None)
+
+
+def test_schedule_rejects_incompatible_line(db_session):
+    p, lines, r, rule = _env(db_session, n_lines=2)
+    wo = _mk_wo(db_session, lines[0], p, r, rule, code="IL1")
+    with pytest.raises(BusinessRuleError, match="默认作业站不属于产线"):
+        PlannerService(db_session).schedule(
+            wo.id, lines[1].id,
+            datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 16, 0),
+            user_id=None, force=True)
+    db_session.refresh(wo)
+    assert wo.line_id == lines[0].id
+    assert wo.planned_start is None
+
+
+def test_schedule_rejects_unknown_line(db_session):
+    p, lines, r, rule = _env(db_session, n_lines=1)
+    wo = _mk_wo(db_session, lines[0], p, r, rule, code="UL1")
+    with pytest.raises(NotFoundError):
+        PlannerService(db_session).schedule(
+            wo.id, 99999,
+            datetime(2026, 8, 11, 8, 0), datetime(2026, 8, 11, 16, 0),
+            user_id=None, force=True)
 
 
 def test_unschedule_clears_planned_times(db_session):

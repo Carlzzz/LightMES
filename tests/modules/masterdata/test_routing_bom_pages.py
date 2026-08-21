@@ -73,10 +73,9 @@ def test_routing_create_invalid_shows_error_fragment(client, db_session):
     resp = client.post("/masterdata/routings", data={
         "code": "RTDUP", "name": "重复", "product_id": str(p.id),
         "op_seq": ["1"], "op_code": ["OP1"], "op_name": ["上料"], "op_ws": [str(w.id)],
-    })
-    assert resp.status_code == 200  # graceful, not 500
-    assert "alert--danger" in resp.text
-    assert "已存在" in resp.text
+    }, follow_redirects=False)
+    assert resp.status_code == 303  # graceful, not 500
+    assert "error=" in resp.headers["location"]
 
 
 def test_routing_create_nonnumeric_seq_graceful(client, db_session):
@@ -248,15 +247,16 @@ def test_patch_bom_item_consume_op_clears_with_null(db_session, client):
 
 
 def test_bom_detail_page_requires_login(client, db_session):
-    """未登录访问 /masterdata/boms/{id} 返回 401。"""
+    """未登录访问 BOM 详情会跳登录。"""
     md = MasterDataService(db_session)
     fin = md.create_product(ProductCreate(code="BDTF", name="成品", type="finished"))
     c1 = md.create_product(ProductCreate(code="BDTC", name="件", type="component", track_mode="serial"))
     bom = md.create_bom(BomCreate(product_id=fin.id, items=[
         BomItemCreate(component_product_id=c1.id, qty=1)]))
     db_session.flush()
-    resp = client.get(f"/masterdata/boms/{bom.id}")
-    assert resp.status_code == 401
+    resp = client.get(f"/masterdata/boms/{bom.id}", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"].startswith("/login")
 
 
 def test_bom_detail_page_accessible_when_logged_in(client, db_session):

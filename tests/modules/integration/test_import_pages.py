@@ -43,6 +43,7 @@ def test_import_products_page_success(client, db_session):
 
 def test_import_page_requires_login_on_post(client, db_session):
     resp = client.post("/integration/import",
-        data={"kind": "products"}, files={"file": ("p.csv", b"x", "text/csv")})
+        data={"kind": "products"}, files={"file": ("p.csv", b"x", "text/csv")},
+        headers={"HX-Request": "true"})
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")

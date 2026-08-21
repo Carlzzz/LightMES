@@ -50,8 +50,9 @@ def test_detail_page_renders(client, db_session):
 
 def test_detail_requires_login(client, db_session):
     routing, wss = _setup(db_session)
-    resp = client.get(f"/masterdata/routings/{routing.id}")
-    assert resp.status_code == 401
+    resp = client.get(f"/masterdata/routings/{routing.id}", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"].startswith("/login")
 
 
 def test_update_head_submit(client, db_session):

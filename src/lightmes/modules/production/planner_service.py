@@ -2,7 +2,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from lightmes.modules.masterdata.models import Line, WorkStation
 from lightmes.modules.production.models import WorkOrder, ScheduleChangeLog
+from lightmes.modules.production.process_snapshot import get_work_order_process
 from lightmes.shared.errors import BusinessRuleError, NotFoundError, ConflictError
 
 
@@ -72,6 +74,7 @@ class PlannerService:
         wo = self.db.get(WorkOrder, wo_id)
         if wo is None:
             raise NotFoundError(f"工单不存在: {wo_id}")
+        self._validate_line_compatible(wo, line_id)
         if end <= start:
             raise BusinessRuleError(
                 f"planned_end 必须晚于 planned_start: start={start}, end={end}")
@@ -89,6 +92,27 @@ class PlannerService:
         after = self._snapshot(wo)
         self._log_change(wo.id, user_id, "schedule", before, after)
         return wo
+
+    def _validate_line_compatible(self, wo: WorkOrder, line_id: int) -> None:
+        if self.db.get(Line, line_id) is None:
+            raise NotFoundError(f"产线不存在: {line_id}")
+        process = get_work_order_process(self.db, wo)
+        station_ids = {op.default_work_station_id for op in process.operations}
+        stations = {
+            station.id: station
+            for station in self.db.execute(
+                select(WorkStation).where(WorkStation.id.in_(station_ids))
+            ).scalars().all()
+        }
+        invalid_ops = [
+            op.seq for op in process.operations
+            if stations.get(op.default_work_station_id) is None
+            or stations[op.default_work_station_id].line_id != line_id
+        ]
+        if invalid_ops:
+            raise BusinessRuleError(
+                f"工单 {wo.code} 的工序 {', '.join(map(str, invalid_ops))} "
+                f"默认作业站不属于产线 {line_id}，不可排程")
 
     def unschedule(self, wo_id: int, user_id: int | None) -> WorkOrder:
         wo = self.db.get(WorkOrder, wo_id)

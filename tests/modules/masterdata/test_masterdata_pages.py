@@ -40,9 +40,10 @@ def test_lines_page_and_create(client, db_session):
 
 def test_lines_create_requires_login(client):
     resp = client.post(
-        "/masterdata/lines", data={"code": "X", "name": "x", "description": ""})
+        "/masterdata/lines", data={"code": "X", "name": "x", "description": ""},
+        headers={"HX-Request": "true"})
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")
 
 
 def test_lines_create_dup_code_returns_error_row(client, db_session):
@@ -51,7 +52,7 @@ def test_lines_create_dup_code_returns_error_row(client, db_session):
     resp = client.post("/masterdata/lines", data={"code": "DUP", "name": "线B", "description": ""})
     assert resp.status_code == 200
     assert "产线编码已存在" in resp.text
-    assert 'colspan="4"' in resp.text
+    assert "alert--danger" in resp.text
 
 
 def test_work_stations_page_renders(client, db_session):
@@ -72,6 +73,7 @@ def test_work_stations_page_and_create(client, db_session):
 
 def test_work_stations_create_requires_login(client):
     resp = client.post("/masterdata/work-stations",
-        data={"code": "WSX", "name": "x", "line_id": "1", "seq": "1"})
+        data={"code": "WSX", "name": "x", "line_id": "1", "seq": "1"},
+        headers={"HX-Request": "true"})
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")

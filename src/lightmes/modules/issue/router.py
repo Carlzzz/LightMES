@@ -180,8 +180,8 @@ def issue_detail(
         serial_unit = db.get(SerialUnit, issue.serial_unit_id)
         serial_unit_sn = serial_unit.sn if serial_unit else None
 
-    from lightmes.modules.masterdata.models import WorkStation
-    from lightmes.modules.production.models import Operation, WorkOrder
+    from lightmes.modules.masterdata.models import Operation, WorkStation
+    from lightmes.modules.production.models import WorkOrder
     wo = db.get(WorkOrder, issue.work_order_id) if issue.work_order_id else None
     station = db.get(WorkStation, issue.work_station_id) if issue.work_station_id else None
     operation = db.get(Operation, issue.operation_id) if issue.operation_id else None

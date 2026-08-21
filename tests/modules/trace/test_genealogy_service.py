@@ -44,6 +44,9 @@ def _setup(db_session):
     def make_su(sn):
         return SerialUnitRepository(db_session).add(
             SerialUnit(sn=sn, work_order_id=wo.id, product_id=fin.id))
+    for component_sn in ("MB-1", "MB-DUP", "MB-OPREC", "N-1", "M-1"):
+        SerialUnitRepository(db_session).add(
+            SerialUnit(sn=component_sn, product_id=c_ser.id))
     op = md.routings.operations_of(r.id)[0]
     ctx = _SetupCtx(line=line, work_station=w, op=op, work_order=wo)
     return fin, c_ser, c_bat, other, make_su, ctx
@@ -52,6 +55,9 @@ def _setup(db_session):
 def test_bind_serial_and_batch(db_session):
     fin, c_ser, c_bat, other, make_su, _ctx = _setup(db_session)
     su = make_su("F1")
+    lot_service = MaterialLotService(db_session)
+    lot_service.receive(code="LOT-1", product_id=c_bat.id, quantity=4)
+    lot_service.release("LOT-1")
     svc = GenealogyService(db_session)
     binds = svc.bind_components(su, [
         ComponentBind(component_product_id=c_ser.id, component_sn="MB-1"),
@@ -174,6 +180,8 @@ def test_bind_blocks_when_component_belongs_to_later_op(db_session):
                         line_id=line.id, qty=10))
     su = SerialUnitRepository(db_session).add(
         SerialUnit(sn="BL1", work_order_id=wo.id, product_id=fin.id))
+    SerialUnitRepository(db_session).add(
+        SerialUnit(sn="X-1", product_id=c_late.id))
 
     svc = GenealogyService(db_session)
     with pytest.raises(BusinessRuleError) as exc:
@@ -211,6 +219,8 @@ def test_bind_blocks_when_component_belongs_to_earlier_op(db_session):
                         line_id=line.id, qty=10))
     su = SerialUnitRepository(db_session).add(
         SerialUnit(sn="BE1", work_order_id=wo.id, product_id=fin.id))
+    SerialUnitRepository(db_session).add(
+        SerialUnit(sn="Y-1", product_id=c_early.id))
 
     svc = GenealogyService(db_session)
     with pytest.raises(BusinessRuleError):
@@ -247,6 +257,8 @@ def test_bind_allows_when_consume_op_matches_current_op(db_session):
                         line_id=line.id, qty=10))
     su = SerialUnitRepository(db_session).add(
         SerialUnit(sn="BK1", work_order_id=wo.id, product_id=fin.id))
+    SerialUnitRepository(db_session).add(
+        SerialUnit(sn="Z-1", product_id=c_match.id))
 
     svc = GenealogyService(db_session)
     binds = svc.bind_components(su, [

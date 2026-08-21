@@ -18,16 +18,18 @@ from lightmes.modules.issue import models as _issue_models  # noqa: F401
 
 
 _settings = get_settings()
+if not _settings.test_database_url:
+    raise pytest.UsageError(
+        "TEST_DATABASE_URL is not configured; refusing to truncate DATABASE_URL"
+    )
+
 if _settings.test_database_url and _settings.environment != "production":
     _test_engine = create_engine(_settings.test_database_url, pool_pre_ping=True)
     _test_session_local = sessionmaker(
         bind=_test_engine, autoflush=False, expire_on_commit=False
     )
     _using_dedicated_test_db = True
-else:
-    _test_engine = db_module.engine
-    _test_session_local = db_module.SessionLocal
-    _using_dedicated_test_db = False
+_using_dedicated_test_db = True
 
 db_module.engine = _test_engine
 db_module.SessionLocal = _test_session_local

@@ -13,7 +13,11 @@ from lightmes.modules.production.repository import (
     SerialUnitRepository, OperationParamRepository,
 )
 from lightmes.modules.production.material_lot_service import MaterialLotService
-from lightmes.modules.production.models import BatchMaterialConsumption, MaterialLot
+from lightmes.modules.production.models import (
+    BatchMaterialConsumption,
+    MaterialLot,
+    SerialUnit,
+)
 from lightmes.shared.errors import NotFoundError, BusinessRuleError
 
 
@@ -105,6 +109,9 @@ def _line_with_op_bom(db_session, n_ops=3):
         BomItemCreate(component_product_id=c_op3.id, qty=1,
                       consume_at_operation_seq=3),
     ]))
+    for operation in md.routings.operations_of(wo.routing_id):
+        if operation.seq == 2:
+            operation.require_material_binding = True
     ProductionService(db_session).release_work_order(wo.id)
     return p, line, ws, wo, c_op2, c_op3
 
@@ -133,6 +140,8 @@ def test_pass_ok_when_required_part_scanned_this_op(db_session):
     svc = OperationPassService(db_session)
     r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
                                                 work_order_code="PXWO"))
+    db_session.add(SerialUnit(sn="SN-OP2-1", product_id=c_op2.id))
+    db_session.flush()
     r2 = svc.pass_operation(OperationPassInput(
         work_station_id=ws[1].id, sn=r1.sn,
         components=[ComponentInput(
@@ -150,6 +159,8 @@ def test_pass_blocks_when_scanning_part_for_future_op(db_session):
     svc = OperationPassService(db_session)
     r1 = svc.pass_operation(OperationPassInput(work_station_id=ws[0].id,
                                                 work_order_code="PXWO"))
+    db_session.add(SerialUnit(sn="SN-OP3-early", product_id=c_op3.id))
+    db_session.flush()
     with pytest.raises(BusinessRuleError) as exc:
         svc.pass_operation(OperationPassInput(
             work_station_id=ws[1].id, sn=r1.sn,
@@ -172,6 +183,9 @@ def test_final_op_cumulative_check_still_blocks_missing(db_session):
         ProductCreate(code="CNULL", name="老件", type="component", track_mode="serial"))
     MasterDataService(db_session).create_bom(BomCreate(product_id=p2.id, items=[
         BomItemCreate(component_product_id=c_null.id, qty=1)]))  # NULL seq
+    for operation in MasterDataService(db_session).routings.operations_of(wo2.routing_id):
+        if operation.seq == 2:
+            operation.require_material_binding = True
     ProductionService(db_session).release_work_order(wo2.id)
     svc = OperationPassService(db_session)
     r_a = svc.pass_operation(OperationPassInput(work_station_id=ws2[0].id,

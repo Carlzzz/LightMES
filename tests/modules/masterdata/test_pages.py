@@ -83,6 +83,7 @@ def test_create_product_via_page_requires_login(client):
         "/masterdata/products",
         data={"code": "NO-LOGIN", "name": "x", "type": "component",
               "unit": "pcs", "track_mode": "none"},
+        headers={"HX-Request": "true"},
     )
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")

@@ -55,6 +55,34 @@ def test_rework_rolls_back_step_and_status(db_session):
     assert reworked.current_operation_seq == 0
 
 
+def test_rework_uses_work_order_process_snapshot(db_session):
+    from sqlalchemy import select
+
+    from lightmes.modules.masterdata.models import Operation
+    from lightmes.modules.masterdata.repository import OperationWorkStationRepository
+
+    fin, comp, w1, w2, wo = _two_step_line(db_session)
+    pass_service = OperationPassService(db_session)
+    result = pass_service.pass_operation(OperationPassInput(
+        work_station_id=w1.id, work_order_code=wo.code))
+
+    operation = db_session.execute(
+        select(Operation).where(
+            Operation.routing_id == wo.routing_id,
+            Operation.seq == 1,
+        )
+    ).scalar_one()
+    station_links = OperationWorkStationRepository(db_session)
+    station_links.delete_by_operation(operation.id)
+    station_links.add(operation.id, w2.id)
+
+    reworked = ReworkService(db_session).rework(
+        result.sn, target_seq=0, expected_repass_station_id=w1.id,
+        reason="按工单快照返工")
+    assert reworked.status == "reworking"
+    assert reworked.rework_target_station_id == w1.id
+
+
 def test_rework_unbinds_components(db_session):
     fin, comp, w1, w2, wo = _two_step_line(db_session)
     lot = MaterialLotService(db_session).receive(

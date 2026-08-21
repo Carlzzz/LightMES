@@ -9,9 +9,9 @@ from lightmes.database import get_db
 from lightmes.modules.auth.dependencies import require_login, require_role
 from lightmes.modules.auth.models import User
 from lightmes.modules.masterdata.models import WorkStation
-from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.carrier_service import CarrierService
 from lightmes.modules.production.models import WorkOrder
+from lightmes.modules.production.process_snapshot import get_work_order_process
 from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.trace.schemas import GenealogyView, ParentRef
 from lightmes.modules.trace.trace_service import TraceService
@@ -107,13 +107,14 @@ def _resolve_rework_stations(db: Session, sn: str, target_seq: int):
     wo = db.get(WorkOrder, su.work_order_id)
     if wo is None:
         raise NotFoundError(f"工单不存在: {su.work_order_id}")
-    query = MasterDataQueryService(db)
-    operations = query.get_operations(wo.routing_id)
+    operations = get_work_order_process(db, wo).operations
     first_repass_op = next((o for o in operations if o.seq > target_seq), None)
     if first_repass_op is None:
         raise ValidationError(f"target_seq {target_seq} 之后无工序可重做")
-    allowed = query.get_allowed_work_stations(first_repass_op.id)
-    station_ids = [w.id for w in allowed] or [first_repass_op.default_work_station_id]
+    station_ids = (
+        first_repass_op.allowed_work_station_ids
+        or [first_repass_op.default_work_station_id]
+    )
     stations = list(db.execute(
         select(WorkStation).where(WorkStation.id.in_(station_ids))
     ).scalars().all())

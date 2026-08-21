@@ -68,9 +68,9 @@ def _line(db_session):
 
 def test_scan_page_requires_login(client, db_session):
     resp = client.post("/production/station/load",
-        data={"work_station_id": 1, "scan": "X"})
+        data={"work_station_id": 1, "scan": "X"}, headers={"HX-Request": "true"})
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")
 
 
 def test_scan_page_renders(client, db_session):

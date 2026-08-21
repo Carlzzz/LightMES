@@ -26,3 +26,14 @@ Python + FastAPI modular monolith. See `docs/superpowers/` for the design spec a
    uv run uvicorn lightmes.main:app --host 0.0.0.0 --port 8000
    uv run python -m lightmes.modules.connectivity.mqtt_listener
    ```
+
+## Tests
+
+The suite truncates `TEST_DATABASE_URL` on startup. Configure a dedicated test
+database before running pytest; LightMES refuses to run tests against the
+unspecified development database.
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql+psycopg://mes:mes@127.0.0.1:5432/lightmes_test"
+uv run pytest
+```

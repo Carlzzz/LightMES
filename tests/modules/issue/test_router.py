@@ -41,7 +41,7 @@ def privileged_client(client, db_session, admin_user):
 def test_issue_list_requires_login(client):
     r = client.get("/issues", follow_redirects=False)
     assert r.status_code == 302
-    assert r.headers["location"] == "/login"
+    assert r.headers["location"] == "/login?next=%2Fissues"
 
 
 def test_issue_list_visible_to_admin(privileged_client):
@@ -55,9 +55,22 @@ def test_issue_detail_404(privileged_client):
     assert r.status_code == 404
 
 
+def test_issue_detail_renders_referenced_objects(
+        privileged_client, db_session, admin_user):
+    from lightmes.modules.issue.models import Issue, IssueType
+    it = IssueType(code="T_detail", name="T", severity="minor")
+    db_session.add(it); db_session.flush()
+    issue = Issue(issue_type_id=it.id, title="detail", severity="minor",
+                  reported_by_id=admin_user.id)
+    db_session.add(issue); db_session.commit()
+    r = privileged_client.get(f"/issues/{issue.id}")
+    assert r.status_code == 200
+    assert "detail" in r.text
+
+
 def test_issue_close_rejected_with_unverified_capa(
         privileged_client, db_session, admin_user):
-    """close 时 CAPA 未全 verified 返回 422。"""
+    """close 时 CAPA 未全 verified 会带回错误提示重定向。"""
     from lightmes.modules.issue.models import Issue, IssueAction, IssueType
     it = IssueType(code="T_close", name="T", severity="minor")
     db_session.add(it); db_session.flush()
@@ -67,8 +80,10 @@ def test_issue_close_rejected_with_unverified_capa(
     db_session.add(IssueAction(issue_id=issue.id, type="corrective",
                                title="a", status="open"))
     db_session.commit()
-    r = privileged_client.post(f"/issues/{issue.id}/close")
-    assert r.status_code == 422
+    r = privileged_client.post(
+        f"/issues/{issue.id}/close", follow_redirects=False)
+    assert r.status_code == 303
+    assert "error=" in r.headers["location"]
 
 
 def test_add_capa_creates_action(privileged_client, db_session, admin_user):

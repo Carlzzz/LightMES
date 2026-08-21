@@ -10,6 +10,7 @@ from lightmes.modules.production.schemas import (
 )
 from lightmes.modules.production.repository import SerialUnitRepository
 from lightmes.modules.production.operation_pass_service import OperationPassService
+from lightmes.modules.production.models import SerialUnit
 from lightmes.modules.trace.trace_service import TraceService
 from lightmes.modules.trace.genealogy_service import GenealogyService
 from lightmes.modules.trace.repository import GenealogyBindRepository
@@ -34,6 +35,8 @@ def _pass_with_components_and_params(db_session):
         code="TWO", product_id=fin.id, routing_id=r.id, line_id=line.id,
         qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
+    db_session.add(SerialUnit(sn="MB-100", product_id=c.id))
+    db_session.flush()
     res = OperationPassService(db_session).pass_operation(OperationPassInput(
         work_station_id=w.id, work_order_code="TWO",
         components=[ComponentInput(component_product_id=c.id, component_sn="MB-100")],

@@ -23,6 +23,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql+psycopg://mes:mes@localhost:5432/lightmes
+      TEST_DATABASE_URL: postgresql+psycopg://mes:mes@localhost:5432/lightmes
     steps:
       - uses: actions/checkout@v4
       - name: Install uv

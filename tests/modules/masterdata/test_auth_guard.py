@@ -99,6 +99,7 @@ def test_deactivated_user_cannot_create_via_page(client, db_session):
         "/masterdata/products",
         data={"code": "D-PAGE", "name": "x", "type": "component",
               "unit": "pcs", "track_mode": "none"},
+        headers={"HX-Request": "true"},
     )
     assert resp.status_code == 401
-    assert resp.headers.get("HX-Redirect") == "/login"
+    assert resp.headers["HX-Redirect"].startswith("/login")

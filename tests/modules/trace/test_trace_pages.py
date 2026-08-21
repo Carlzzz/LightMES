@@ -14,6 +14,7 @@ from lightmes.modules.production.schemas import (
     SnRuleCreate, WorkOrderCreate, OperationPassInput, ComponentInput, ParamInput,
 )
 from lightmes.modules.production.operation_pass_service import OperationPassService
+from lightmes.modules.production.models import SerialUnit
 
 
 @pytest.fixture()
@@ -48,6 +49,8 @@ def _passed_sn(db_session):
         code="PWO", product_id=fin.id, routing_id=r.id, line_id=line.id,
         qty=5, sn_rule_id=rule.id))
     prod.release_work_order(wo.id)
+    db_session.add(SerialUnit(sn="MB-7", product_id=c.id))
+    db_session.flush()
     res = OperationPassService(db_session).pass_operation(OperationPassInput(
         work_station_id=w.id, work_order_code="PWO",
         components=[ComponentInput(component_product_id=c.id, component_sn="MB-7")],

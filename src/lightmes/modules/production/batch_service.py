@@ -75,3 +75,16 @@ class BatchService:
             batch.status = "done"
             batch.completed_at = batch.completed_at or datetime.now()
         self.db.flush()
+
+    def record_scrapped_finished_unit(self, batch_id: int | None) -> None:
+        """Move a previously finished unit from produced to scrapped scope."""
+        if batch_id is None:
+            return
+        batch = self.batches.get(batch_id)
+        if batch is None or batch.produced_qty <= 0:
+            return
+        batch.produced_qty -= 1
+        if batch.status == "done" and batch.produced_qty < batch.target_qty:
+            batch.status = "in_process"
+            batch.completed_at = None
+        self.db.flush()

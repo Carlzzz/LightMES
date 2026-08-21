@@ -29,8 +29,13 @@ def test_skills_page_and_create(client, db_session):
 
 
 def test_skills_create_requires_login(client, db_session):
-    resp = client.post("/masterdata/skills", data={"code": "X", "name": "x", "max_level": "3", "description": ""})
-    assert resp.status_code == 401
+    resp = client.post(
+        "/masterdata/skills",
+        data={"code": "X", "name": "x", "max_level": "3", "description": ""},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"].startswith("/login")
 
 
 def test_operator_skills_page_and_upsert(client, db_session):
@@ -58,6 +63,10 @@ def test_operator_skills_level_out_of_range_error(client, db_session):
     db_session.flush()
     from lightmes.modules.auth.repository import UserRepository
     uid = UserRepository(db_session).get_by_username("sk").id
-    resp = client.post("/masterdata/operator-skills", data={"user_id": str(uid), "skill_id": str(s.id), "level": "9"})
-    assert resp.status_code == 200  # error_row 片段
-    assert "越界" in resp.text
+    resp = client.post(
+        "/masterdata/operator-skills",
+        data={"user_id": str(uid), "skill_id": str(s.id), "level": "9"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]

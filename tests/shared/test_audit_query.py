@@ -93,8 +93,9 @@ def test_page_returns_audit_rows_for_admin(client, db_session):
 
 
 def test_page_requires_login(client, db_session):
-    resp = client.get("/system/audit-logs")
-    assert resp.status_code == 401
+    resp = client.get("/system/audit-logs", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"].startswith("/login")
 
 
 def test_page_non_admin_forbidden(client, db_session, monkeypatch):

@@ -3,8 +3,9 @@ from datetime import datetime
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from lightmes.modules.masterdata.query_service import MasterDataQueryService
 from lightmes.modules.production.models import SerialUnit, WorkOrder
+from lightmes.modules.production.batch_service import BatchService
+from lightmes.modules.production.process_snapshot import get_work_order_process
 from lightmes.modules.production.repository import SerialUnitRepository, CarrierBindingRepository
 from lightmes.modules.trace.events import SerialUnitReworkStarted
 from lightmes.modules.trace.genealogy_service import GenealogyService
@@ -20,7 +21,6 @@ class ReworkService:
         self.serial_units = SerialUnitRepository(db)
         self.genealogy = GenealogyService(db)
         self.carrier_bindings = CarrierBindingRepository(db)
-        self.query = MasterDataQueryService(db)
 
     def rework(
         self, sn: str, target_seq: int,
@@ -45,12 +45,14 @@ class ReworkService:
         wo = self.db.get(WorkOrder, su.work_order_id)
         if wo is None:
             raise NotFoundError(f"工单不存在: {su.work_order_id}")
-        operations = self.query.get_operations(wo.routing_id)
+        operations = get_work_order_process(self.db, wo).operations
         first_repass_op = next((o for o in operations if o.seq > target_seq), None)
         if first_repass_op is None:
             raise ValidationError(f"target_seq {target_seq} 之后无工序可重做")
-        allowed = self.query.get_allowed_work_stations(first_repass_op.id)
-        allowed_ids = [w.id for w in allowed] or [first_repass_op.default_work_station_id]
+        allowed_ids = (
+            first_repass_op.allowed_work_station_ids
+            or [first_repass_op.default_work_station_id]
+        )
         if expected_repass_station_id not in allowed_ids:
             raise ValidationError(
                 f"站位 #{expected_repass_station_id} 不在工序 "
@@ -83,6 +85,7 @@ class ReworkService:
             raise NotFoundError(f"SN 不存在: {sn}")
         if su.status not in ("in_process", "reworking", "quarantined", "finished"):
             raise BusinessRuleError(f"仅在制/返工/隔离/完工件可判废，当前: {su.status}")
+        was_counted = su.is_counted
         # 清除载体码绑定（与完工路径一致）
         if su.carrier_code is not None:
             binding = self.carrier_bindings.active_by_serial_unit(su.id)
@@ -91,18 +94,23 @@ class ReworkService:
                 binding.unbound_reason = "scrap"
             su.carrier_code = None
         su.status = "scrapped"
-        # 报废扣数：工单 scrap_qty +1；产出+报废 >= 计划量时工单完工
-        # （报废件不再可能 finished，欠产工单借此路径收尾）
+        # 完工件先计入 produced；报废时必须从 produced 换到 scrap，
+        # 避免同一物理件同时占用两个工单口径。
         if su.work_order_id is not None:
             wo = self.db.get(WorkOrder, su.work_order_id)
-            if wo is not None and wo.status in ("released", "in_process"):
-                new_scrap = self.db.execute(
+            if wo is not None:
+                counter_values = {"scrap_qty": WorkOrder.scrap_qty + 1}
+                if was_counted:
+                    counter_values["produced_qty"] = WorkOrder.produced_qty - 1
+                new_produced, new_scrap = self.db.execute(
                     update(WorkOrder)
                     .where(WorkOrder.id == wo.id)
-                    .values(scrap_qty=WorkOrder.scrap_qty + 1)
-                    .returning(WorkOrder.scrap_qty)
-                ).scalar_one()
-                if wo.produced_qty + new_scrap >= wo.qty:
+                    .values(**counter_values)
+                    .returning(WorkOrder.produced_qty, WorkOrder.scrap_qty)
+                ).one()
+                if was_counted:
+                    BatchService(self.db).record_scrapped_finished_unit(su.batch_id)
+                if wo.status in ("released", "in_process") and new_produced + new_scrap >= wo.qty:
                     self.db.execute(
                         update(WorkOrder).where(WorkOrder.id == wo.id)
                         .values(status="completed"))

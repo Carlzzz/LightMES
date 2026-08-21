@@ -53,7 +53,7 @@ def test_work_orders_endpoint_returns_options(client, db_session):
     resp = client.get(f"/production/station/work-orders?work_station_id={ws[0].id}")
     assert resp.status_code == 200
     assert f'<option value="{wo.id}"' in resp.text
-    assert "可用" in resp.text  # 含可用 pending 数
+    assert "待产" in resp.text
 
 
 def test_work_orders_endpoint_filters_other_line(client, db_session):
@@ -70,8 +70,12 @@ def test_work_orders_endpoint_filters_other_line(client, db_session):
 
 def test_work_orders_requires_login(client, db_session):
     ws, wo, line = _setup(db_session)
-    resp = client.get(f"/production/station/work-orders?work_station_id={ws[0].id}")
-    assert resp.status_code == 401
+    resp = client.get(
+        f"/production/station/work-orders?work_station_id={ws[0].id}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"].startswith("/login")
 
 
 def test_enter_first_station_carrier_binds_sn_no_pass(client, db_session):
@@ -163,9 +167,12 @@ def test_enter_work_order_exhausted_blocks(client, db_session):
 
 def test_enter_requires_login(client, db_session):
     ws, wo, line = _setup(db_session)
-    resp = client.post("/production/station/enter",
-                       data={"work_station_id": str(ws[0].id),
-                             "work_order_id": str(wo.id), "scan": "X"})
+    resp = client.post(
+        "/production/station/enter",
+        data={"work_station_id": str(ws[0].id),
+              "work_order_id": str(wo.id), "scan": "X"},
+        headers={"HX-Request": "true"},
+    )
     assert resp.status_code == 401
 
 

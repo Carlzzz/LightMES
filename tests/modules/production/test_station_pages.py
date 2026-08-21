@@ -74,7 +74,8 @@ def test_load_unknown_scan_shows_error(client, db_session):
 def test_load_requires_login(client, db_session):
     ws = _prod(db_session)
     resp = client.post("/production/station/load",
-                       data={"work_station_id": str(ws.id), "scan": "WO"})
+                       data={"work_station_id": str(ws.id), "scan": "WO"},
+                       headers={"HX-Request": "true"})
     assert resp.status_code == 401
 
 
@@ -90,5 +91,6 @@ def test_pass_first_item_success(client, db_session):
 def test_pass_requires_login(client, db_session):
     ws = _prod(db_session)
     resp = client.post("/production/station/pass",
-                       data={"work_station_id": str(ws.id), "scan": "WO"})
+                       data={"work_station_id": str(ws.id), "scan": "WO"},
+                       headers={"HX-Request": "true"})
     assert resp.status_code == 401
